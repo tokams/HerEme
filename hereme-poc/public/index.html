@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f7f3">
+  <meta name="description" content="HerEme er din lokale møteplass for historier, spørsmål, bilder og drøs.">
+  <title>HerEme · Her e me.</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <button class="logo" data-action="home" aria-label="HerEme, gå til forsiden">hereme<span class="logo-dot">.</span><span class="logo-caption">LOKAL DRØS</span></button>
+      <div class="header-search" id="headerSearch">
+        <span class="header-search-icon" aria-hidden="true">⌕</span>
+        <input id="searchInput" type="search" autocomplete="off" aria-label="Søk i innlegg" placeholder="Søk etter saker, steder eller rom …">
+        <kbd class="search-kbd">SØK</kbd>
+      </div>
+      <div class="topbar-actions">
+        <span class="local-status"><span class="status-dot"></span> Lokal demo</span>
+        <button class="iconbtn mobile-search-btn" data-action="mobile-search" aria-label="Søk">⌕</button>
+        <button class="btn btn-primary desktop-create" data-action="compose" data-type="text"><span class="btn-plus">+</span> Nytt innlegg</button>
+        <button class="profile-chip" id="profileButton" data-action="profile" aria-label="Profil"><span class="profile-monogram" id="profileMonogram">?</span><span id="profileLabel">Bli med</span></button>
+      </div>
+    </div>
+  </header>
+  <div class="app-layout">
+    <aside class="sidebar sidebar-left" aria-label="Navigasjon">
+      <div class="sidebar-group">
+        <p class="sidebar-eyebrow">DIN MØTEPLASS</p>
+        <button class="side-link active" data-action="home" id="homeSide"><span class="side-icon">⌂</span> Alt fra vest <span class="side-arrow">›</span></button>
+        <button class="side-link" data-action="sort-hot" id="hotSide"><span class="side-icon">↗</span> På gang</button>
+        <button class="side-link" data-action="compose" data-type="poster"><span class="side-icon">▧</span> Lag en plakat</button>
+      </div>
+      <div class="side-rule"></div>
+      <div class="sidebar-group">
+        <div class="side-header"><p class="sidebar-eyebrow">ROMMENE VÅRE</p><button class="text-button" data-action="new-room" title="Opprett nytt rom" aria-label="Opprett rom">+</button></div>
+        <div id="roomSidebar" class="room-sidebar"></div>
+        <button class="new-room-link" data-action="new-room">+ Lag ditt eget rom</button>
+      </div>
+      <div class="sidebar-footer">Laget for folk på Vestlandet.<br><b>Her e me. Og her kan du drøsa.</b><br><span>PoC v0.1 · ikke en offentlig tjeneste</span></div>
+    </aside>
+
+    <main class="main-column" id="mainContent">
+      <div class="mobile-region"><span class="region-ping">✳</span> HEILT LOKALT <span class="region-separator">·</span> STAVANGER & VESTLANDET</div>
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow" id="pageEyebrow">HEI, VESTLANDET 👋</p>
+          <h1 id="pageTitle">Her skjer det.</h1>
+          <p id="pageSubtitle" class="page-subtitle">Din plass for små og store saker fra folk rundt deg.</p>
+        </div>
+        <span class="heading-flower" aria-hidden="true">✳</span>
+      </div>
+
+      <section class="hero" aria-label="Velkommen">
+        <div class="hero-copy"><span class="hero-kicker">✳ &nbsp; LOKAL STEMME. EKTE FOLK.</span>
+          <h2>Har du någe<br><em>på hjerta?</em></h2>
+          <p>Et bilde, et rykte, et spørsmål? Drøs i vei.</p>
+          <button class="hero-cta" data-action="compose" data-type="poster">Lag et innlegg <span aria-hidden="true">↗</span></button>
+        </div>
+        <div class="hero-visual" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><span class="hero-speech">KA<br>SKJER?</span><span class="hero-star">✱</span></div>
+      </section>
+
+      <div class="mobile-rooms" id="mobileRooms" aria-label="Velg rom"></div>
+
+      <section class="quick-compose" aria-label="Opprett innlegg">
+        <span class="quick-avatar" id="quickAvatar">?</span>
+        <button class="quick-prompt" data-action="compose" data-type="text">Ka har du på hjerta?</button>
+        <button class="quick-tool" data-action="compose" data-type="image" title="Legg ut bilde"><span aria-hidden="true">▧</span> Bilde</button>
+        <button class="quick-tool poster-tool" data-action="compose" data-type="poster" title="Lag bildeplakat"><span aria-hidden="true">✳</span> Plakat</button>
+      </section>
+
+      <div class="feed-heading"><div class="feed-heading-title"><span class="feed-pulse"></span> <strong>Drøsen</strong><span id="feedCounter" class="feed-counter"></span></div>
+        <div class="sort-tabs" role="group" aria-label="Sorter innlegg">
+          <button class="sort-tab active" data-action="sort" data-sort="hot">På gang</button>
+          <button class="sort-tab" data-action="sort" data-sort="new">Nyeste</button>
+          <button class="sort-tab" data-action="sort" data-sort="top">Topp</button>
+        </div>
+      </div>
+      <div class="feed" id="feed" aria-live="polite"><div class="loading-card">Henter lokale innlegg …</div></div>
+      <p class="feed-end">Du e ajour! ✳ <span>Her begynne den gode drøsen.</span></p>
+    </main>
+
+    <aside class="sidebar sidebar-right" aria-label="Informasjon">
+      <div class="aside-card intro-card">
+        <span class="mini-eyebrow">✳ &nbsp; VELKOMMEN INN</span>
+        <h3>Et lite hjørna<br>av internett.</h3>
+        <p>For ting som skjer her. Spør, stem, vis fram og bli med i praten.</p>
+        <button class="intro-link" data-action="new-room">Start et eget rom <span>↗</span></button>
+      </div>
+      <div class="aside-card qr-card">
+        <div class="card-section-title"><span class="section-icon">▦</span> Ta drøsen med deg</div>
+        <p>Åpne HerEme på mobilen, på samme Wi-Fi som PC-en.</p>
+        <div class="qr-frame"><img src="/api/connect-qr.svg" alt="QR-kode med lokal adresse for mobilen" id="qrImage"></div>
+        <div class="connect-url" id="connectUrl">Finner lokaladresse …</div>
+        <button class="small-link" data-action="copy-connect">Kopier adressen ↗</button>
+      </div>
+      <div class="aside-card room-stats-card">
+        <div class="card-section-title">Rom å utforske <span>✳</span></div>
+        <div id="popularRooms"></div>
+      </div>
+      <div class="side-moderation"><span>🛡️</span> <div><b>Plass til alle.</b><p>Rapportér innlegg som bryter reglene. Dette er en lokal teknisk demo.</p><button data-action="admin">Moderatorkø ↗</button></div></div>
+    </aside>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Mobilnavigasjon">
+    <button class="bottom-item active" data-action="home" id="mobileHome"><span class="bottom-icon">⌂</span><span>Hjem</span></button>
+    <button class="bottom-item" data-action="browse-rooms"><span class="bottom-icon">▦</span><span>Rom</span></button>
+    <button class="bottom-item bottom-create" data-action="compose" data-type="poster" aria-label="Lag innlegg"><span class="bottom-create-icon">+</span><span>Legg ut</span></button>
+    <button class="bottom-item" data-action="sort-hot" id="mobileHot"><span class="bottom-icon">↗</span><span>På gang</span></button>
+    <button class="bottom-item" data-action="profile"><span class="bottom-icon">♙</span><span>Meg</span></button>
+  </nav>
+  <div id="modalRoot"></div>
+  <div class="toast-container" id="toastRoot" aria-live="polite"></div>
+</body>
+</html>

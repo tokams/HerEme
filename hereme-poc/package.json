@@ -1,0 +1,14 @@
+{
+  "name": "hereme-local-forum",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HerEme: local-first forum proof of concept",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": { "node": ">=24" },
+  "dependencies": {}
+}
