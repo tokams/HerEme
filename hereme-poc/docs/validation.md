@@ -6,13 +6,14 @@ Simple, slightly spaced tiles and light/dark modes. See [design](wall-v3.md).
 
 ## Automated and visual checks
 
-- `npm test`: **25 passed**, zero failures. Covers online WAL snapshots, both
+- `npm run check`: all JavaScript sources parse successfully.
+- `npm test`: **27 passed**, zero failures. Covers online WAL snapshots, both
   writing origins, conflict rollback, all post types/media, seed idempotency,
   category/crop/text-position validation, roomless posts, preserved high-water
   IDs, repeat merges, API interactions, filtered activity and port selection.
 - `npm run test:browser`: **passed**, using a temporary database and isolated
   headless Chromium. Desktop 1440x1000, mobile 390x844; responsive checks also at
-  320, 768, 900 and 1100. No page overflow or JavaScript/console errors.
+  350, 390, 700, 900, 1280 and 1700. No page overflow or JavaScript/console errors.
 - Verifies Simple default, five visible category icon buttons, multi-selection,
   shared filter state across desktop modes, light/dark and layout persistence,
   actual discussion links, search and sorting; square edges, ordered actions,
@@ -26,39 +27,27 @@ Simple, slightly spaced tiles and light/dark modes. See [design](wall-v3.md).
 - Reviewed Simple light, Advanced dark and mobile wall screenshots, including
   the supplied green/red square vote icons. Other interaction captures are
   available under `docs/screenshots/wall-v3/`.
-- `git diff --check` passed. Implementation remains unstaged and uncommitted.
+- Release tests additionally cover recovery/session/CSRF contracts, legacy identity
+  upgrade, FTS pagination, normalized image derivatives, private moderation audit,
+  checksummed restore, resumable video offsets and the 180-second worker boundary.
 
-## Actual preview preservation and runtime
+## Actual-data migration rehearsal
 
-Retained `data/preview.before-wall-v3` before redesign. Compared all 148 rows from
-its six legacy tables plus presentation/import/design/membership metadata against
-current preview: no changed or missing rows. All nine uploads are byte-identical.
-Migration 5 adds default auto text placement; old category/crop values survive.
-SQLite integrity is OK; foreign-key check is empty.
+On 2026-11-19, the current original and poster-wall data were opened read-only and
+the complete release migration/merge ran against disposable snapshots. The first
+attempt exposed duplicate case-insensitive legacy pseudonyms; schema 10 now
+disambiguates them deterministically while retaining both user IDs and every post
+relationship. The repeated rehearsal then passed with 35 posts, 11 users, 7
+historical rooms, 29 votes, 50 comments, 1 report and 15 verified media files.
 
-The final merge imported zero source changes, retained 30 posts, 10 users,
-7 historical rooms, 21 votes, 33 comments and 1 report. Newer real preview writes
-remain alongside the original posts and 13 supplied examples. Repeated explicit
-seeding added zero and skipped all 13. The original source's six legacy tables
-also compare unchanged against their preview counterparts.
+The source-to-preview merge reported zero outstanding changes. Manifest checksums,
+SQLite integrity and foreign keys passed. A disposable release process migrated
+and opened the result, `/api/ready` reported every check true, and one bounded page
+returned all 35 published posts. It was stopped after the check. Neither running
+data directory was modified and no process/PID claim is recorded here.
 
-Retained merge backup/source snapshot suffix:
-`7d8d52e8-ae38-492e-8240-23eaa474224e` under `data/preview.before-merge-...`
-and `data/preview.incoming-...`. No snapshot or original data was overwritten.
-
-At 21:50 UTC, subsequent real preview writes brought the total to **32 posts**,
-23 votes and 12 uploads. All 51 original-source legacy rows match the preview.
-
-The worktree `run.cmd` is running on **http://localhost:3001**
-(Node PID 24804, launcher PID 22104 after the preview-only restart); the original remains on
-**http://localhost:3000**, PID 16472. Both health endpoints pass. The new live
-activity endpoint, display preference script, icons, styles and local font are
-served successfully, including the updated font MIME handler. All 28 distinct
-live referenced media URLs are verified nonempty.
-Recheck processes/ports before taking any future process action.
-
-Future source writes need another explicit merge before cutover; this is not
-continuous synchronization. See [migration procedure](migration.md).
+Future source writes still require an explicit final merge before cutover; this is
+not continuous synchronization. See [migration procedure](migration.md).
 
 ## Manual hardware checks
 

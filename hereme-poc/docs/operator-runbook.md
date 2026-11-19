@@ -29,7 +29,10 @@ new media unsafe; text interactions remain available.
 
 ## Back up and restore
 
-Run `node scripts/backup-data.js /off-host/staging/hereme-<timestamp>`. The
+The installed `hereme-backup.timer` runs a daily WAL-safe snapshot, verifies its
+manifest immediately and retains `HEREME_BACKUP_KEEP` local copies. Inspect with
+`systemctl list-timers hereme-backup.timer` and `journalctl -u hereme-backup`.
+For an ad-hoc copy run `node scripts/backup-data.js /off-host/staging/hereme-<timestamp>`. The
 destination must not exist or be inside the live data directory. Copy the
 completed directory off-host only after `node scripts/verify-backup.js <path>`
 passes. Default policy: daily 14 days, weekly 8 weeks, monthly 12 months; the

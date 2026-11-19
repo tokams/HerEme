@@ -20,7 +20,7 @@ production. The app does not fetch user-submitted links.
 | Disk/CPU denial | Readiness minimum-free-space threshold, upload suspension, request limits, one video worker by default and retained failure state. |
 | Privilege escalation | Capabilities are checked in services; verification never grants moderator; remote admin disabled; CLI requires local filesystem access. |
 
-Default budgets per five-minute window: account creation 5/IP, recovery 10/IP,
+Default budgets per five-minute window: account creation 10/IP, recovery 10/IP,
 posts 12/account and 20/IP, comments 40/account, votes 180/account, reports
 20/account, image uploads 12/account and video uploads 3/account. Operators can
 tighten values through environment configuration. Rate-limit responses are 429
