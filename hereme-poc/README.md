@@ -49,7 +49,8 @@ operatørkommandoer.
 ## Legg ut
 
 1. Trykk **Legg ut** og velg et unikt pseudonym hvis nødvendig. Ta vare på
-   gjenopprettingsnøkkelen som bare vises én gang.
+   gjenopprettingsnøkkelen som bare vises én gang. Velg **Lagre med enheten** for
+   å la nettleseren eller mobilens passordbehandler tilby å lagre innloggingen.
 2. Velg kategori og skriv overskrift.
 3. Ta/velg et bilde hvis du ønsker; uten bilde brukes kategoriens bakgrunn.
 4. Legg eventuelt til tekst og lenke. Se den samme plakatflaten i forhåndsvisningen.

@@ -57,9 +57,15 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
     return null;
   }
   function requireUser(req,res){const auth=readSession(req,res);if(!auth)fail('AUTH_REQUIRED','Velg et pseudonym eller logg inn for å delta.',401);return auth;}
-  function requireCsrf(req,auth){
-    const value=req.headers['x-csrf-token'];
+  function requireCsrf(req,auth,value=req.headers['x-csrf-token']){
     if(!value||sha256(String(value))!==auth.csrfHash)fail('CSRF_INVALID','Sikkerhetstoken mangler eller er utløpt.',403);
+  }
+  function confirmRecovery(auth,recoveryKey){
+    recoveryKey=text(recoveryKey,{name:'Gjenopprettingsnøkkel',min:20,max:200});
+    const row=db.prepare('SELECT secret_hash,salt FROM recovery_credentials WHERE user_id=?').get(auth.id);
+    const candidate=row?secretHash(recoveryKey,row.salt):secretHash(recoveryKey,Buffer.alloc(16).toString('base64url'));
+    if(!row||candidate.length!==row.secret_hash.length||!crypto.timingSafeEqual(Buffer.from(candidate),Buffer.from(row.secret_hash)))fail('RECOVERY_FAILED','Gjenopprettingsnøkkelen er feil.',401);
+    return {ok:true};
   }
   function requireCapability(auth,capability){if(!auth.capabilities.includes(capability))fail('FORBIDDEN','Du har ikke tilgang til denne handlingen.',403);}
   function createProfile({name,userAgent=''}){
@@ -94,6 +100,6 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
   }
   function logout(auth,res){if(auth)db.prepare("UPDATE sessions SET revoked_at=datetime('now') WHERE id_hash=?").run(auth.sessionHash);clearCookie(res);}
   function rename(auth,name){name=text(name,{name:'Pseudonym',min:2,max:24});const normalized=normalize(name);if(db.prepare('SELECT id FROM users WHERE normalized_name=? AND id<>?').get(normalized,auth.id))fail('NAME_TAKEN','Pseudonymet er allerede i bruk.',409);db.prepare('UPDATE users SET name=?,normalized_name=? WHERE id=?').run(name,normalized,auth.id);return {...auth,name};}
-  return {readSession,requireUser,requireCsrf,requireCapability,createProfile,recover,rotateRecovery,revokeAll,logout,rename,setCookie,userProjection,sha256};
+  return {readSession,requireUser,requireCsrf,requireCapability,createProfile,recover,confirmRecovery,rotateRecovery,revokeAll,logout,rename,setCookie,userProjection,sha256};
 }
 module.exports={createIdentityService};

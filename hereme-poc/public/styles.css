@@ -140,7 +140,10 @@ main { min-width:0; }
 .activity-totals span { color:var(--muted); }
 .empty-state { column-span:all; padding:45px 20px; text-align:center; }
 .load-more { column-span:all; width:calc(100% - 24px); margin:18px 12px; }
-.recovery-key { display:block; margin:18px 0; padding:16px; border:2px solid var(--accent); background:var(--panel2); font-size:15px; overflow-wrap:anywhere; user-select:all; }
+.recovery-key { width:100%; min-width:0; padding:16px; border:2px solid var(--accent); background:var(--panel2); font-size:15px; }
+.credential-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }
+.credential-row button { min-width:72px; }
+.recovery-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .policy-page { max-width:760px; margin:0 auto; padding:clamp(24px,6vw,80px) 20px; }
 .policy-page h1 { font-size:clamp(28px,6vw,52px); letter-spacing:-.08em; }
 .policy-page h2 { margin-top:35px; color:var(--accent); }

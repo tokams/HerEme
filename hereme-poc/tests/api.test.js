@@ -21,6 +21,8 @@ test('liveness, readiness, public pages and retired room/admin surfaces',async()
 });
 test('pseudonym creation, CSRF, recovery, rotation and session revocation',async()=>{
   const first=await profile('ReleaseUser');assert.ok(first.recovery.length>=20);assert.match(first.headers||'',/^$/);
+  const saved=await fetch(url+'/api/recovery/confirm',{method:'POST',redirect:'manual',headers:{cookie:first.cookie,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({username:'ReleaseUser',password:first.recovery,csrf_token:first.csrf})});assert.equal(saved.status,303);assert.equal(saved.headers.get('location'),'/?recovery-saved=1');
+  const rejectedSave=await fetch(url+'/api/recovery/confirm',{method:'POST',redirect:'manual',headers:{cookie:first.cookie,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({username:'ReleaseUser',password:'feil-gjenopprettingsnokkel-som-er-lang',csrf_token:first.csrf})});assert.equal(rejectedSave.status,401);
   const me=await request('/api/me',{session:first});assert.equal(me.body.user.name,'ReleaseUser');assert.equal(me.body.user.secured,true);
   const without=await request('/api/posts',{method:'POST',body:{title:'Uten token',type:'text',category:'story'},headers:{cookie:first.cookie}});assert.equal(without.status,403);assert.equal(without.body.error.code,'CSRF_INVALID');
   assert.equal((await request('/api/session/recover',{method:'POST',body:{name:'ReleaseUser',recovery_key:'helt-feil-nokkel-som-er-lang'}})).status,401);

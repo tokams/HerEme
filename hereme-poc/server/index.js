@@ -84,6 +84,13 @@ app.post('/api/session/recover',(req,res)=>{
   recordSecurity(req,'session.recovered','allowed',result.user.id);
   res.json({user:result.user,csrf_token:result.session.csrf});
 });
+app.post('/api/recovery/confirm',async(req,res,next)=>{try{
+  const form=new URLSearchParams((await web.readBody(req,4096)).toString('utf8')),current=S.identity.requireUser(req,res);
+  S.identity.requireCsrf(req,current,form.get('csrf_token'));
+  if(form.get('username')!==current.name)return errors(res,400,'IDENTITY_MISMATCH','Pseudonymet samsvarer ikke med den aktive kontoen.');
+  S.identity.confirmRecovery(current,form.get('password'));recordSecurity(req,'recovery.confirmed','allowed',current.id);
+  res.status(303).set('Location','/?recovery-saved=1').send('');
+}catch(error){next(error);}});
 app.get('/api/me',(req,res)=>{const current=S.identity.readSession(req,res);if(!current)return errors(res,401,'AUTH_REQUIRED','Ingen aktiv sesjon.');res.json({user:current,csrf_token:current.csrf||null,legacy_migrated:Boolean(current.legacyMigrated),recovery_key:current.recoveryKey||null,recovery_key_shown_once:Boolean(current.recoveryKey)});});
 app.post('/api/session/logout',write(null,20),(req,res)=>{S.identity.logout(req.auth,res);res.json({ok:true});});
 app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.identity.revokeAll(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});

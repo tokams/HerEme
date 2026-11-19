@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-19 — Recovery credential save and autofill
+
+- Replaced the copy-only recovery screen with a prefilled username/new-password
+  form and validated native POST/redirect so browser and mobile password managers
+  can offer to save the generated credential. Returning recovery login now exposes
+  standard username/current-password autofill metadata.
+- Added reveal plus clipboard, selection-copy and manual-prompt fallbacks. The
+  server confirms the key against its existing scrypt hash and never stores or
+  logs the plaintext credential.
+
 ## 2026-11-19 — Public-release architecture and optional capability boundaries
 
 - Added secure pseudonym recovery and browser sessions, canonical domain services,
