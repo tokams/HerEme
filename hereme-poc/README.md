@@ -1,105 +1,123 @@
-# HerEme — lokal forum-PoC
+# HerEme — én lokal plakatvegg
 
-En fungerende, lokal proof of concept av en Stavanger/Vestlandet-forumplattform. Én server, en SQLite-database, og to skreddersydde responsive grensesnitt: en kompakt mobilvisning og en full desktopvisning.
+En lokal møteplass for Stavanger, Sandnes og Rogaland. Mobil og desktop åpner
+direkte på den samme veggen: kategori, plakatflate og store stemmeknapper.
+Fem faste uttrykk gir plass til **Spørsmål, Mening, Historie, Varsel og Tips**.
+Rom er borte fra navigasjon og publisering.
 
-## Start på Windows (VS Code)
+## Start
 
-1. Pakk ut ZIP-filen, og åpne **hele mappen `hereme-poc`** i VS Code.
-2. Installer [Node.js 24 LTS eller nyere](https://nodejs.org/) hvis du ikke allerede har det.
-3. Dobbeltklikk **`run.cmd`** fra filutforskeren. Eller kjør `./run.cmd` i VS Code-terminal (PowerShell). Den kjører en automatisk avhengighetssjekk ved første oppstart (ingen tredjepartspakker kreves).
-4. Åpne **http://localhost:3000** i nettleseren på PC-en.
-5. Finn **mobiladressen** i terminalen eller se QR-koden på høyre side av desktop-grensesnittet. Eksempel: `http://192.168.1.42:3000`.
-6. Koble telefonen til **samme lokale Wi-Fi/LAN** som PC-en. Åpne mobiladressen i Safari/Chrome.
+Node.js **24 eller nyere** kreves. Kjør **`run.cmd`** på Windows fra denne mappen,
+eller `npm start`. På macOS/Linux kan `./run.sh` brukes.
 
-**Hvis telefonen ikke får kontakt:** Tillat Node.js gjennom Windows Defender Firewall på **Private networks** når Windows spør. Sørg for at PC-nettverket er satt til *Private*. Hvis popupen allerede ble avvist, åpne Windows Security → Firewall & network protection → Allow an app through firewall. Eventuelt, fra en administrator-kommandolinje:
+`run.cmd` sjekker låste avhengigheter og installerer ved endret package/lock-fil
+eller manglende moduler.
 
-```cmd
-netsh advfirewall firewall add rule name="HerEme Local 3000" dir=in action=allow protocol=TCP localport=3000 profile=private
-```
+- Hovedcheckout: `data/`, første port **3000**.
+- Git-worktree: `data/preview/`, første port **3001**. En eksisterende snapshot
+  kreves; se [migrering](docs/migration.md).
+- Hvis porten er opptatt, prøves neste, maksimalt 20 porter. Bruk adressen
+  terminalen skriver ut. API, mobiladresse og QR bruker faktisk åpnet port.
+- `run-preview.cmd` velger samme preview-oppsett.
+- `PORT` velger første port, `HEREME_DATA_DIR` datamappen, og
+  `HEREME_ADMIN_PIN` demo-PIN (standard `2468`).
 
-Enkelte gjestenett og rutere har klientisolering som blokkerer enheter på samme Wi-Fi. Deaktiver dette på ditt eget nettverk ved behov. Ikke åpne port 3000 i ruteren mot internett.
+Telefonen må være på samme Wi-Fi/LAN. Mobiladresse og QR ligger i
+**Meny → Åpne på mobilen**. Tillat Node i Windows-brannmuren for private nettverk
+ved behov. Ikke åpne denne lokale demoen mot internett.
 
-## Start på macOS/Linux
+## Bruk veggen
 
-```sh
-./run.sh
-```
+Alle fem kategorier er valgt fra start. Kryss av eller fjern kategorier; flere
+kan være aktive samtidig. Ingen valgte kategorier gir en tydelig tom visning.
+Innlegg vises med nyeste først. Desktop starter i **Enkel**: synlige kategori-
+knapper med ikoner over veggen og litt luft mellom flisene. **Avansert** viser
+navigasjon og faktiske samtaler/svar i sidepaneler. Begge deler samme utvalg.
+Velg **Lys modus / Mørk modus**; visning og fargevalg huskes i nettleseren.
+Mobil beholder en kompakt header, sammenhengende fliser og sammenleggbare filtre.
 
-For manuelt utviklingsoppsett:
+Hver flis har kategori/tid, plakatflate og en felles handlingsrad med grønn
+oppstemme, rød nedstemme, nettoscore og kommentarantall. Stemmeknappene er minst
+44 × 44 piksler. Tekstinnlegg og lenker får en fullverdig temaplakat uten bilde.
 
-```sh
-npm ci
-npm start
-# alternativt: npm run dev (restart ved serverendringer)
-```
+Åpne flisen for hele innlegget, forfatter, tekst, lenke og trådede svar.
+På mobil fyller detaljvisningen skjermen, med **Lukk**, **Del** og **Rapporter**
+øverst. Rapportering finnes bare inne i innlegget. Animasjon respekterer
+redusert bevegelse. Menyen gir tilgang til den lokale moderatorkøen.
 
-## Dette fungerer
+## Legg ut
 
-- Persistente **rom/subforum**, innlegg, kommentarer, stemmer og rapportering i SQLite.
-- Mobiltilpasset forum med bunnnavigasjon og rask opprettelse av innlegg.
-- Desktopvisning med sidepaneler, søk, sortering og QR-kode for mobil.
-- Tekstinnlegg, deling av http(s)-lenker, vanlige bildeinnlegg.
-- **Plakatgenerator:** velg eller ta bilde på mobil, skriv stor tekst oppå, velg stil/plassering, og publiser det sammensatte bildet.
-- Upvotes/downvotes: synlig nettoscore, én stemme per lokal demokonto (trykk igjen for å angre).
-- Trådede kommentarer, med svar på svar (maks 4 nivåer).
-- Lokale demoprofiler (kallenavn) på hver nettleser.
-- Rapporter innlegg; ved **3 rapporter fra forskjellige demokontoer** settes innlegget på vent til manuell vurdering.
-- Moderatorkø (demo-PIN `2468`, kan overstyres med miljøvariabelen `HEREME_ADMIN_PIN`).
-- Eksempelinnhold fylles på automatisk **kun første gang** databasen opprettes.
+1. Trykk **Legg ut** og velg et kallenavn hvis nødvendig.
+2. Velg kategori og skriv overskrift.
+3. Ta/velg et bilde hvis du ønsker; uten bilde brukes kategoriens bakgrunn.
+4. Legg eventuelt til tekst og lenke. Se den samme plakatflaten i forhåndsvisningen.
+5. Publiser direkte på fellesveggen — intet romvalg.
 
-## Dette er *ikke* produksjonsklart
+Desktop har i tillegg **Tilpass bildeutsnitt** med zoom og vannrett/loddrett
+plassering, samt automatisk/topp/midt/bunn for tekst. Cascadia Code er fast og
+leveres lokalt; farger og form følger en av de fem kategoriene.
+Originalfoto lagres som JPEG uten innbrent tittel; kategori og utsnitt lagres i
+SQLite. Vegg, forhåndsvisning og detalj bruker samme plakatkomponent.
 
-- **Ingen BankID**, ekte innlogging eller verifisering. Demoprofiler er kun en lokal browser-token, uten HTTPS; pålitelig identitetskontroll mangler.
-- **Ingen AI-bildemoderasjon eller faktisk lenkeskanning**. Rapportering + enkel automatisk ventestatus er implementert; alle opplastinger bør modereres skikkelig før en offentlig lansering.
-- Demo-PIN er usikker og er kun egnet for lokal test. Moderatorkø er ikke et produksjons-autoriseringoppsett.
-- Ingen automatisk EXIF-fjerning. Opplastede bilder kan inneholde GPS-/kamera-metadata. En offentlig tjeneste må strippe metadata og re-enkode alle bilder, kontrollere innhold og begrense belastning.
-- Bilder i demoen valideres kun med enkle signaturer, ikke en fullstendig dekoder/sikker mediepipeline.
-- Ingen databasebackup, HTTPS, e-post, rate limiting, anti-spam, skalerbar hosting eller DSA/GDPR-compliance.
-- Innholdet er synlig for alle på ditt lokale nettverk så lenge serveren kjører. Bruk **kun testdata**.
+Ekte ferdige plakatbilder vises uten et nytt tekstoverlegg. Syntetiske eksempler
+med kildebilder bruker den nye v3-malen og lenker til den urørte originalplakaten.
+Eksemplene med
+kildebilder tilbyr **Lag din egen variant** i detaljvisningen. Det lager et nytt
+innlegg og beholder demomerkingen.
 
-## Struktur
+## Innhold og bevaring
 
-```
-hereme-poc/
-├── run.cmd                 Start på Windows
-├── run.sh                  Start på macOS/Linux
-├── package.json
-├── package-lock.json
-├── server/
-│   ├── index.js            HTTP API + LAN/QR
-│   ├── mini-web.js         Innebygd HTTP router (ingen dependencies)
-│   ├── mini-upload.js      Avgrenset filopplasting
-│   ├── qr.js               Innebygd QR-kodegenerator
-│   └── db.js               SQLite-skjema og demodata
-├── public/
-│   ├── index.html          Semantisk app-skall
-│   ├── styles.css          Mobil- og desktop-design
-│   ├── app.js              Forumklient + bilde/plakat-editor
-│   └── assets/             Lokale illustrasjonsbilder
-├── tests/
-│   └── api.test.js         API-røykprøver
-└── data/
-    ├── hereme.sqlite       Genereres automatisk
-    └── uploads/            Lokalt opplastede bilder
-```
+Det medfølgende settet har 13 syntetiske eksempler: seks plakater, tre bilder,
+tre tekstinnlegg og én lenke til UT.no. Kontoer, historier, poeng og kommentarer
+er demo; de merkes i vegg og detalj. Se [innholdsmatrisen](docs/content-matrix.md).
 
-## Nullstill demo
-
-Stopp serveren med `Ctrl+C`. Slett `data/hereme.sqlite` og eventuelle `data/hereme.sqlite-wal` / `data/hereme.sqlite-shm`-filer. Slett eventuelle bilder i `data/uploads/`. Start `run.cmd` på nytt. Husk også å bruke «Bytt profil» i nettleseren hvis den gamle demokontoen var lagret.
-
-## Konfigurasjon
-
-- `PORT` — HTTP-port, standard `3000`
-- `HEREME_ADMIN_PIN` — lokal mod-kode, standard `2468` (kun test)
-
-Eksempel PowerShell:
+En ny database får settet én gang. En eksisterende database får aldri automatisk
+flere eksempler, heller ikke hvis den er tom. Eksplisitt, idempotent import:
 
 ```powershell
-$env:PORT = '3005'
-$env:HEREME_ADMIN_PIN = 'bytt-denne-koden'
-.\run.cmd
+npm run seed:demo
 ```
 
-## Neste steg for en reell tjeneste
+Alle gamle ID-er, romtilknytninger, tidspunkt, medier, stemmer, kommentarer,
+rapporter og modereringsstatus bevares. Versjon 4 gjør kun romtilknytning valgfri
+og legger til `post_design` for kategorier og utsnitt. Nye innlegg har
+`room_id = NULL`. Gamle rom-API-er beholdes for eksisterende klienter og databevaring;
+den nye UI-en bruker dem ikke. Versjon 5 legger til tekstplassering med standard
+`auto`, uten å endre innhold eller eksisterende kategorier/utsnitt.
 
-HTTPS/reverse proxy; BankID/OIDC-integrasjon; ekte kontoadministrasjon; pålitelige filbehandling og moderasjonskøer; abuse/rate-limiting; publiseringsregler; personvernvilkår; backup; database-migrasjoner; og automatiserte tester.
+Kategori kommer fra en eksplisitt mapping for seed-settet, ellers fra gammelt
+rom/type og en dokumentert standardkategori Historie. Se
+[design og migreringsbeslutning](docs/adr/0004-category-poster-wall.md).
+Nye innlegg starter med forfatterens ene oppstemme; historiske poeng endres ikke.
+
+[migreringsveiledningen](docs/migration.md) beskriver online backup, sammenslåing
+av ekte innlegg fra begge instanser og siste overføring før bytte.
+Dette er en eksplisitt operatørhandling, ikke kontinuerlig synkronisering.
+
+## Tester og dokumentasjon
+
+```powershell
+npm test
+npm run test:browser
+```
+
+Ved første installasjon av browsertestene:
+
+```powershell
+npm ci
+npx playwright install chromium
+```
+
+Testene bruker midlertidige databaser. Playwright åpner en egen headless browser,
+aldri brukerens eksisterende nettleser. De dekker migrering, begge skriveinstanser,
+konflikter, metadata, API, fem temaer, kategoriutvalg, publisering med/uten bilde,
+44-pikslers knapper, mobil fullskjerm, deling, rapportering, kommentarer og omstart.
+
+- [Design, komponenter og visuelle eksempler](docs/wall-v3.md)
+- [Valideringsrapport](docs/validation.md)
+- [Arkitekturbeslutninger](docs/adr/)
+
+`public/themes.js` er den faste temakatalogen, `poster.js` plakatflaten,
+`feed.js` flisene/filtrene, `compose.js` publisering og `detail.js`
+innlegg/svar. `app.js` sender handlinger til samme API. `server/post-design.js`
+validerer og mapper kategorier; SQLite eier tilstand, ID-er, stemmer og moderering.

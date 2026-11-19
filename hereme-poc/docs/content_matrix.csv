@@ -1,0 +1,14 @@
+﻿seed_key,type,room_slug,title,image_url,source_image_url,overlay_text,score,comment_count
+hereme-2026-p01,poster,stavanger,Så va det regn igjen,/assets/demo/posts/poster-01-rain_bus_stop.jpg,/assets/demo/sources/source-01-rain_bus_stop.jpg,SÅ VA DET | REGN IGJEN,38,2
+hereme-2026-p02,poster,hva-skjer,Ka skjer i helgå?,/assets/demo/posts/poster-02-coffee_cups.jpg,/assets/demo/sources/source-02-coffee_cups.jpg,KA SKJER | I HELGÅ?,54,2
+hereme-2026-p03,poster,sandnes,Kor e folkå?,/assets/demo/posts/poster-03-quiet_street.jpg,/assets/demo/sources/source-03-quiet_street.jpg,KOR E | FOLKÅ?,26,1
+hereme-2026-p04,poster,fotoprat,"Detta lyset, då",/assets/demo/posts/poster-04-harbor_sunset.jpg,/assets/demo/sources/source-04-harbor_sunset.jpg,"DETTA | LYSET, DÅ",81,2
+hereme-2026-p05,poster,sporsmal,Någen som savne denne?,/assets/demo/posts/poster-05-found_wallet.jpg,/assets/demo/sources/source-05-found_wallet.jpg,NÅGEN SOM | SAVNE DEN?,18,1
+hereme-2026-p06,poster,rogaland,Verdt å gå ut for,/assets/demo/posts/poster-06-hiking_view.jpg,/assets/demo/sources/source-06-hiking_view.jpg,VERDT Å | GÅ UT FOR,67,2
+hereme-2026-p07,image,stavanger,Litt farge i gråværet,/assets/demo/posts/photo-07-rainbow.jpg,,,45,1
+hereme-2026-p08,image,fotoprat,Han nekta å gå videre,/assets/demo/posts/photo-08-dog.jpg,,,92,2
+hereme-2026-p09,image,sandnes,Kaffe eller is?,/assets/demo/posts/photo-09-ice_cream.jpg,,,23,1
+hereme-2026-p10,text,sporsmal,Nylig flytta hit. Kor møte en folk utenom jobb?,,,,34,2
+hereme-2026-p11,text,ryktetorget,Kva e det villaste vær-ryktet du har hørt?,,,,17,1
+hereme-2026-p12,text,rogaland,Ka e den mest undervurderte plassen på Jæren?,,,,57,2
+hereme-2026-p13,link,hva-skjer,Fant en oversikt med turforslag,,,,30,1
