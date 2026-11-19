@@ -8,3 +8,8 @@ data/uploads/*
 .DS_Store
 
 .hereme-deps-ready
+data/preview*/
+data/*.log
+.venv/
+tmp/
+output/

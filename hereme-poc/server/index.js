@@ -7,9 +7,14 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { db, dataDir } = require('./db');
+const { nextId } = require('./migrations');
+const { runtimeConfig } = require('./config');
+const { listenAvailable } = require('./listen');
+const { themes } = require('../public/themes');
+const { ids: categoryIds, legacyCategory, parseDesign, insertDesign } = require('./post-design');
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
+const { port: requestedPort } = runtimeConfig();
 const ADMIN_PIN = process.env.HEREME_ADMIN_PIN || '2468'; // Demo only. Never use in production.
 const MAX_IMAGE = 8 * 1024 * 1024;
 const uploadsDir = path.join(dataDir, 'uploads');
@@ -44,7 +49,7 @@ function lanIps() {
     }
   }
   found.sort((a,b) => {
-    const score = x => /wi-?fi|wireless|wlan|ethernet|eth\d/i.test(x.name) ? 0 : /vpn|virtual|docker|veth|tailscale|wsl/i.test(x.name) ? 2 : 1;
+    const score = x => /vpn|virtual|docker|vethernet|veth|tailscale|wsl|hyper-v/i.test(x.name) ? 2 : /wi-?fi|wireless|wlan|ethernet|eth\d/i.test(x.name) ? 0 : 1;
     return score(a) - score(b);
   });
   return found;
@@ -68,17 +73,22 @@ function requireAdmin(req,res,next) {
   }
   next();
 }
-function roomRows() {
-  return db.prepare(`SELECT r.*, (SELECT count(*) FROM posts p WHERE p.room_id=r.id AND p.status='published') AS post_count
-    FROM rooms r ORDER BY CASE WHEN created_by IS NULL THEN 0 ELSE 1 END, id`).all();
+function roomRows(user) {
+  return db.prepare(`SELECT r.*, (SELECT count(*) FROM posts p WHERE p.room_id=r.id AND p.status='published') AS post_count,
+    (SELECT count(*) FROM room_memberships m WHERE m.room_id=r.id) AS member_count,
+    EXISTS(SELECT 1 FROM room_memberships m WHERE m.room_id=r.id AND m.user_id=?) AS joined
+    FROM rooms r ORDER BY CASE WHEN created_by IS NULL THEN 0 ELSE 1 END, id`).all(user?.id??null);
 }
 function postSql(where = '') {
   return `SELECT p.*, r.slug AS room_slug,r.name AS room_name,r.emoji AS room_emoji,
-    COALESCE(u.name,p.demo_author,'anonym') AS author,
+    COALESCE(u.name,p.demo_author,'anonym') AS author, COALESCE(pp.synthetic_demo,0) AS synthetic_demo, pp.poster_json,
+    d.category,d.image_zoom,d.image_x,d.image_y,d.text_position,
     p.base_score+COALESCE((SELECT sum(v.value) FROM votes v WHERE v.post_id=p.id),0) AS score,
     (SELECT count(*) FROM comments c WHERE c.post_id=p.id) AS comment_count,
     (SELECT count(*) FROM reports rp WHERE rp.post_id=p.id AND rp.resolved=0) AS report_count
-    FROM posts p JOIN rooms r ON r.id=p.room_id LEFT JOIN users u ON u.id=p.author_id ${where}`;
+    FROM posts p LEFT JOIN rooms r ON r.id=p.room_id LEFT JOIN users u ON u.id=p.author_id
+    LEFT JOIN post_presentation pp ON pp.post_id=p.id
+    LEFT JOIN post_design d ON d.post_id=p.id ${where}`;
 }
 function enrichPosts(posts, user) {
   if (!user) return posts.map(p => ({...p, my_vote:0}));
@@ -87,8 +97,10 @@ function enrichPosts(posts, user) {
 }
 function publicPost(row) {
   if (!row) return null;
-  const { author_id, demo_author, base_score, report_count, ...result } = row;
-  return result;
+  const { author_id, demo_author, base_score, report_count, poster_json, ...result } = row;
+  const design=row.category?{category:row.category,image_zoom:row.image_zoom,image_x:row.image_x,image_y:row.image_y,text_position:row.text_position}
+    :parseDesign({},legacyCategory(row.room_slug,row.type));
+  return {...result,...design,poster_style:design.category,poster:poster_json?JSON.parse(poster_json):null};
 }
 function imageExt(buf) {
   if (buf.length > 3 && buf[0]===0xFF && buf[1]===0xD8 && buf[2]===0xFF) return '.jpg';
@@ -102,7 +114,9 @@ function slugify(s) {
 }
 
 app.get('/api/health', (req,res) => res.json({ok:true,name:'HerEme',storage:'SQLite'}));
+app.get('/api/categories', (req,res) => res.json({categories:themes}));
 app.get('/api/meta', (req,res) => {
+  const PORT = req.socket.localPort;
   const ips = lanIps();
   res.json({ port:PORT, addresses:ips.map(x => ({ ...x,url:`http://${x.ip}:${PORT}` })),
     local_url:`http://localhost:${PORT}`, connect_url:ips.length?`http://${ips[0].ip}:${PORT}`:`http://localhost:${PORT}`,
@@ -111,12 +125,21 @@ app.get('/api/meta', (req,res) => {
 });
 app.get('/api/connect-qr.svg', async (req,res,next) => {
   try {
+    const PORT = req.socket.localPort;
     const ip = lanIps()[0]?.ip || 'localhost';
     const svg = await qrcode.toString(`http://${ip}:${PORT}`, {type:'svg',margin:4,width:220,color:{dark:'#184d49',light:'#ffffff'}});
     res.type('svg').set('Cache-Control','no-store').send(svg);
   } catch(e){next(e);}
 });
-app.get('/api/rooms', (req,res) => res.json({rooms:roomRows()}));
+app.get('/api/rooms', (req,res) => res.json({rooms:roomRows(session(req))}));
+app.post('/api/rooms/:id/membership',requireSession,(req,res)=>{
+  const id=Number(req.params.id),joined=req.body?.joined;
+  if(typeof joined!=='boolean')return errors(res,400,'Velg bli med eller forlat rommet.');
+  if(!db.prepare('SELECT id FROM rooms WHERE id=?').get(id))return errors(res,404,'Rommet finnes ikke.');
+  if(joined)db.prepare('INSERT INTO room_memberships(room_id,user_id) VALUES(?,?) ON CONFLICT DO NOTHING').run(id,req.user.id);
+  else db.prepare('DELETE FROM room_memberships WHERE room_id=? AND user_id=?').run(id,req.user.id);
+  res.json({room:roomRows(req.user).find(r=>r.id===id)});
+});
 app.post('/api/session', (req,res) => {
   const name = asText(req.body?.name,24);
   if (name.length<2 || name.length>24 || !/^[\p{L}\p{N} _.-]+$/u.test(name)) return errors(res,400,'Kallenavn må være 2–24 bokstaver eller tall.');
@@ -134,23 +157,35 @@ app.post('/api/rooms', requireSession, (req,res) => {
   if (!slug) return errors(res,400,'Navnet må inneholde bokstaver eller tall.');
   const base = slug;
   for(let n=2;db.prepare('SELECT id FROM rooms WHERE slug=?').get(slug);n++)slug=`${base}-${n}`;
-  const room = db.prepare('INSERT INTO rooms(slug,name,description,emoji,created_by) VALUES(?,?,?,?,?)').run(slug,name,description,'💬',req.user.id);
+  const room = db.prepare('INSERT INTO rooms(id,slug,name,description,emoji,created_by) VALUES(?,?,?,?,?,?)').run(nextId(db,'rooms'),slug,name,description,'💬',req.user.id);
   res.status(201).json({room:db.prepare('SELECT * FROM rooms WHERE id=?').get(room.lastInsertRowid)});
 });
-app.get('/api/posts', (req,res) => {
-  const user = session(req);
-  const room = asText(req.query.room,40), query = asText(req.query.q,100).toLowerCase();
-  const sort = ['new','top','hot'].includes(req.query.sort)?req.query.sort:'hot';
-  let items = db.prepare(postSql("WHERE p.status='published' ORDER BY p.id DESC LIMIT 300")).all();
+function wallRows(params) {
+  const room = asText(params.room,40), query = asText(params.q,100).toLowerCase();
+  const sort = ['new','top','hot'].includes(params.sort)?params.sort:'hot';
+  const categories=params.categories===undefined?categoryIds:String(params.categories).split(',').filter(Boolean);
+  if(categories.some(category=>!categoryIds.includes(category)))return {error:'Ugyldig kategori.'};
+  let items = db.prepare(postSql("WHERE p.status='published' ORDER BY p.created_at DESC, ABS(p.id) DESC")).all();
+  items=items.filter(p=>categories.includes(p.category||legacyCategory(p.room_slug,p.type)));
   if (room && room !== 'all') items = items.filter(p=>p.room_slug===room);
-  if (query) items = items.filter(p=>(p.title+' '+p.body+' '+p.room_name).toLocaleLowerCase('no').includes(query));
+  if (query) items = items.filter(p=>(p.title+' '+p.body).toLocaleLowerCase('no').includes(query));
   if (sort==='top') items.sort((a,b)=>b.score-a.score||b.id-a.id);
   else if (sort==='hot') {
     const now=Date.now();
     const hot=p=>Math.log1p(Math.max(0,p.score)+1)/Math.pow(2+Math.max(0,(now-Date.parse(p.created_at.replace(' ','T')+'Z'))/3600000),0.55);
     items.sort((a,b)=>hot(b)-hot(a)||b.id-a.id);
   }
-  res.json({posts:enrichPosts(items.slice(0,100),user).map(publicPost)});
+  return {items};
+}
+app.get('/api/posts', (req,res) => {
+  const result=wallRows(req.query);
+  if(result.error)return errors(res,400,result.error);
+  res.json({posts:enrichPosts(result.items,session(req)).map(publicPost)});
+});
+app.get('/api/activity', (req,res) => {
+  const result=wallRows(req.query);
+  if(result.error)return errors(res,400,result.error);
+  res.json(require('./activity').activityProjection(db,result.items.map(publicPost)));
 });
 app.get('/api/posts/:id', (req,res) => {
   const p = db.prepare(postSql("WHERE p.id=? AND p.status='published'")).get(req.params.id);
@@ -158,15 +193,21 @@ app.get('/api/posts/:id', (req,res) => {
   res.json({post:publicPost(enrichPosts([p],session(req))[0])});
 });
 app.post('/api/posts', requireSession, upload.single('image'), (req,res) => {
-  const roomId = Number(req.body?.room_id);
+  const roomId = req.body?.room_id===undefined?null:Number(req.body.room_id);
   const title = asText(req.body?.title,160), body = asText(req.body?.body,3000);
   const type = asText(req.body?.type,10), rawLink = asText(req.body?.link_url,1500);
-  if (!db.prepare('SELECT id FROM rooms WHERE id=?').get(roomId)) return errors(res,400,'Ugyldig rom.');
+  const synthetic = req.body?.synthetic_demo;
+  if(synthetic!==undefined&&!['true','false'].includes(synthetic))return errors(res,400,'Ugyldig demomerking.');
+  const room=roomId===null?null:db.prepare('SELECT id,slug FROM rooms WHERE id=?').get(roomId);
+  if (roomId!==null&&!room) return errors(res,400,'Ugyldig rom.');
+  let design;
+  try { design=parseDesign(req.body,legacyCategory(room?.slug,type)); }
+  catch(error) { return errors(res,400,error.message); }
   if (title.length<3||title.length>160) return errors(res,400,'Overskriften må være 3–160 tegn.');
   if (body.length>3000) return errors(res,400,'Innlegget er for langt.');
   if (!['text','link','image','poster'].includes(type)) return errors(res,400,'Ugyldig innleggstype.');
   let link=null;
-  if(type==='link') {
+  if(type==='link'||rawLink) {
     try {const u=new URL(rawLink);if(!['https:','http:'].includes(u.protocol)||!u.hostname)throw Error();link=u.href;}
     catch {return errors(res,400,'Bruk en gyldig http(s)-lenke.');}
   }
@@ -182,11 +223,15 @@ app.post('/api/posts', requireSession, upload.single('image'), (req,res) => {
     imageUrl=`/uploads/${name}`;
   }
   try {
-    const result=db.prepare(`INSERT INTO posts(room_id,author_id,title,body,type,link_url,image_url,base_score)
-      VALUES(?,?,?,?,?,?,?,1)`).run(roomId,req.user.id,title,body,type,link,imageUrl);
+    db.exec('BEGIN IMMEDIATE');
+    const result=db.prepare(`INSERT INTO posts(id,room_id,author_id,title,body,type,link_url,image_url,base_score)
+      VALUES(?,?,?,?,?,?,?,?,0)`).run(nextId(db,'posts'),roomId,req.user.id,title,body,type,link,imageUrl);
     db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(?,?,1)').run(result.lastInsertRowid,req.user.id);
+    insertDesign(db,Number(result.lastInsertRowid),design);
+    if(synthetic==='true')db.prepare('INSERT INTO post_presentation(post_id,synthetic_demo) VALUES(?,1)').run(result.lastInsertRowid);
+    db.exec('COMMIT');
     res.status(201).json({id:Number(result.lastInsertRowid)});
-  } catch(e) {if(filePath)fs.rmSync(filePath,{force:true});throw e;}
+  } catch(e) {if(db.isTransaction)db.exec('ROLLBACK');if(filePath)fs.rmSync(filePath,{force:true});throw e;}
 });
 app.post('/api/posts/:id/vote', requireSession, (req,res) => {
   const id=Number(req.params.id), value=Number(req.body?.value);
@@ -204,7 +249,7 @@ app.get('/api/posts/:id/comments', (req,res) => {
   if(!db.prepare("SELECT id FROM posts WHERE id=? AND status='published'").get(id))return errors(res,404,'Fant ikke innlegget.');
   const comments=db.prepare(`SELECT c.id,c.post_id,c.parent_id,c.body,c.depth,c.created_at,
     COALESCE(u.name,c.demo_author,'anonym') AS author
-    FROM comments c LEFT JOIN users u ON u.id=c.author_id WHERE c.post_id=? ORDER BY c.id ASC LIMIT 300`).all(id);
+    FROM comments c LEFT JOIN users u ON u.id=c.author_id WHERE c.post_id=? ORDER BY c.created_at ASC, ABS(c.id) ASC`).all(id);
   res.json({comments});
 });
 app.post('/api/posts/:id/comments', requireSession, (req,res) => {
@@ -217,7 +262,7 @@ app.post('/api/posts/:id/comments', requireSession, (req,res) => {
     if(parent.depth>=3)return errors(res,400,'Maks fire nivåer med svar.');
     depth=parent.depth+1;
   }
-  const info=db.prepare('INSERT INTO comments(post_id,parent_id,author_id,body,depth) VALUES(?,?,?,?,?)').run(id,parentId,req.user.id,body,depth);
+  const info=db.prepare('INSERT INTO comments(id,post_id,parent_id,author_id,body,depth) VALUES(?,?,?,?,?,?)').run(nextId(db,'comments'),id,parentId,req.user.id,body,depth);
   res.status(201).json({id:Number(info.lastInsertRowid)});
 });
 app.post('/api/posts/:id/report', requireSession, (req,res) => {
@@ -225,7 +270,7 @@ app.post('/api/posts/:id/report', requireSession, (req,res) => {
   if(!['Personopplysninger','Trakassering','Ulovlig innhold','Spam / svindel','Annet'].includes(reason))return errors(res,400,'Velg en grunn.');
   const post=db.prepare("SELECT id FROM posts WHERE id=? AND status='published'").get(id);
   if(!post)return errors(res,404,'Fant ikke innlegget.');
-  const result=db.prepare('INSERT OR IGNORE INTO reports(post_id,user_id,reason) VALUES(?,?,?)').run(id,req.user.id,reason);
+  const result=db.prepare('INSERT INTO reports(id,post_id,user_id,reason) VALUES(?,?,?,?) ON CONFLICT(post_id,user_id) DO NOTHING').run(nextId(db,'reports'),id,req.user.id,reason);
   if(!result.changes)return errors(res,409,'Du har allerede rapportert innlegget.');
   const count=db.prepare('SELECT count(*) AS n FROM reports WHERE post_id=? AND resolved=0').get(id).n;
   if (count>=3) db.prepare("UPDATE posts SET status='review' WHERE id=?").run(id);
@@ -235,7 +280,7 @@ app.get('/api/admin/queue', requireAdmin, (req,res) => {
   const posts=db.prepare(postSql(`WHERE p.status IN ('review','hidden') OR EXISTS
     (SELECT 1 FROM reports rr WHERE rr.post_id=p.id AND rr.resolved=0)
     ORDER BY p.id DESC LIMIT 100`)).all();
-  res.json({posts:posts.map(p=>({id:p.id,title:p.title,room_name:p.room_name,author:p.author,status:p.status,report_count:p.report_count,
+  res.json({posts:posts.map(p=>({id:p.id,title:p.title,category:p.category||legacyCategory(p.room_slug,p.type),author:p.author,status:p.status,report_count:p.report_count,
     reasons:db.prepare('SELECT reason,count(*) AS n FROM reports WHERE post_id=? AND resolved=0 GROUP BY reason').all(p.id)}))});
 });
 app.post('/api/admin/posts/:id', requireAdmin, (req,res) => {
@@ -255,7 +300,8 @@ app.use((err,req,res,next) => {
 });
 
 if (require.main===module) {
-  app.listen(PORT,'0.0.0.0',()=>{
+  listenAvailable(app,{port:requestedPort,onBusy:port=>console.log(`  Port ${port} er opptatt. Prøver neste port...`)}).then(server=>{
+    const PORT = server.address().port;
     console.log(`\n  HerEme kjører!\n  På PC:     http://localhost:${PORT}`);
     const all=lanIps();
     if(all.length)for(const {name,ip} of all)console.log(`  På mobilen: http://${ip}:${PORT}  (${name})`);
@@ -263,7 +309,7 @@ if (require.main===module) {
     console.log(`\n  Åpne samme adresse fra mobilen på samme Wi-Fi.`);
     console.log('  Hvis mobilen ikke får kontakt: tillat Node.js i Windows-brannmuren (Private nettverk).');
     console.log(`  Demo-moderatorkode: ${ADMIN_PIN}  (kun for lokal test!)`);
-    console.log('  Data lagres i data/hereme.sqlite. Ctrl+C for å stoppe.\n');
-  });
+    console.log(`  Data lagres i ${path.join(dataDir, 'hereme.sqlite')}. Ctrl+C for å stoppe.\n`);
+  }).catch(error=>{console.error(error);db.close();process.exitCode=1;});
 }
 module.exports=app;

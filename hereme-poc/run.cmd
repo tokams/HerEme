@@ -24,23 +24,17 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist ".hereme-deps-ready" (
-  echo  Installing dependencies - first launch only...
-  if exist "package-lock.json" (
-    call npm.cmd ci --no-audit --no-fund
-  ) else (
-    call npm.cmd install --no-audit --no-fund
-  )
-  if errorlevel 1 (
-    echo  [ERROR] npm installation failed.
-    pause
-    exit /b 1
-  )
-  type nul > ".hereme-deps-ready"
+node scripts\ensure-deps.js
+if errorlevel 1 (
+  echo [ERROR] Dependency check failed.
+  pause
+  exit /b 1
 )
 
 echo.
 echo  Starting HerEme...
+echo  Worktrees use preview data and start at port 3001.
+echo  If a port is busy, the server tries the next port and prints the actual URL.
 echo  Keep this window open while the forum is running.
 echo  Press Ctrl+C to stop it.
 echo.
