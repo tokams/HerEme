@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-19 — Account-first mobile menu
+
+- The burger menu now opens directly on account state. Signed-in users see their
+  pseudonym, recovery-key rotation and logout without another profile step.
+- Anonymous visitors see the recovery login form immediately and a prominent
+  create-pseudonym action, with password-manager autofill metadata retained.
+
 ## 2026-11-19 — Recovery credential save and autofill
 
 - Replaced the copy-only recovery screen with a prefilled username/new-password
