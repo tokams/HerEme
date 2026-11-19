@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HerEme — current implementation wireframes</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#222;font:13px/1.5 "Cascadia Code",Consolas,monospace}
+main{max-width:1160px;margin:auto;padding:28px}
+h1{font-size:24px;margin:0 0 8px}h2{font-size:18px;margin:0 0 8px}h3{font-size:14px}
+p{max-width:90ch}a{color:#222;text-underline-offset:3px}
+nav{display:flex;gap:20px;flex-wrap:wrap;margin:20px 0}
+section{margin:40px 0 56px;scroll-margin-top:20px}
+.caption,.note{color:#555;font-size:12px}
+.screen{border:2px solid #333;background:#fafafa}
+.control,.selected{display:inline-block;border:1px solid #777;padding:7px 10px;background:#fff}
+.selected{background:#ddd;border-bottom:3px solid #333;font-weight:bold}
+.app-header{display:flex;gap:12px;align-items:center;padding:12px;border-bottom:2px solid #333;white-space:nowrap}
+.app-header b{font-size:19px}.search{flex:1;border:1px solid #999;padding:8px;color:#666}
+.preferences{display:flex;justify-content:flex-end;gap:5px;padding:8px 12px;border-bottom:1px solid #999}
+.category-row{display:flex;justify-content:center;gap:8px;padding:16px 8px 0}
+.toolbar{display:flex;justify-content:space-between;font-size:11px;padding:12px 0}
+.wall{columns:3;column-gap:0}.tile{break-inside:avoid;border:1px solid #333;background:#fff;margin:0}
+.tile header{display:flex;justify-content:space-between;padding:7px;font-size:10px;border-top:4px solid #777;border-bottom:1px solid #333;background:#eee}
+.face{position:relative;aspect-ratio:1;display:flex;flex-direction:column;justify-content:flex-end;padding:15px;background:#ececec;overflow:hidden}
+.photo{aspect-ratio:1/1.12;background:repeating-linear-gradient(135deg,#f2f2f2,#f2f2f2 15px,#e8e8e8 15px,#e8e8e8 16px)}
+.face small{position:absolute;top:38%;left:0;right:0;text-align:center;color:#666;font-size:10px}
+.face strong{font-size:clamp(14px,1.5vw,22px);line-height:1.12;max-width:100%;overflow-wrap:anywhere}
+.face strong:before{content:"";display:block;width:38px;height:4px;background:#777;margin-bottom:10px}
+.text{justify-content:center}.badge{position:absolute;right:8px;top:8px;border:1px solid #777;padding:4px;font-size:9px;background:#fff}
+.tile footer{display:grid;grid-template-columns:44px 44px 1fr 1fr;border-top:1px solid #333}
+.tile footer span{display:grid;place-items:center;min-height:44px;border-right:1px solid #777;font-size:12px}
+.tile footer span:last-child{border:0}.tile footer span:nth-child(-n+2){background:#ddd;font-size:20px}
+.simple-inner{max-width:960px;margin:auto;padding:0 20px 20px}
+.simple-inner .wall{column-gap:10px}.simple-inner .tile{margin-bottom:10px}
+.desktop-scroll{overflow-x:auto}.desktop{min-width:900px}
+.utility{font-size:9px;padding:5px 12px;background:#e3e3e3;border-bottom:1px solid #777;display:flex;justify-content:space-between}
+.advanced-grid{display:grid;grid-template-columns:160px minmax(0,1fr) 185px}
+.sidebar{padding:15px 10px;background:#eee;font-size:11px;border-right:1px solid #555}
+.sidebar.right{border-right:0;border-left:1px solid #555}
+.sidebar h3{font-size:11px;text-transform:uppercase;margin:0 0 12px}
+.sidebar p{border-bottom:1px solid #bbb;padding-bottom:10px}
+.sidebar .category{display:block;padding:7px 0}.advanced-center .toolbar{padding:12px 8px}
+.advanced-center .face strong{font-size:16px}
+.mobile-row{display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap}
+.mobile{width:390px;max-width:100%}.mobile .app-header{justify-content:space-between;gap:8px}
+.mobile .app-header b{font-size:18px}.mobile .wall{columns:2}
+.mobile .face strong{font-size:18px}.mobile .tile header{font-size:9px}
+.mobile-notes{flex:1;min-width:230px;max-width:430px;padding-top:12px}
+.mobile-notes p{margin:0 0 24px}
+.filters-example{border:1px dashed #777;padding:12px;background:#f6f6f6}
+.filters-example span{display:inline-block;padding:5px}
+.detail-toolbar{display:flex;gap:15px;padding:10px;border-bottom:1px solid #555;align-items:center}
+.detail-toolbar span:first-child{margin-right:auto}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr}
+.detail-grid>.face{border-right:1px solid #777}
+.copy{padding:18px}.copy h3{font-size:18px}.copy .meta{font-size:10px;color:#666}
+.vote-row{border:1px solid #777;padding:10px;display:flex;gap:20px}
+.placeholder-lines{height:65px;background:repeating-linear-gradient(to bottom,transparent,transparent 15px,#ccc 15px,#ccc 16px);margin:12px 0}
+.comment{border-top:1px solid #aaa;padding:10px 0;font-size:11px}
+.reply{margin-left:18px;border-left:2px solid #aaa;padding-left:10px}
+.input{border:1px solid #888;background:#fff;color:#777;min-height:38px;padding:8px;margin:6px 0 16px}
+.input.large{min-height:65px}.submit{display:block;margin-left:auto;width:max-content;border:1px solid #555;padding:8px}
+.detail-pair{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:28px;align-items:start}
+.mobile-detail .face{aspect-ratio:1/1.12}.mobile-detail .face strong{font-size:20px}
+.mobile-detail .copy{padding:12px}.mobile-detail .detail-toolbar{font-size:10px;gap:10px}
+.compose-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:25px;padding:20px}
+.compose-grid label{display:block;font-size:11px;font-weight:bold}.preview{max-width:270px}
+.compose-footer{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #777;padding:12px}
+.key{border-left:3px solid #999;padding-left:12px}
+@media(max-width:650px){main{padding:16px}.detail-pair{grid-template-columns:1fr}.compose-grid{grid-template-columns:1fr}.detail-grid{grid-template-columns:1fr}.face strong{font-size:20px}}
+@media print{main{max-width:none;padding:0}section{break-inside:avoid}.desktop{min-width:0}.desktop-scroll{overflow:visible}nav{display:none}}
+</style>
+</head>
+<body><main>
+<h1>HerEme / current implementation</h1>
+<p>Plain wireframes for discussing structure. <strong>Placeholder content; controls do not work.</strong>
+This is the existing feature-worktree layout, not a new redesign proposal.</p>
+<p class="note">Source: feat/local-poster-wall working files, including uncommitted changes · 2026-11-18.
+Actual app: Cascadia Code, five muted category colors, light/dark shell, green/red vote buttons.
+This sheet deliberately uses grayscale.</p>
+<nav aria-label="Wireframe sections"><a href="#mobile">Mobile</a><a href="#simple">Desktop Simple</a><a href="#advanced">Desktop Advanced</a><a href="#detail">Open post</a><a href="#create">Create</a><a href="implementation.md">Implementation document</a></nav>
+
+<section id="mobile">
+<h2>1 / Mobile — default wall</h2>
+<p class="caption">Compact header. Filters collapsed. Two touching columns. No sidebars.</p>
+<div class="mobile-row">
+<div class="screen mobile" aria-label="Mobile wall wireframe">
+<header class="app-header"><b>H / hereme.</b><span>Filter ▾</span><span class="control">+</span><span>☰</span></header>
+<div class="wall"><article class="tile"><header>STORY<span>2 h</span></header><div class="face photo"><small>[ PHOTO PLACEHOLDER ]</small><span class="badge">[icon]</span><strong>A LOCAL MOMENT</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article><article class="tile"><header>QUESTION<span>2 h</span></header><div class="face text"><span class="badge">[icon]</span><strong>A QUESTION?</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article><article class="tile"><header>TIP<span>2 h</span></header><div class="face photo"><small>[ PHOTO PLACEHOLDER ]</small><span class="badge">[icon]</span><strong>SOMETHING TO TRY</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article><article class="tile"><header>OPINION<span>2 h</span></header><div class="face text"><span class="badge">[icon]</span><strong>A POINT OF VIEW</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article></div>
+</div>
+<aside class="mobile-notes">
+<p><strong>Header:</strong> brand/home, filters, create and menu. Profile, connection info and moderation are secondary menu/dialog surfaces.</p>
+<div class="filters-example"><strong>When filters are expanded:</strong><br><span>☑ Question</span><span>☑ Opinion</span><span>☑ Story</span><span>☑ Alert</span><span>☑ Tip</span><br><small>All selected initially; multiple selections allowed.</small></div>
+<p style="margin-top:24px"><strong>Tile:</strong> category + age → poster face → up / down / score / comments. Photo faces are slightly taller than text faces.</p>
+<p><strong>Tap poster:</strong> open a full-screen detail sheet. Voting stays on the wall. Reporting is only inside detail.</p>
+<p class="note">At less than 359px: one column. Desktop layout/theme controls are hidden on mobile.</p>
+</aside>
+</div></section>
+
+<section id="simple">
+<h2>2 / Desktop — Simple (default)</h2>
+<p class="caption">Category icons + labels always visible above the wall. Three columns with 10px gaps. No side panels.</p>
+<div class="desktop-scroll"><div class="screen desktop">
+<header class="app-header"><b>H / hereme.</b><span class="search">Search posts…</span><span class="control">Newest ▾</span><span class="control">+ Create</span><span>Profile</span><span>☰</span></header><div class="preferences"><span class="selected">Simple</span><span class="control">Advanced</span><span class="control">Light / dark</span></div>
+<div class="simple-inner"><div class="category-row"><span class="selected">? Question</span><span class="selected">▤ Opinion</span><span class="selected">▣ Story</span><span class="selected">! Alert</span><span class="selected">↗ Tip</span></div><div class="toolbar"><span>● POSTER WALL</span><span>12 posts</span></div><div class="wall"><article class="tile"><header>STORY<span>2 h</span></header><div class="face photo"><small>[ PHOTO PLACEHOLDER ]</small><span class="badge">[icon]</span><strong>A LOCAL MOMENT</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article><article class="tile"><header>QUESTION<span>2 h</span></header><div class="face text"><span class="badge">[icon]</span><strong>A QUESTION FOR THE NEIGHBOURHOOD</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article><article class="tile"><header>TIP<span>2 h</span></header><div class="face photo"><small>[ PHOTO PLACEHOLDER ]</small><span class="badge">[icon]</span><strong>SOMETHING TO TRY</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article></div></div>
+</div></div>
+<p class="note">Both desktop views share categories, search, sort and post actions. Layout and light/dark choices are remembered locally.</p>
+</section>
+
+<section id="advanced">
+<h2>3 / Desktop — Advanced</h2>
+<p class="caption">Same tiles and data; more surrounding navigation and conversation context.</p>
+<div class="desktop-scroll"><div class="screen desktop">
+<div class="utility"><span>HEREME / LOCAL COMMUNITY</span><span>AREA / LOCAL DEMO</span></div>
+<header class="app-header"><b>H / hereme.</b><span class="search">Search posts…</span><span class="control">Newest ▾</span><span class="control">+ Create</span><span>Profile</span><span>☰</span></header><div class="preferences"><span class="control">Simple</span><span class="selected">Advanced</span><span class="control">Light / dark</span></div>
+<div class="advanced-grid">
+<aside class="sidebar"><h3>Neighbourhood</h3><p>▦ All posts<br><br>+ Create post</p><h3>Categories</h3><span class="category">☑ ? Question</span><span class="category">☑ ▤ Opinion</span><span class="category">☑ ▣ Story</span><span class="category">☑ ! Alert</span><span class="category">☑ ↗ Tip</span><p>Show all categories</p><p>Community note<br><br>About / mobile address</p></aside>
+<div class="advanced-center"><div class="toolbar"><span>● POSTER WALL</span><span>12 posts</span></div><div class="wall"><article class="tile"><header>STORY<span>2 h</span></header><div class="face photo"><small>[ PHOTO PLACEHOLDER ]</small><span class="badge">[icon]</span><strong>A LOCAL MOMENT</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article><article class="tile"><header>QUESTION<span>2 h</span></header><div class="face text"><span class="badge">[icon]</span><strong>A QUESTION FOR THE NEIGHBOURHOOD</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article><article class="tile"><header>TIP<span>2 h</span></header><div class="face photo"><small>[ PHOTO PLACEHOLDER ]</small><span class="badge">[icon]</span><strong>SOMETHING TO TRY</strong></div><footer><span>▲</span><span>▼</span><span>+12</span><span>▤ 3</span></footer></article></div></div>
+<aside class="sidebar right"><h3>Discussions</h3><p>Post title A<br>3 replies</p><p>Post title B<br>2 replies</p><h3>Recent comments</h3><p>Name · 1 h<br>A short comment…<br><small>On post A</small></p><p>Name · 2 h<br>Another response…</p><small>12 posts / 24 replies<br>For this filter/search</small></aside>
+</div></div></div>
+<p class="note">Right panel disappears below 1280px. Below 900px navigation collapses into mobile/tablet controls. Activity comes from actual published content.</p>
+</section>
+
+<section id="detail">
+<h2>4 / Open post</h2>
+<p class="caption">Desktop: wide focused overlay. Mobile: full-screen, vertically stacked sheet. Background wall is inactive while open.</p>
+<div class="detail-pair">
+<div><h3>Desktop overlay</h3><div class="screen">
+<div class="detail-toolbar"><span>× Close</span><span>Report</span><span>↗ Share</span></div>
+<div class="detail-grid"><div class="face photo"><small>[ PHOTO / POSTER ]</small><span class="badge">[icon]</span><strong>POST TITLE HERE</strong></div>
+<div class="copy"><div class="vote-row">▲ &nbsp; ▼ &nbsp; +12 &nbsp; ▤ 3</div><p class="meta">Author · time · category</p><h3>Post title here</h3><div class="placeholder-lines"></div><p>Optional source link ↗</p><h3>Comments</h3><div class="comment">Name · time<br>Example comment.<div class="reply">Name · reply<br>Example reply.</div></div><div class="input large">Write a comment…</div><span class="submit">Send</span></div></div>
+</div><p class="note">Close returns to the same wall position and filters. Reporting and sharing live here, not on the tile.</p></div>
+<div><h3>Mobile full-screen sheet</h3><div class="screen mobile-detail"><div class="detail-toolbar"><span>× Close</span><span>Report</span><span>↗ Share</span></div><div class="face photo"><small>[ PHOTO / POSTER ]</small><span class="badge">[icon]</span><strong>POST TITLE HERE</strong></div><div class="copy"><div class="vote-row">▲ ▼ +12 ▤ 3</div><p class="meta">Author · time · category</p><h3>Post title here</h3><div class="placeholder-lines"></div><div class="comment">Name · comment<br><span class="reply">↳ Reply text</span></div><div class="input">Write a comment…</div><span class="submit">Send</span></div></div></div>
+</div></section>
+
+<section id="create">
+<h2>5 / Create a post</h2>
+<p class="caption">Same form and poster renderer. Desktop places fields beside preview; mobile stacks them and hides crop/text-position controls.</p>
+<div class="screen">
+<div class="detail-toolbar"><strong>Create a post</strong><span style="margin-left:auto">× Close</span></div>
+<div class="compose-grid"><div>
+<label>1. Category</label><div class="input">Question / Opinion / Story / Alert / Tip</div>
+<label>2. Title</label><div class="input">Your headline…</div>
+<label>3. Photo — optional</label><div class="input">Take photo / Choose file</div>
+<label>Body — optional</label><div class="input large">Tell us more…</div>
+<label>Link — optional</label><div class="input">https://…</div>
+<div class="filters-example">Desktop only: crop zoom / horizontal / vertical<br>Text: Auto / Top / Center / Bottom</div>
+</div><aside><h3>Live poster preview</h3><div class="preview"><article class="tile"><header>STORY<span>2 h</span></header><div class="face text"><span class="badge">[icon]</span><strong>YOUR HEADLINE HERE</strong></div></article></div><p class="note">No photo still produces a complete themed poster. Fixed Cascadia Code; no free-form font/style editor.</p></aside></div>
+<div class="compose-footer"><span class="note">Five templates / shared wall</span><span class="control">Publish →</span></div>
+</div>
+</section>
+<p class="key">Discussion focus: information hierarchy, tile density, category selection, discovery panels, detail/composition flow and their backing data/actions. Backend and storage details are in <a href="implementation.md">implementation.md</a>.</p>
+</main></body></html>
+

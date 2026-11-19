@@ -1,0 +1,160 @@
+{
+  "icons": [
+    {
+      "name": "question",
+      "file": "icons/question.svg",
+      "category": "ui"
+    },
+    {
+      "name": "opinion",
+      "file": "icons/opinion.svg",
+      "category": "ui"
+    },
+    {
+      "name": "story",
+      "file": "icons/story.svg",
+      "category": "ui"
+    },
+    {
+      "name": "alert",
+      "file": "icons/alert.svg",
+      "category": "ui"
+    },
+    {
+      "name": "tip",
+      "file": "icons/tip.svg",
+      "category": "ui"
+    },
+    {
+      "name": "comment",
+      "file": "icons/comment.svg",
+      "category": "ui"
+    },
+    {
+      "name": "close",
+      "file": "icons/close.svg",
+      "category": "ui"
+    },
+    {
+      "name": "share",
+      "file": "icons/share.svg",
+      "category": "ui"
+    },
+    {
+      "name": "report",
+      "file": "icons/report.svg",
+      "category": "ui"
+    },
+    {
+      "name": "plus",
+      "file": "icons/plus.svg",
+      "category": "ui"
+    },
+    {
+      "name": "image",
+      "file": "icons/image.svg",
+      "category": "ui"
+    },
+    {
+      "name": "camera",
+      "file": "icons/camera.svg",
+      "category": "ui"
+    },
+    {
+      "name": "filter",
+      "file": "icons/filter.svg",
+      "category": "ui"
+    },
+    {
+      "name": "clock",
+      "file": "icons/clock.svg",
+      "category": "ui"
+    },
+    {
+      "name": "check",
+      "file": "icons/check.svg",
+      "category": "ui"
+    },
+    {
+      "name": "menu",
+      "file": "icons/menu.svg",
+      "category": "ui"
+    },
+    {
+      "name": "grid",
+      "file": "icons/grid.svg",
+      "category": "ui"
+    },
+    {
+      "name": "search",
+      "file": "icons/search.svg",
+      "category": "ui"
+    },
+    {
+      "name": "link",
+      "file": "icons/link.svg",
+      "category": "ui"
+    },
+    {
+      "name": "location",
+      "file": "icons/location.svg",
+      "category": "ui"
+    },
+    {
+      "name": "spark",
+      "file": "icons/spark.svg",
+      "category": "ui"
+    },
+    {
+      "name": "arrow-right",
+      "file": "icons/arrow-right.svg",
+      "category": "ui"
+    },
+    {
+      "name": "send",
+      "file": "icons/send.svg",
+      "category": "ui"
+    },
+    {
+      "name": "refresh",
+      "file": "icons/refresh.svg",
+      "category": "ui"
+    },
+    {
+      "name": "user",
+      "file": "icons/user.svg",
+      "category": "ui"
+    },
+    {
+      "name": "type",
+      "file": "icons/type.svg",
+      "category": "ui"
+    },
+    {
+      "name": "vote-up",
+      "file": "icons/vote-up.svg",
+      "category": "voting"
+    },
+    {
+      "name": "vote-down",
+      "file": "icons/vote-down.svg",
+      "category": "voting"
+    }
+  ],
+  "themes": [
+    "question",
+    "opinion",
+    "story",
+    "alert",
+    "tip"
+  ],
+  "colors": {
+    "bg": "#0A0B0D",
+    "surface": "#17191B",
+    "border": "#000000",
+    "up": "#00C854",
+    "down": "#F9233C",
+    "lime": "#C4FF00"
+  },
+  "license": "Original SVG artwork generated for this HerEme design prototype. You may modify and use in your project."
+}

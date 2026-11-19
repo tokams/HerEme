@@ -1,0 +1,451 @@
+{
+  "schema_version": "1.0",
+  "dataset_id": "hereme-poster-demo-nov-2026",
+  "generated_for": "HerEme local PoC poster-wall redesign",
+  "synthetic_demo": true,
+  "created_at": "2026-11-18T19:00:00Z",
+  "notes": "All people, accounts, scores, comments, and scene-specific post claims are fictional examples. All images are generated/derived from generated imagery and intended for local demo use. Do not treat as real Stavanger news.",
+  "asset_base": "public",
+  "rooms": [
+    {
+      "slug": "stavanger",
+      "name": "Stavanger",
+      "emoji": "🌊",
+      "description": "Alt som skjer i Stavanger – stort og smått."
+    },
+    {
+      "slug": "sandnes",
+      "name": "Sandnes",
+      "emoji": "🏘️",
+      "description": "Snakk om Sandnes, folk og steder."
+    },
+    {
+      "slug": "rogaland",
+      "name": "Rogaland",
+      "emoji": "🧭",
+      "description": "Fra Jæren til Ryfylke og Haugalandet."
+    },
+    {
+      "slug": "ryktetorget",
+      "name": "Ryktetorget",
+      "emoji": "👀",
+      "description": "Ubekreftet prat, helst om ufarlige ting."
+    },
+    {
+      "slug": "hva-skjer",
+      "name": "Ka skjer?",
+      "emoji": "🎉",
+      "description": "Ting å finne på og lokale invitasjoner."
+    },
+    {
+      "slug": "sporsmal",
+      "name": "Spørsmål & hjelp",
+      "emoji": "💡",
+      "description": "Spør lokalt, få svar."
+    },
+    {
+      "slug": "fotoprat",
+      "name": "Fotoprat",
+      "emoji": "📸",
+      "description": "Bilder, plakater, stemninger."
+    }
+  ],
+  "posts": [
+    {
+      "seed_key": "hereme-2026-p01",
+      "type": "poster",
+      "room_slug": "stavanger",
+      "demo_author": "regnjakka",
+      "title": "Så va det regn igjen",
+      "body": "Andre som blei klissvåte på vei hjem? 😅",
+      "image_url": "/assets/demo/posts/poster-01-rain_bus_stop.jpg",
+      "base_score": 38,
+      "created_at": "2026-11-18T15:28:00Z",
+      "poster": {
+        "source_image_url": "/assets/demo/sources/source-01-rain_bus_stop.jpg",
+        "overlay_text": "SÅ VA DET\nREGN IGJEN",
+        "style": "gradient-bottom",
+        "position": "bottom",
+        "text_color": "#ffffff",
+        "accent_color": "#F9D657"
+      },
+      "comments": [
+        {
+          "local_id": "c-20_12",
+          "demo_author": "tørre_sokker",
+          "body": "Tok bussen og blei våt likevel 😂",
+          "created_at": "2026-11-18T15:40:00Z"
+        },
+        {
+          "local_id": "c-12_4",
+          "demo_author": "skya",
+          "body": "Paraply og Stavanger e ein dårlig kombinasjon.",
+          "created_at": "2026-11-18T15:48:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "ui_hint": "poster-hero"
+    },
+    {
+      "seed_key": "hereme-2026-p02",
+      "type": "poster",
+      "room_slug": "hva-skjer",
+      "demo_author": "koppmedmelk",
+      "title": "Ka skjer i helgå?",
+      "body": "Någen som vett om någe kjekt på lørdag? Helst någe det går an å bli med på aleina.",
+      "image_url": "/assets/demo/posts/poster-02-coffee_cups.jpg",
+      "base_score": 54,
+      "created_at": "2026-11-18T14:39:00Z",
+      "poster": {
+        "source_image_url": "/assets/demo/sources/source-02-coffee_cups.jpg",
+        "overlay_text": "KA SKJER\nI HELGÅ?",
+        "style": "gradient-bottom",
+        "position": "bottom",
+        "text_color": "#ffffff",
+        "accent_color": "#F4FEF2"
+      },
+      "comments": [
+        {
+          "local_id": "c-65_8",
+          "demo_author": "gladlaks",
+          "body": "E med på en rusletur og kaffe hvis det ikkje pøse ned.",
+          "created_at": "2026-11-18T14:55:00Z"
+        },
+        {
+          "local_id": "c-52_11",
+          "demo_author": "koppmedmelk",
+          "body": "Det e faktisk ikkje verst forslag!",
+          "created_at": "2026-11-18T15:08:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "ui_hint": "poster-hero"
+    },
+    {
+      "seed_key": "hereme-2026-p03",
+      "type": "poster",
+      "room_slug": "sandnes",
+      "demo_author": "midtibyen",
+      "title": "Kor e folkå?",
+      "body": "Følte eg hadde heile sentrum for meg sjøl. Kor pleie dokker å henga på en rolig onsdag?",
+      "image_url": "/assets/demo/posts/poster-03-quiet_street.jpg",
+      "base_score": 26,
+      "created_at": "2026-11-18T13:35:00Z",
+      "poster": {
+        "source_image_url": "/assets/demo/sources/source-03-quiet_street.jpg",
+        "overlay_text": "KOR E\nFOLKÅ?",
+        "style": "gradient-bottom",
+        "position": "bottom",
+        "text_color": "#ffffff",
+        "accent_color": "#FFF1F1"
+      },
+      "comments": [
+        {
+          "local_id": "c-120_8",
+          "demo_author": "langgata",
+          "body": "Du tok bildet på det tidspunktet alle e på jobb 😄",
+          "created_at": "2026-11-18T14:00:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "ui_hint": "poster-hero"
+    },
+    {
+      "seed_key": "hereme-2026-p04",
+      "type": "poster",
+      "room_slug": "fotoprat",
+      "demo_author": "lysjeger",
+      "title": "Detta lyset, då",
+      "body": "Så fargane over sjøen og måtte stoppa et lite minutt. Flere som tar altfor mange himmelbilder?",
+      "image_url": "/assets/demo/posts/poster-04-harbor_sunset.jpg",
+      "base_score": 81,
+      "created_at": "2026-11-18T12:27:00Z",
+      "poster": {
+        "source_image_url": "/assets/demo/sources/source-04-harbor_sunset.jpg",
+        "overlay_text": "DETTA\nLYSET, DÅ",
+        "style": "gradient-bottom",
+        "position": "bottom",
+        "text_color": "#ffffff",
+        "accent_color": "#FCE3A2"
+      },
+      "comments": [
+        {
+          "local_id": "c-197_6",
+          "demo_author": "gråvær",
+          "body": "Dette e grunnen til at eg tåle regnet.",
+          "created_at": "2026-11-18T12:43:00Z"
+        },
+        {
+          "local_id": "c-181_5",
+          "demo_author": "vågen",
+          "body": "Nydelige fargar!",
+          "created_at": "2026-11-18T12:59:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "ui_hint": "poster-hero"
+    },
+    {
+      "seed_key": "hereme-2026-p05",
+      "type": "poster",
+      "room_slug": "sporsmal",
+      "demo_author": "hittegods",
+      "title": "Någen som savne denne?",
+      "body": "DEMO: Fiktivt hittegodsinnlegg. Fant ei lommebok på en benk i dette eksempelet. Ville levert den til hittegods – ikkje lagt ut personopplysninger.",
+      "image_url": "/assets/demo/posts/poster-05-found_wallet.jpg",
+      "base_score": 18,
+      "created_at": "2026-11-18T11:08:00Z",
+      "poster": {
+        "source_image_url": "/assets/demo/sources/source-05-found_wallet.jpg",
+        "overlay_text": "NÅGEN SOM\nSAVNE DEN?",
+        "style": "gradient-bottom",
+        "position": "bottom",
+        "text_color": "#ffffff",
+        "accent_color": "#F2FCFF"
+      },
+      "comments": [
+        {
+          "local_id": "c-271_6",
+          "demo_author": "ryddig",
+          "body": "Bra å la hittegods håndtera sånt.",
+          "created_at": "2026-11-18T11:29:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "ui_hint": "poster-hero"
+    },
+    {
+      "seed_key": "hereme-2026-p06",
+      "type": "poster",
+      "room_slug": "rogaland",
+      "demo_author": "småtur",
+      "title": "Verdt å gå ut for",
+      "body": "Tar gjerne imot tips til turer på under to timer med utsikt, helst ikkje altfor langt å kjøre.",
+      "image_url": "/assets/demo/posts/poster-06-hiking_view.jpg",
+      "base_score": 67,
+      "created_at": "2026-11-18T09:40:00Z",
+      "poster": {
+        "source_image_url": "/assets/demo/sources/source-06-hiking_view.jpg",
+        "overlay_text": "VERDT Å\nGÅ UT FOR",
+        "style": "gradient-bottom",
+        "position": "bottom",
+        "text_color": "#ffffff",
+        "accent_color": "#FFF8E5"
+      },
+      "comments": [
+        {
+          "local_id": "c-349_5",
+          "demo_author": "stien",
+          "body": "Rundt Dalsnuten e fint, men kan vera glatt.",
+          "created_at": "2026-11-18T10:11:00Z"
+        },
+        {
+          "local_id": "c-319_8",
+          "demo_author": "kortetur",
+          "body": "Sjekk UT.no etter turforslag og vanskelighetsgrad.",
+          "created_at": "2026-11-18T10:41:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "ui_hint": "poster-hero"
+    },
+    {
+      "seed_key": "hereme-2026-p07",
+      "type": "image",
+      "room_slug": "stavanger",
+      "demo_author": "regnbuefolk",
+      "title": "Litt farge i gråværet",
+      "body": "Himmel over fjorden i dag. Null filter, bare flaks med lyset.",
+      "image_url": "/assets/demo/posts/photo-07-rainbow.jpg",
+      "base_score": 45,
+      "created_at": "2026-11-18T07:50:00Z",
+      "comments": [
+        {
+          "local_id": "c-472_8",
+          "demo_author": "solglimt",
+          "body": "Så fint! Det skifte fort her vest.",
+          "created_at": "2026-11-18T08:08:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "poster": null,
+      "ui_hint": "photo-story"
+    },
+    {
+      "seed_key": "hereme-2026-p08",
+      "type": "image",
+      "room_slug": "fotoprat",
+      "demo_author": "hundepappa",
+      "title": "Han nekta å gå videre",
+      "body": "Kom til stranden og bestemte seg for at turen va ferdige akkurat her 😂",
+      "image_url": "/assets/demo/posts/photo-08-dog.jpg",
+      "base_score": 92,
+      "created_at": "2026-11-18T07:00:00Z",
+      "comments": [
+        {
+          "local_id": "c-521_8",
+          "demo_author": "potespor",
+          "body": "Han har jo et poeng.",
+          "created_at": "2026-11-18T07:19:00Z"
+        },
+        {
+          "local_id": "c-507_9",
+          "demo_author": "tasseladd",
+          "body": "Gi han fem minutter til 😁",
+          "created_at": "2026-11-18T07:33:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "poster": null,
+      "ui_hint": "photo-story"
+    },
+    {
+      "seed_key": "hereme-2026-p09",
+      "type": "image",
+      "room_slug": "sandnes",
+      "demo_author": "vaffelhjerte",
+      "title": "Kaffe eller is?",
+      "body": "Ka e favorittplassen for en rolig kaffikopp eller någe søtt i sentrum?",
+      "image_url": "/assets/demo/posts/photo-09-ice_cream.jpg",
+      "base_score": 23,
+      "created_at": "2026-11-18T05:50:00Z",
+      "comments": [
+        {
+          "local_id": "c-587_7",
+          "demo_author": "søttann",
+          "body": "Velge is uansett årstid!",
+          "created_at": "2026-11-18T06:13:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "poster": null,
+      "ui_hint": "photo-story"
+    },
+    {
+      "seed_key": "hereme-2026-p10",
+      "type": "text",
+      "room_slug": "sporsmal",
+      "demo_author": "nyifeltet",
+      "title": "Nylig flytta hit. Kor møte en folk utenom jobb?",
+      "body": "E ganske ny i Stavanger-området og kjenne ikkje så mange. Har dokker tips til åpne aktiviteter der folk faktisk snakke med nye?",
+      "image_url": null,
+      "base_score": 34,
+      "created_at": "2026-11-18T03:10:00Z",
+      "comments": [
+        {
+          "local_id": "c-739_9",
+          "demo_author": "frivillig",
+          "body": "Frivillighet e en veldig fin start. Finn någe du like!",
+          "created_at": "2026-11-18T03:41:00Z"
+        },
+        {
+          "local_id": "c-728_9",
+          "demo_author": "nyifeltet",
+          "body": "Takk! Det ska eg faktisk sjekka.",
+          "created_at": "2026-11-18T03:52:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "poster": null,
+      "ui_hint": "discussion"
+    },
+    {
+      "seed_key": "hereme-2026-p11",
+      "type": "text",
+      "room_slug": "ryktetorget",
+      "demo_author": "vestavind",
+      "title": "Kva e det villaste vær-ryktet du har hørt?",
+      "body": "Någen lovde meg ein gong at det «alltid e sol på Jæren» 😄 Dette e bare humor og skrøner om været – ikkje rykter om privatpersonar.",
+      "image_url": null,
+      "base_score": 17,
+      "created_at": "2026-11-18T02:20:00Z",
+      "comments": [
+        {
+          "local_id": "c-789_8",
+          "demo_author": "solbrent",
+          "body": "At det berre regne på mandagar.",
+          "created_at": "2026-11-18T02:51:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "poster": null,
+      "ui_hint": "discussion"
+    },
+    {
+      "seed_key": "hereme-2026-p12",
+      "type": "text",
+      "room_slug": "rogaland",
+      "demo_author": "jærske",
+      "title": "Ka e den mest undervurderte plassen på Jæren?",
+      "body": "Trenge nye små utflukter. Ikkje nødvendigvis topplista alle kjenne fra før. Ka ville du vist en som e ny her?",
+      "image_url": null,
+      "base_score": 57,
+      "created_at": "2026-11-17T21:40:00Z",
+      "comments": [
+        {
+          "local_id": "c-1070_10",
+          "demo_author": "strandsone",
+          "body": "Småstiene nær sjøen kan vera bedre enn de mest kjente turene.",
+          "created_at": "2026-11-17T22:10:00Z"
+        },
+        {
+          "local_id": "c-1058_5",
+          "demo_author": "trive",
+          "body": "Eg følge med på tips her!",
+          "created_at": "2026-11-17T22:22:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "link_url": null,
+      "poster": null,
+      "ui_hint": "discussion"
+    },
+    {
+      "seed_key": "hereme-2026-p13",
+      "type": "link",
+      "room_slug": "hva-skjer",
+      "demo_author": "turplanlegger",
+      "title": "Fant en oversikt med turforslag",
+      "body": "Her e UT.no hvis någen vil finna sin neste tur. Kva korte turer ville dokker anbefalt nær Stavanger?",
+      "link_url": "https://ut.no/",
+      "image_url": null,
+      "base_score": 30,
+      "created_at": "2026-11-17T17:00:00Z",
+      "comments": [
+        {
+          "local_id": "c-1355_6",
+          "demo_author": "gårmeg",
+          "body": "Fint å kunna filtrera etter lengde og vanskelighet.",
+          "created_at": "2026-11-17T17:25:00Z"
+        }
+      ],
+      "status": "published",
+      "synthetic_demo": true,
+      "poster": null,
+      "ui_hint": "link-story"
+    }
+  ]
+}

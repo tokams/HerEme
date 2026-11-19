@@ -1,0 +1,152 @@
+[
+  {
+    "id": 1,
+    "cat": "question",
+    "title": "Ka skjer i helgå?",
+    "body": "Någen som har tips te någe kjekt å finna på i Stavanger? Helst någe som ikkje koste skjortå.",
+    "age": "12 min",
+    "score": 46,
+    "comments": 12,
+    "image": "coffee_cups"
+  },
+  {
+    "id": 2,
+    "cat": "alert",
+    "title": "Så va det regn igjen.",
+    "body": "Er det fleire som har merka kor mykje det bøtte ned ved holdeplassen i dag?",
+    "age": "29 min",
+    "score": 118,
+    "comments": 18,
+    "image": "rain_bus_stop"
+  },
+  {
+    "id": 3,
+    "cat": "opinion",
+    "title": "Ka e egentlig den beste kaffen i Sandnes?",
+    "body": "Eg meine me må få avgjort dette. Kven servere den beste kaffen, og kor?",
+    "age": "42 min",
+    "score": 84,
+    "comments": 31,
+    "image": null
+  },
+  {
+    "id": 4,
+    "cat": "story",
+    "title": "Ein heilt vanlig kveld ved sjøen.",
+    "body": "Tog ein tur langs sjøen og fekk denne utsikten. Litt av grunnen til at eg like å bu her.",
+    "age": "1 t",
+    "score": 236,
+    "comments": 9,
+    "image": "harbor_sunset"
+  },
+  {
+    "id": 5,
+    "cat": "tip",
+    "title": "Verdt turen i helgå.",
+    "body": "Ein liten tur i fjellet gir energi til heile vekå. Har dokker andre gode turforslag?",
+    "age": "2 t",
+    "score": 67,
+    "comments": 11,
+    "image": "hiking_view"
+  },
+  {
+    "id": 6,
+    "cat": "question",
+    "title": "Kor blei det av sommaren?",
+    "body": "Andre som er lei av fire årstider på ein dag?",
+    "age": "2 t",
+    "score": 129,
+    "comments": 26,
+    "image": null
+  },
+  {
+    "id": 7,
+    "cat": "story",
+    "title": "Denna traff eg på i dag.",
+    "body": "Någen så kjenne igjen denne fine hunden? Bildet er frå ein tur langs sjøen.",
+    "age": "3 t",
+    "score": 53,
+    "comments": 7,
+    "image": "dog"
+  },
+  {
+    "id": 8,
+    "cat": "opinion",
+    "title": "Me trenge fleire plassar å bare vera.",
+    "body": "Ikkje alt må vera ein kafé, butikk eller aktivitet. Koss kan byen bli betre på dette?",
+    "age": "3 t",
+    "score": 91,
+    "comments": 44,
+    "image": null
+  },
+  {
+    "id": 9,
+    "cat": "tip",
+    "title": "Is på ein grå dag? Alltid.",
+    "body": "Dagens viktige diskusjon: kor får du den beste isen i sentrum?",
+    "age": "4 t",
+    "score": 37,
+    "comments": 21,
+    "image": "ice_cream"
+  },
+  {
+    "id": 10,
+    "cat": "alert",
+    "title": "Funne lommebok ved benken.",
+    "body": "Send ei melding om du veit kven som eig han. Ikkje legg ut personlege opplysningar i kommentarfeltet.",
+    "age": "5 t",
+    "score": 34,
+    "comments": 6,
+    "image": "found_wallet"
+  },
+  {
+    "id": 11,
+    "cat": "question",
+    "title": "Kven har tips til regnvêrsdagar?",
+    "body": "Me trenge tips til ting å gjera inne på ein regndag. Alle forslag mottas!",
+    "age": "6 t",
+    "score": 16,
+    "comments": 13,
+    "image": "quiet_street"
+  },
+  {
+    "id": 12,
+    "cat": "story",
+    "title": "Regnboge over byen!",
+    "body": "Måtte stoppa opp og ta bilde. Rett og slett ein fin liten overraskelse.",
+    "age": "8 t",
+    "score": 202,
+    "comments": 14,
+    "image": "rainbow"
+  },
+  {
+    "id": 13,
+    "cat": "opinion",
+    "title": "Dette fortjene meir merksemd.",
+    "body": "Kva vil dokker at folk i lokalmiljøet skal snakka meir om?",
+    "age": "9 t",
+    "score": -4,
+    "comments": 29,
+    "image": null
+  },
+  {
+    "id": 14,
+    "cat": "tip",
+    "title": "Ei lita påminning.",
+    "body": "Ta deg tid te ein prat med nokon du ikkje har snakka med på ei stund.",
+    "age": "11 t",
+    "score": 12,
+    "comments": 4,
+    "image": null
+  },
+  {
+    "id": 15,
+    "cat": "story",
+    "title": "Stille i gatene før byen vakne.",
+    "body": "Det er någe fint med dei fem minuttå når alt er rolig.",
+    "age": "12 t",
+    "score": 88,
+    "comments": 8,
+    "image": "quiet_street"
+  }
+]
