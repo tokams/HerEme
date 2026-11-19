@@ -110,6 +110,11 @@ main { min-width:0; }
 .with-image.placement-top:not(.original-poster)::after { transform:rotate(180deg); }
 .with-image.placement-center:not(.original-poster)::after { background:linear-gradient(0deg,rgba(var(--theme-rgb),.35),rgba(var(--theme-rgb),.85) 50%,rgba(var(--theme-rgb),.25)); }
 .demo-tag { position:absolute; z-index:2; top:8px; left:8px; padding:3px 4px; font-size:7px; line-height:1.2; text-transform:uppercase; background:#111a1be6; color:#eee; }
+.video-tile-badge,.video-preview-badge { position:absolute; z-index:3; left:10px; top:10px; padding:6px 8px; background:#0f1113e8; color:#fff; border:1px solid #fff; font-size:10px; }
+.video-preview-badge { top:auto; bottom:10px; }
+.detail-video { display:block; width:100%; max-height:calc(100dvh - 120px); background:#000; }
+#recordingPreview { display:block; width:100%; max-height:240px; margin-top:10px; background:#000; }
+.photo-field progress { width:100%; accent-color:var(--accent); }
 .tile-actions { display:grid; grid-template-columns:48px 48px minmax(35px,1fr) minmax(35px,1fr); align-items:stretch; height:50px; border-top:2px solid #000; background:#16191b; }
 .vote-btn { width:48px; height:48px; padding:0; }
 .vote-btn .icon { width:100%; height:100%; display:block; }
@@ -134,6 +139,21 @@ main { min-width:0; }
 .activity-totals { font-size:10px; color:var(--accent); border-top:1px solid #39413b; padding-top:16px; }
 .activity-totals span { color:var(--muted); }
 .empty-state { column-span:all; padding:45px 20px; text-align:center; }
+.load-more { column-span:all; width:calc(100% - 24px); margin:18px 12px; }
+.recovery-key { display:block; margin:18px 0; padding:16px; border:2px solid var(--accent); background:var(--panel2); font-size:15px; overflow-wrap:anywhere; user-select:all; }
+.policy-page { max-width:760px; margin:0 auto; padding:clamp(24px,6vw,80px) 20px; }
+.policy-page h1 { font-size:clamp(28px,6vw,52px); letter-spacing:-.08em; }
+.policy-page h2 { margin-top:35px; color:var(--accent); }
+.policy-page li,.policy-page p { line-height:1.75; }
+.area-picker { display:grid; grid-template-columns:1.2fr 1fr; gap:20px; }
+.norway-map { width:100%; max-height:55dvh; border:1px solid var(--muted); background:var(--panel2); }
+.norway-map path { fill:#879182; stroke:var(--line); stroke-width:1.5; cursor:pointer; }
+.norway-map path[aria-pressed=true] { fill:var(--accent); }
+.norway-map path:focus-visible { stroke:#fff; stroke-width:5; outline:none; }
+.area-list { max-height:55dvh; overflow:auto; }
+.area-list-item { width:100%; min-height:44px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--muted); text-align:left; }
+.area-list-item[aria-pressed=true] { background:var(--accent); color:#101510; }
+@media(max-width:699px) { .area-picker { grid-template-columns:1fr; } .norway-map { max-height:40dvh; } #areaButton { padding:5px; } }
 .empty-state h2 { font-size:20px; }
 .loading-card { padding:25px; }
 .modal-open { overflow:hidden; }
