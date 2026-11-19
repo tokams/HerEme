@@ -1,0 +1,11 @@
+[Unit]
+Description=Run and verify HerEme backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=hereme-backup.service
+
+[Install]
+WantedBy=timers.target

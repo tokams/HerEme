@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-19 — Public-release architecture and optional capability boundaries
+
+- Added secure pseudonym recovery and browser sessions, canonical domain services,
+  stable APIs, indexed pagination/search, audited private moderation and account
+  lifecycle operations while preserving and upgrading legacy identities.
+- Added server-decoded immutable image storage with display/thumbnail derivatives,
+  durable resumable video upload/worker states, native playback and explicit
+  location/verification feature boundaries that remain disabled by default.
+- Added schema 6–10 migrations, cross-instance media-aware merging, checksummed
+  backup/restore, production config validation, systemd/Caddy deployment, health
+  checks, threat model, policies, runbooks, CI and a truthful go/no-go gate.
+- Validated source syntax, 27 automated contracts and an isolated Chromium flow at
+  350/390/700/900/1280/1700 widths. External VM, DNS/TLS, cellular, off-host backup,
+  licensed Norway geometry and BankID-provider evidence remain operator gates.
+
 ## 2026-11-18 — Square wall v3 and desktop display choices
 
 - Applied supplied v3 square geometry, muted category palettes, gradients, badges

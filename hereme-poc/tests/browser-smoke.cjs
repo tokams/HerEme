@@ -63,7 +63,10 @@ async function publish(page,title) {
   assert.equal(await page.locator('#simpleCategories svg').count(),5);
   assert.equal(await page.locator('#feed').evaluate(el=>getComputedStyle(el).columnGap),'10px');
   await page.screenshot({path:path.join(screenshots,'desktop-simple-dark.png'),fullPage:true});
-  for(const width of [900,1100]){await page.setViewportSize({width,height:844});await fits(page);assert.equal(await page.locator('#simpleCategories button:visible').count(),5);}
+  for(const width of [350,390,700,900,1280,1700]){
+    await page.setViewportSize({width,height:844});await fits(page);
+    assert.equal(await page.locator('#simpleCategories button:visible').count(),width>=900?5:0);
+  }
   await page.setViewportSize({width:1440,height:1000});
   await page.locator('#simpleCategories [data-category=tip]').click();await settleWall(page);
   assert.equal(await page.locator('.post-card[data-category=tip]').count(),0);
@@ -97,9 +100,9 @@ async function publish(page,title) {
   await page.locator('#discussion').waitFor();
   await page.screenshot({path:path.join(screenshots,'desktop-detail.png')});
   await page.locator('.modal-close').click();
-  for(const width of [320,390,768,1100]){
+  for(const width of [350,390,700,900,1280,1700]){
     await page.setViewportSize({width,height:844});await fits(page);
-    assert.equal(await page.locator('#rightPanel').isVisible(),false);
+    assert.equal(await page.locator('#rightPanel').isVisible(),width>=1280);
     assert.equal(await page.locator('#leftPanel').isVisible(),width>=900);
   }
   await page.setViewportSize({width:1440,height:1000});
@@ -126,6 +129,8 @@ async function publish(page,title) {
   await page.locator('.create-button').click();
   await page.locator('#nicknameInput').fill('VeggTester');
   await page.locator('#profileForm button').click();
+  const recovery=await page.locator('.recovery-key').textContent();assert.ok(recovery.length>=20);
+  await page.locator('[data-action=recovery-continue]').click();
   await page.locator('input[name=postCategory][value=question]').check();
   await page.locator('#postTitle').fill('KOR E BUSSEN?');
   await page.locator('#postBody').fill('Et spørsmål fra en isolert test.');
@@ -244,12 +249,10 @@ async function publish(page,title) {
   const persisted=await(await fetch(base+'/api/posts/'+textId)).json();
   assert.equal(persisted.post.category,'question');assert.equal(persisted.post.room_id,null);
   assert.equal((await (await fetch(base+'/api/posts/'+imageId)).json()).post.text_position,'center');
-  // Detail-only reporting still reaches the real moderator queue.
+  // Detail-only reporting remains public, while moderation is private operator work.
   await phone.locator('[data-action=report]').click();await phone.locator('#reportForm button').click();
-  await phone.locator('.menu-button').click();await phone.locator('[data-action=admin]').click();
-  await phone.locator('#adminPin').fill('2468');await phone.locator('#adminLoginForm button').click();
-  await phone.locator('.admin-row').filter({hasText:'REGN PÅ VEIEN'}).waitFor();
-  await phone.locator('.modal-close').click();
+  await phone.locator('.menu-button').click();assert.equal(await phone.locator('[data-action=admin],#adminPin').count(),0);await phone.locator('.modal-close').click();
+  assert.equal((await fetch(base+'/api/admin/queue')).status,404);
   await phone.emulateMedia({reducedMotion:'reduce'});
   await phone.locator('[data-post-id="'+textId+'"] .tile-open').click();
   await phone.waitForFunction(()=>getComputedStyle(document.querySelector('.detail-modal')).animationName==='none');
@@ -257,7 +260,7 @@ async function publish(page,title) {
   assert.equal(await phone.locator('.modal-panel').count(),0);
   assert.deepEqual(errors,[],'Browser errors');
   await mobile.close();
-  console.log(JSON.stringify({desktop:'1440x1000',mobile:'390x844',widths:[320,390,768],themes:5,seedPosts:13,createdPosts:3,filters:true,fullScreenDetail:true,reporting:true,persistence:true,screenshots}));
+  console.log(JSON.stringify({desktop:'1440x1000',mobile:'390x844',widths:[350,390,700,900,1280,1700],themes:5,seedPosts:13,createdPosts:3,filters:true,fullScreenDetail:true,reporting:true,persistence:true,screenshots}));
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
   if(browser)await browser.close();await stop();fs.rmSync(data,{recursive:true});
 });

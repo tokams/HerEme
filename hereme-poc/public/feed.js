@@ -25,7 +25,7 @@
   }
   function card(p) {
     return `<article class="post-card theme-${p.category} ${Poster.image(p.image_url)?'is-photo':'is-text'}" data-post-id="${p.id}" data-category="${p.category}">${header(p)}
-      <button class="tile-open" data-action="detail" data-id="${p.id}" aria-label="Åpne ${E(p.title)}">${Poster.surface(p)}</button>
+      <button class="tile-open" data-action="detail" data-id="${p.id}" aria-label="Åpne ${E(p.title)}">${Poster.surface(p)}${p.type==='video'?`<span class="video-tile-badge">▶ ${Math.floor((p.duration_ms||0)/60000)}:${String(Math.floor((p.duration_ms||0)/1000)%60).padStart(2,'0')}</span>`:''}</button>
       ${controls(p)}</article>`;
   }
   function filters(selected) {

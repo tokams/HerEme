@@ -1,0 +1,25 @@
+[Unit]
+Description=HerEme public forum
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hereme
+Group=hereme
+WorkingDirectory=/opt/hereme/current
+EnvironmentFile=/etc/hereme/hereme.env
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hereme /var/log/hereme
+UMask=0027
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

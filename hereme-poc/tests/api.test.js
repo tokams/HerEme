@@ -1,177 +1,69 @@
 'use strict';
-const test=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const os=require('node:os');
-const path=require('node:path');
-const testData=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-api-'));
-process.env.HEREME_DATA_DIR=testData;
-const app=require('../server/index');
-const {db}=require('../server/db');
-const {readRows}=require('../server/migrations');
-db.prepare('INSERT INTO migration_source(id,directory,baseline) VALUES(1,?,?)').run(testData,JSON.stringify(readRows(db)));
-let server,url;
-test.before(async()=>{
-  server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
-  url=`http://127.0.0.1:${server.address().port}`;
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
+const testData=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-release-api-'));process.env.HEREME_DATA_DIR=testData;process.env.HEREME_ENV='test';
+const app=require('../server/index');const S=require('../server/services');let server,url;
+test.before(async()=>{server=await new Promise(resolve=>{const instance=app.listen(0,'127.0.0.1',()=>resolve(instance));});url=`http://127.0.0.1:${server.address().port}`;});
+test.after(async()=>{if(server)await new Promise(resolve=>server.close(resolve));S.db.close();fs.rmSync(testData,{recursive:true,force:true});});
+async function request(route,{method='GET',body,form,session,headers={}}={}){
+  const outgoing={...headers};if(body!==undefined)outgoing['content-type']='application/json';if(session){outgoing.cookie=session.cookie;if(!['GET','HEAD'].includes(method))outgoing['x-csrf-token']=session.csrf;}
+  const response=await fetch(url+route,{method,headers:outgoing,body:form||(body===undefined?undefined:JSON.stringify(body))});
+  const type=response.headers.get('content-type')||'',payload=type.includes('json')?await response.json():await response.text();
+  return {status:response.status,body:payload,headers:response.headers};
+}
+async function profile(name){
+  const result=await request('/api/session',{method:'POST',body:{name}});assert.equal(result.status,201);
+  const cookies=result.headers.getSetCookie();return {user:result.body.user,recovery:result.body.recovery_key,csrf:result.body.csrf_token,cookie:cookies.map(value=>value.split(';')[0]).join('; ')};
+}
+test('liveness, readiness, public pages and retired room/admin surfaces',async()=>{
+  assert.equal((await request('/api/live')).status,200);const ready=await request('/api/ready');assert.equal(ready.status,200);assert.ok(Object.values(ready.body.checks).every(Boolean));
+  assert.equal((await request('/api/rooms')).status,410);assert.equal((await request('/api/admin/queue')).status,404);
+  assert.match((await request('/privacy.html')).body,/Personvern/);assert.match((await request('/rules.html')).body,/Fellesskapsregler/);
 });
-test.after(async()=>{
-  if(server)await new Promise(resolve=>server.close(resolve));
-  db.close();
-  fs.rmSync(testData,{recursive:true});
+test('pseudonym creation, CSRF, recovery, rotation and session revocation',async()=>{
+  const first=await profile('ReleaseUser');assert.ok(first.recovery.length>=20);assert.match(first.headers||'',/^$/);
+  const me=await request('/api/me',{session:first});assert.equal(me.body.user.name,'ReleaseUser');assert.equal(me.body.user.secured,true);
+  const without=await request('/api/posts',{method:'POST',body:{title:'Uten token',type:'text',category:'story'},headers:{cookie:first.cookie}});assert.equal(without.status,403);assert.equal(without.body.error.code,'CSRF_INVALID');
+  assert.equal((await request('/api/session/recover',{method:'POST',body:{name:'ReleaseUser',recovery_key:'helt-feil-nokkel-som-er-lang'}})).status,401);
+  const recovered=await request('/api/session/recover',{method:'POST',body:{name:'ReleaseUser',recovery_key:first.recovery}});assert.equal(recovered.status,200);const second={cookie:recovered.headers.getSetCookie().map(value=>value.split(';')[0]).join('; '),csrf:recovered.body.csrf_token};assert.notEqual(second.cookie,first.cookie);
+  const rotated=await request('/api/recovery/rotate',{method:'POST',session:second});assert.equal(rotated.status,200);assert.notEqual(rotated.body.recovery_key,first.recovery);
+  assert.equal((await request('/api/session/recover',{method:'POST',body:{name:'ReleaseUser',recovery_key:first.recovery}})).status,401);
+  assert.equal((await request('/api/session/revoke-all',{method:'POST',session:second})).status,200);assert.equal((await request('/api/me',{session:first})).status,401);
+  const expiring=await profile('ExpiredUser'),raw=/hereme_session=([^;]+)/.exec(expiring.cookie)[1];S.db.prepare("update sessions set expires_at=datetime('now','-1 second') where id_hash=?").run(S.identity.sha256(decodeURIComponent(raw)));assert.equal((await request('/api/posts',{method:'POST',session:expiring,body:{title:'Skal ikke lagres',type:'text',category:'story'}})).status,401);
+  assert.ok(S.db.prepare("select id from security_events where event='recovery.failed' and result='denied'").get());
 });
-const send=async(path,opts={})=>{
-  const res=await fetch(url+path,opts);return {status:res.status,body:await res.json()};
-};
-test('health and seed rooms',async()=>{
-  const health=await send('/api/health');assert.equal(health.status,200);assert.equal(health.body.storage,'SQLite');
-  const rooms=await send('/api/rooms');assert.ok(rooms.body.rooms.length>=7);
+test('legacy bearer identity is upgraded once to a recoverable secure session',async()=>{
+  const crypto=require('node:crypto'),token=crypto.randomBytes(32).toString('hex'),id='legacy-upgrade-user';
+  S.db.prepare('insert into users(id,token_hash,name,normalized_name) values(?,?,?,?)').run(id,crypto.createHash('sha256').update(token).digest('hex'),'LegacyUpgrade','legacyupgrade');
+  const upgraded=await request('/api/me',{headers:{authorization:'Bearer '+token}});assert.equal(upgraded.status,200);assert.equal(upgraded.body.legacy_migrated,true);assert.ok(upgraded.body.recovery_key.length>=20);assert.equal(upgraded.body.user.secured,true);
+  assert.equal(S.db.prepare('select count(*) n from recovery_credentials where user_id=?').get(id).n,1);assert.deepEqual(S.db.prepare('select role from user_roles where user_id=?').all(id).map(row=>row.role),['member']);
+  const again=await request('/api/me',{headers:{authorization:'Bearer '+token}});assert.equal(again.status,200);assert.equal(again.body.recovery_key,null);
 });
-test('LAN metadata prefers physical Wi-Fi over virtual Ethernet',async t=>{
-  t.mock.method(os,'networkInterfaces',()=>({
-    'vEthernet (Default Switch)':[{family:'IPv4',internal:false,address:'172.20.16.1'}],
-    'Wi-Fi':[{family:'IPv4',internal:false,address:'192.168.68.60'}]
-  }));
-  const meta=await send('/api/meta');
-  assert.equal(meta.body.connect_url,`http://192.168.68.60:${meta.body.port}`);
+test('stable post, pagination, search, vote, comment depth and report contracts',async()=>{
+  const actor=await profile('ForumActor');
+  const created=await request('/api/posts',{method:'POST',session:actor,body:{title:'Unik søkbar overskrift',body:'Lokal kontrakt',type:'text',category:'question',poster_style:'question'}});assert.equal(created.status,201);const id=created.body.id;
+  const detail=await request('/api/posts/'+id);assert.equal(detail.body.post.category,'question');assert.equal(detail.body.post.score,1);assert.equal(detail.body.post.room_id,null);
+  assert.equal((await request('/api/posts/'+id+'/vote',{method:'POST',session:actor,body:{value:1}})).body.my_vote,0);
+  assert.equal((await request('/api/posts/'+id+'/vote',{method:'POST',session:actor,body:{value:-1}})).body.my_vote,-1);
+  const root=await request('/api/posts/'+id+'/comments',{method:'POST',session:actor,body:{body:'nivå 1'}});let parent=root.body.id;
+  for(let depth=1;depth<=3;depth++){const child=await request('/api/posts/'+id+'/comments',{method:'POST',session:actor,body:{body:'nivå '+(depth+1),parent_id:parent}});assert.equal(child.status,201);parent=child.body.id;}
+  assert.equal((await request('/api/posts/'+id+'/comments',{method:'POST',session:actor,body:{body:'for dypt',parent_id:parent}})).status,400);
+  const search=await request('/api/posts?q='+encodeURIComponent('Unik søkbar')+'&limit=1');assert.equal(search.body.posts[0].id,id);
+  for(let index=0;index<30;index++)await S.posts.create({title:'Sidepost '+index,type:'text',category:'story'},actor.user);
+  const first=await request('/api/posts?limit=10');assert.equal(first.body.posts.length,10);assert.ok(first.body.next_cursor);
+  const second=await request('/api/posts?limit=10&cursor='+encodeURIComponent(first.body.next_cursor));assert.equal(second.body.posts.length,10);assert.equal(new Set([...first.body.posts,...second.body.posts].map(post=>post.id)).size,20);
+  const people=[await profile('ReporterOne'),await profile('ReporterTwo')];for(const person of [actor,...people])assert.equal((await request('/api/posts/'+id+'/report',{method:'POST',session:person,body:{reason:'Annet'}})).status,201);
+  assert.equal(S.db.prepare('select status from posts where id=?').get(id).status,'review');
+  const local={id:'local-operator',capabilities:['moderate']};S.moderation.act(local,id,'publish','reviewed locally');assert.equal(S.db.prepare('select status from posts where id=?').get(id).status,'published');assert.ok(S.db.prepare("select id from audit_events where action='moderation.publish' and subject_id=?").get(String(id)));
 });
-test('session, room, post, vote, nested comment and report',async()=>{
-  const name=`Test${Date.now()}`;
-  const s=await send('/api/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})});
-  assert.equal(s.status,201);assert.equal(s.body.token.length,64);
-  const headers={authorization:`Bearer ${s.body.token}`,'content-type':'application/json'};
-  const room=await send('/api/rooms',{method:'POST',headers,body:JSON.stringify({name:`Testrom ${Date.now()}`,description:'Et testrom'})});
-  assert.equal(room.status,201);
-  assert.ok(room.body.room.id<0);
-  const form=new FormData();form.set('room_id',String(room.body.room.id));form.set('title','Dette er et testinnlegg');form.set('type','text');form.set('body','lokal testing');
-  const post=await send('/api/posts',{method:'POST',headers:{authorization:headers.authorization},body:form});
-  assert.equal(post.status,201);
-  const id=post.body.id;
-  assert.ok(id<0);
-  const listed=await send(`/api/posts?room=${room.body.room.slug}`);
-  assert.ok(listed.body.posts.some(p=>p.id===id));
-  assert.equal(listed.body.posts.find(p=>p.id===id).score,1);
-  const vote=await send(`/api/posts/${id}/vote`,{method:'POST',headers,body:JSON.stringify({value:-1})});
-  assert.equal(vote.body.my_vote,-1);
-  const reply=await send(`/api/posts/${id}/comments`,{method:'POST',headers,body:JSON.stringify({body:'Hei alle sammen!'})});
-  assert.equal(reply.status,201);
-  assert.ok(reply.body.id<0);
-  const reply2=await send(`/api/posts/${id}/comments`,{method:'POST',headers,body:JSON.stringify({body:'Svarer på den første',parent_id:reply.body.id})});
-  assert.equal(reply2.status,201);
-  const comments=await send(`/api/posts/${id}/comments`);assert.equal(comments.body.comments.length,2);
-  assert.equal(comments.body.comments[1].depth,1);
-  const report=await send(`/api/posts/${id}/report`,{method:'POST',headers,body:JSON.stringify({reason:'Annet'})});
-  assert.equal(report.status,201);
-  const queue=await send('/api/admin/queue',{headers:{'x-admin-pin':'2468'}});
-  assert.ok(queue.body.posts.some(p=>p.id===id));
+test('server validates image bytes, records immutable media and cleans rejected input',async()=>{
+  const actor=await profile('ImageActor'),good=fs.readFileSync(path.join(__dirname,'../public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
+  const form=new FormData();for(const [key,value] of Object.entries({title:'Bildekontrakt',type:'image',category:'alert',poster_style:'alert'}))form.set(key,value);form.set('image',new Blob([good],{type:'image/jpeg'}),'photo.jpg');
+  const created=await request('/api/posts',{method:'POST',session:actor,form});assert.equal(created.status,201);
+  const post=(await request('/api/posts/'+created.body.id)).body.post;assert.match(post.image_url,/^\/media\//);assert.equal(post.media_status,'ready');assert.equal((await fetch(url+post.image_url)).status,200);
+  const before=fs.readdirSync(path.join(testData,'media')).length,bad=new FormData();for(const [key,value] of Object.entries({title:'Falskt bilde',type:'image',category:'tip'}))bad.set(key,value);bad.set('image',new Blob([Buffer.from('<script>bad</script>')],{type:'image/png'}),'bad.png');
+  const rejected=await request('/api/posts',{method:'POST',session:actor,form:bad});assert.equal(rejected.status,400);assert.equal(fs.readdirSync(path.join(testData,'media')).length,before);
 });
-test('reject unauthenticated writes and malformed URLs',async()=>{
-  const r=await send('/api/rooms',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Ikke lov'})});
-  assert.equal(r.status,401);
-});
-
-test('serve frontend, render connect QR, and accept an image upload',async()=>{
-  const res=await fetch(url+'/');
-  assert.equal(res.status,200);assert.match(await res.text(),/HerEme/);
-  const qr=await fetch(url+'/api/connect-qr.svg');
-  assert.equal(qr.status,200);assert.match(await qr.text(),/<svg/);
-  const s=await send('/api/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:`PhotoTest${Date.now()}`})});
-  const token=s.body.token;
-  const form=new FormData();form.set('room_id','1');form.set('title','Lokalt bilde fra testen');form.set('type','image');
-  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLrWQAAAABJRU5ErkJggg==','base64');
-  form.set('image',new Blob([png],{type:'image/png'}),'test.png');
-  const post=await send('/api/posts',{method:'POST',headers:{authorization:`Bearer ${token}`},body:form});
-  assert.equal(post.status,201);
-  const detail=await send(`/api/posts/${post.body.id}`);
-  assert.match(detail.body.post.image_url,/^\/uploads\/[a-f0-9-]+\.png$/);
-  const uploaded=await fetch(url+detail.body.post.image_url);assert.equal(uploaded.status,200);
-  assert.equal((await uploaded.arrayBuffer()).byteLength,png.length);
-});
-
-test('older posts remain searchable and visible beyond the former feed limits',async()=>{
-  const insert=db.prepare("INSERT INTO posts(id,room_id,title,type) VALUES(?,1,?,'text')");
-  const {nextId}=require('../server/migrations');
-  for(let i=0;i<305;i++)insert.run(nextId(db,'posts'),`Nyere innlegg ${i}`);
-  const all=await send('/api/posts?sort=new');
-  assert.ok(all.body.posts.some(post=>post.id===1));
-  const title=db.prepare('SELECT title FROM posts WHERE id=1').get().title;
-  const search=await send('/api/posts?q='+encodeURIComponent(title));
-  assert.ok(search.body.posts.some(post=>post.id===1));
-});
-
-test('room membership is canonical, authenticated and idempotent',async()=>{
-  const session=await send('/api/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Romvenn'})});
-  const headers={'content-type':'application/json',authorization:`Bearer ${session.body.token}`};
-  const join=()=>send('/api/rooms/1/membership',{method:'POST',headers,body:JSON.stringify({joined:true})});
-  assert.equal((await join()).body.room.joined,1);
-  assert.equal((await join()).body.room.member_count,1);
-  assert.equal((await send('/api/rooms',{headers})).body.rooms.find(r=>r.id===1).joined,1);
-  const leave=await send('/api/rooms/1/membership',{method:'POST',headers,body:JSON.stringify({joined:false})});
-  assert.equal(leave.body.room.joined,0);
-  assert.equal((await send('/api/rooms/1/membership',{method:'POST',headers:{'content-type':'application/json'},body:'{"joined":true}'})).status,401);
-});
-
-test('synthetic labels and poster source metadata are served for the supplied examples',async()=>{
-  const posts=(await send('/api/posts')).body.posts;
-  const demo=posts.filter(p=>p.synthetic_demo===1);
-  assert.equal(demo.length,13);
-  assert.equal(demo.filter(p=>p.type==='poster').length,6);
-  assert.ok(demo.filter(p=>p.type==='poster').every(p=>p.poster.source_image_url.startsWith('/assets/demo/sources/')));
-  for(const post of demo.filter(p=>p.image_url))assert.equal((await fetch(url+post.image_url)).status,200);
-});
-
-test('category actions create roomless posts and filter the single wall with exact empty/multiple selections',async()=>{
-  const categories=(await send('/api/categories')).body.categories.map(c=>c.id);
-  assert.deepEqual(categories,['question','opinion','story','alert','tip']);
-  const s=await send('/api/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'VeggTest'})});
-  const headers={authorization:'Bearer '+s.body.token,'content-type':'application/json'};
-  const created=[];
-  for(const category of categories){
-    const post=await send('/api/posts',{method:'POST',headers,body:JSON.stringify({type:'text',title:'Ny '+category,category,poster_style:category})});
-    assert.equal(post.status,201);created.push(post.body.id);
-    const detail=(await send('/api/posts/'+post.body.id)).body.post;
-    assert.equal(detail.room_id,null);assert.equal(detail.category,category);
-    assert.equal(detail.poster_style,category);assert.equal(detail.score,1);
-  }
-  const all=(await send('/api/posts')).body.posts;
-  for(const id of created)assert.ok(all.some(p=>p.id===id));
-  const filtered=(await send('/api/posts?categories=question,alert')).body.posts;
-  assert.ok(filtered.length>=2);assert.ok(filtered.every(p=>['question','alert'].includes(p.category)));
-  assert.deepEqual((await send('/api/posts?categories=')).body.posts,[]);
-  assert.equal((await send('/api/posts?categories=custom')).status,400);
-  for(const invalid of [{category:'custom'},{category:'tip',poster_style:'story'},{image_zoom:4}]){
-    assert.equal((await send('/api/posts',{method:'POST',headers,body:JSON.stringify({title:'Ugyldig plakat',type:'text',...invalid})})).status,400);
-  }
-  const photo=new FormData();photo.set('title','Bilde med kategori');photo.set('type','image');photo.set('category','alert');
-  photo.set('image_zoom','1.5');photo.set('image_x','30');photo.set('image_y','70');photo.set('text_position','top');
-  photo.set('image',new Blob([fs.readFileSync(path.join(__dirname,'../public/assets/demo/sources/source-01-rain_bus_stop.jpg'))],{type:'image/jpeg'}),'photo.jpg');
-  const result=await send('/api/posts',{method:'POST',headers:{authorization:headers.authorization},body:photo});
-  assert.equal(result.status,201);
-  const detail=(await send('/api/posts/'+result.body.id)).body.post;
-  assert.equal(detail.category,'alert');assert.equal(detail.image_zoom,1.5);
-  assert.equal(detail.image_x,30);assert.equal(detail.image_y,70);
-  assert.equal(detail.text_position,'top');
-});
-
-test('activity uses the same published category/search projection and hides moderated content',async()=>{
-  const filtered=(await send('/api/posts?categories=question')).body.posts;
-  const ids=new Set(filtered.map(p=>p.id));
-  const activity=(await send('/api/activity?categories=question')).body;
-  assert.equal(activity.stats.posts,filtered.length);
-  assert.equal(activity.stats.comments,filtered.reduce((sum,p)=>sum+p.comment_count,0));
-  assert.ok(activity.recent_comments.every(c=>ids.has(c.post_id)));
-  assert.ok(activity.discussions.every(p=>ids.has(p.id)&&p.category==='question'));
-  assert.deepEqual((await send('/api/activity?categories=')).body,{stats:{posts:0,comments:0},discussions:[],recent_comments:[]});
-  assert.equal((await send('/api/activity?categories=invalid')).status,400);
-  const searched=(await send('/api/activity?q='+encodeURIComponent('no matching text 928374'))).body;
-  assert.equal(searched.stats.posts,0);
-  const hidden=activity.recent_comments[0]?.post_id;
-  assert.ok(hidden);
-  db.prepare("UPDATE posts SET status='hidden' WHERE id=?").run(hidden);
-  const after=(await send('/api/activity?categories=question')).body;
-  assert.ok(!after.recent_comments.some(c=>c.post_id===hidden));
-  assert.ok(!after.discussions.some(p=>p.id===hidden));
-  db.prepare("UPDATE posts SET status='published' WHERE id=?").run(hidden);
-  const font=await fetch(url+'/assets/fonts/CascadiaCode.ttf');
-  assert.equal(font.status,200);assert.equal(font.headers.get('content-type'),'font/ttf');
+test('production config rejects public bind and insecure origin',()=>{
+  const {runtimeConfig}=require('../server/config');assert.throws(()=>runtimeConfig(process.cwd(),{HEREME_ENV:'production',HEREME_DATA_DIR:testData,HEREME_PUBLIC_ORIGIN:'http://example.test'}),/HTTPS/);
+  assert.throws(()=>runtimeConfig(process.cwd(),{HEREME_ENV:'production',HEREME_DATA_DIR:testData,HEREME_PUBLIC_ORIGIN:'https://example.test',HOST:'0.0.0.0'}),/loopback/);
 });

@@ -5,7 +5,7 @@ const http=require('node:http');
 const fs=require('node:fs');
 const path=require('node:path');
 const {URL}=require('node:url');
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8','.mp4':'video/mp4'};
 function createApp(){
   const stack=[];
   const app=(req,res)=>{
@@ -51,6 +51,9 @@ function createApp(){
   };
   app.get=(p,...handlers)=>route('GET',p,handlers);
   app.post=(p,...handlers)=>route('POST',p,handlers);
+  app.put=(p,...handlers)=>route('PUT',p,handlers);
+  app.patch=(p,...handlers)=>route('PATCH',p,handlers);
+  app.delete=(p,...handlers)=>route('DELETE',p,handlers);
   app.listen=(...args)=>http.createServer(app).listen(...args);
   return app;
 }
@@ -84,10 +87,12 @@ createApp.static=(root,opts={})=>{
     const ext=path.extname(file).toLowerCase();if(!mime[ext])return next();
     fs.stat(file,(err,stat)=>{
       if(err||!stat.isFile())return next();
-      res.setHeader('Content-Type',mime[ext]);
+      res.setHeader('Content-Type',mime[ext]);res.setHeader('Accept-Ranges','bytes');
       res.setHeader('Cache-Control','no-cache');
-      res.statusCode=200;
-      const stream=fs.createReadStream(file);
+      let start=0,end=stat.size-1;const range=req.headers.range;
+      if(range){const match=/^bytes=(\d*)-(\d*)$/.exec(range);if(!match)return next();start=match[1]?Number(match[1]):0;end=match[2]?Number(match[2]):end;if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||end>=stat.size){res.statusCode=416;res.setHeader('Content-Range',`bytes */${stat.size}`);return res.end();}res.statusCode=206;res.setHeader('Content-Range',`bytes ${start}-${end}/${stat.size}`);}else res.statusCode=200;
+      res.setHeader('Content-Length',String(end-start+1));
+      const stream=fs.createReadStream(file,{start,end});
       stream.on('error',next);stream.pipe(res);
     });
   };

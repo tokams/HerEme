@@ -1,0 +1,21 @@
+{$HEREME_DOMAIN} {
+  log {
+    output stderr
+    format json
+  }
+  encode zstd gzip
+  reverse_proxy 127.0.0.1:3000 {
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+    transport http {
+      read_timeout 5m
+      write_timeout 5m
+    }
+  }
+  @immutable path /assets/* /media/*
+  header @immutable Cache-Control "public, max-age=31536000, immutable"
+  header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+  request_body {
+    max_size 2GB
+  }
+}

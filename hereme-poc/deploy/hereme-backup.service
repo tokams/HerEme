@@ -1,0 +1,18 @@
+[Unit]
+Description=HerEme verified local backup
+
+[Service]
+Type=oneshot
+User=hereme
+Group=hereme
+WorkingDirectory=/opt/hereme/current
+EnvironmentFile=/etc/hereme/hereme.env
+ExecStart=/usr/bin/node scripts/backup-scheduled.js
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hereme /var/backups/hereme
+UMask=0077
+StandardOutput=journal
+StandardError=journal

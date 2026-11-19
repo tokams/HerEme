@@ -6,6 +6,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { snapshotData } = require('./snapshot-data');
 const { readRows, tables, keys, applyMigrations } = require('../server/migrations');
 const { backfillDesigns } = require('../server/post-design');
+const { backfillLegacyMedia } = require('../server/domain/media');
 const key = (table, row) => JSON.stringify(keys[table].map(column => row[column]));
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -41,6 +42,15 @@ function mergePlan(baseline, incoming, current) {
   if (conflicts.length) throw new Error(`Merge conflicts; no database changes applied:\n${conflicts.join('\n')}`);
   return actions;
 }
+function copyTreeImmutable(source, destination, relative = '') {
+  const from=path.join(source,relative);if(!fs.existsSync(from))return;
+  for(const entry of fs.readdirSync(from,{withFileTypes:true})){
+    const child=path.join(relative,entry.name),sourceFile=path.join(source,child),targetFile=path.join(destination,child);
+    if(entry.isDirectory()){fs.mkdirSync(targetFile,{recursive:true});copyTreeImmutable(source,destination,child);continue;}
+    if(!entry.isFile())throw new Error(`Unexpected media entry: ${child}`);
+    const bytes=fs.readFileSync(sourceFile);if(fs.existsSync(targetFile)){if(!bytes.equals(fs.readFileSync(targetFile)))throw new Error(`Media collision: ${child}`);}else fs.writeFileSync(targetFile,bytes,{flag:'wx'});
+  }
+}
 
 async function mergeData(sourceDir, targetDir) {
   const source = fs.realpathSync(sourceDir), target = fs.realpathSync(targetDir);
@@ -57,8 +67,16 @@ async function mergeData(sourceDir, targetDir) {
     await snapshotData(target, backupDir);
     applyMigrations(targetDb);
     const incomingDb = new DatabaseSync(path.join(incomingDir, 'hereme.sqlite'), { readOnly: true });
-    let incoming;
-    try { incoming = readRows(incomingDb); } finally { incomingDb.close(); }
+    let incoming,incomingRelease;
+    try {
+      incoming = readRows(incomingDb);
+      incomingRelease={
+        designs:incomingDb.prepare('SELECT * FROM post_design').all(),
+        presentations:incomingDb.prepare('SELECT * FROM post_presentation').all(),
+        links:incomingDb.prepare('SELECT * FROM post_media').all(),
+        media:incomingDb.prepare('SELECT * FROM media').all()
+      };
+    } finally { incomingDb.close(); }
     targetDb.exec('BEGIN IMMEDIATE; PRAGMA defer_foreign_keys=ON;');
     try {
       // Read the baseline again under the write lock to serialize concurrent merge attempts.
@@ -70,15 +88,9 @@ async function mergeData(sourceDir, targetDir) {
           if (!equal(Object.keys(row), expected)) throw new Error(`Unsupported source schema for ${table}`);
         }
       }
-      // Immutable uploaded filenames must never be silently replaced.
-      for (const entry of fs.readdirSync(path.join(incomingDir, 'uploads'), { withFileTypes: true })) {
-        if (!entry.isFile()) throw new Error(`Unexpected upload entry: ${entry.name}`);
-        const bytes = fs.readFileSync(path.join(incomingDir, 'uploads', entry.name));
-        const destination = path.join(target, 'uploads', entry.name);
-        if (fs.existsSync(destination)) {
-          if (!bytes.equals(fs.readFileSync(destination))) throw new Error(`Upload collision: ${entry.name}`);
-        } else fs.writeFileSync(destination, bytes, { flag: 'wx' });
-      }
+      // Immutable uploaded filenames and derived media must never be silently replaced.
+      copyTreeImmutable(path.join(incomingDir,'uploads'),path.join(target,'uploads'));
+      copyTreeImmutable(path.join(incomingDir,'media'),path.join(target,'media'));
       for (const action of actions) {
         const { table } = action;
         const where = keys[table].map(column => `${column}=?`).join(' AND ');
@@ -93,7 +105,12 @@ async function mergeData(sourceDir, targetDir) {
             .run(...columns.map(column => action.update[column]), ...keys[table].map(column => action.update[column]));
         }
       }
+      const insertedPosts=new Set(actions.filter(action=>action.table==='posts'&&action.insert).map(action=>action.insert.id));
+      const releaseLinks=incomingRelease.links.filter(row=>insertedPosts.has(row.post_id)),releaseMediaIds=new Set(releaseLinks.map(row=>row.media_id));
+      for(const row of incomingRelease.media.filter(row=>releaseMediaIds.has(row.id))){const columns=Object.keys(row);targetDb.prepare(`INSERT INTO media(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...columns.map(column=>row[column]));}
+      for(const [table,rows] of [['post_presentation',incomingRelease.presentations.filter(row=>insertedPosts.has(row.post_id))],['post_design',incomingRelease.designs.filter(row=>insertedPosts.has(row.post_id))],['post_media',releaseLinks]])for(const row of rows){const columns=Object.keys(row);targetDb.prepare(`INSERT OR IGNORE INTO ${table}(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...columns.map(column=>row[column]));}
       backfillDesigns(targetDb);
+      backfillLegacyMedia(targetDb,target);
       // Reports from two instances may jointly reach the existing moderation threshold.
       targetDb.exec(`UPDATE posts SET status='review' WHERE status='published' AND
         (SELECT count(*) FROM reports WHERE post_id=posts.id AND resolved=0)>=3`);

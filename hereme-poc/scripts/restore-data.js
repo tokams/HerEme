@@ -1,0 +1,5 @@
+'use strict';
+const fs=require('node:fs');const path=require('node:path');const {verifyBackup}=require('./verify-backup');
+const [source,destination,...extra]=process.argv.slice(2);
+if(!source||!destination||extra.length){console.error('Usage: node scripts/restore-data.js <verified-backup> <new-data-directory>');process.exitCode=1;}
+else try{const from=fs.realpathSync(source),to=path.resolve(destination);verifyBackup(from);if(fs.existsSync(to))throw new Error(`Destination already exists: ${to}`);if(to===from||to.startsWith(from+path.sep))throw new Error('Restore destination must be outside backup.');const staging=to+'.incomplete';fs.mkdirSync(staging,{recursive:false});for(const name of ['hereme.sqlite','uploads','media','snapshot.json']){const item=path.join(from,name);if(fs.existsSync(item))fs.cpSync(item,path.join(staging,name),{recursive:true,errorOnExist:true,force:false});}fs.mkdirSync(path.join(staging,'tmp'));fs.renameSync(staging,to);console.log(JSON.stringify({restored:to,verified:true}));}catch(error){console.error(error.message);process.exitCode=1;}

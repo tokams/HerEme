@@ -16,6 +16,7 @@
   <script src="/shell.js" defer></script>
   <script src="/compose.js" defer></script>
   <script src="/detail.js" defer></script>
+  <script src="/locations.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -28,6 +29,7 @@
       <label class="sort-control"><span>Sorter</span><select id="sortSelect"><option value="new">Nyeste</option><option value="hot">På gang</option><option value="top">Topp</option></select></label>
       <div class="header-actions">
         <button class="filter-toggle" id="filterToggle" data-action="toggle-filters" aria-controls="leftPanel" aria-expanded="false" aria-label="Vis kategorifiltre"><span data-icon="filter"></span><span id="filterCount"></span></button>
+        <button class="btn btn-secondary" id="areaButton" data-action="areas" hidden>Områder</button>
         <button class="btn btn-primary create-button" data-action="compose" aria-label="Legg ut"><span data-icon="plus"></span><span class="create-label">Ny plakat</span></button>
         <button class="profile-chip" data-action="profile" aria-label="Din profil"><span id="profileMonogram">○</span><span id="profileLabel">Bli med</span></button>
         <button class="menu-button" data-action="menu" aria-label="Åpne meny"><span data-icon="menu"></span></button>
