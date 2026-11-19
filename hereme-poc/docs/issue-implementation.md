@@ -8,7 +8,8 @@ operator/external evidence are deliberately separate.
 
 - I01–I04: release contract, ADRs, typed domain-service boundaries, stable error
   envelopes, migrations, CI, source checks, API/migration/operations/browser tests.
-- I05–I08: unique pseudonyms, one-time recovery keys, legacy-token upgrade,
+- I05–I08: unique pseudonyms, one-time recovery keys, password-manager-compatible
+  save/autofill forms with copy fallback, legacy-token upgrade,
   HttpOnly/SameSite sessions, CSRF, revocation, roles/capabilities and verification
   state separated from authorization.
 - I09–I13: canonical post projections, five categories, votes, four-level comments,

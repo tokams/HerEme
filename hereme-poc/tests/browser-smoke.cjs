@@ -127,10 +127,17 @@ async function publish(page,title) {
   await page.locator('#sortSelect').selectOption('new');await settleWall(page);
   // Desktop category-only creation is a complete poster, with no required image or room.
   await page.locator('.create-button').click();
+  assert.equal(await page.locator('#recoverName').getAttribute('autocomplete'),'username');
+  assert.equal(await page.locator('#recoverKey').getAttribute('autocomplete'),'current-password');
   await page.locator('#nicknameInput').fill('VeggTester');
   await page.locator('#profileForm button').click();
-  const recovery=await page.locator('.recovery-key').textContent();assert.ok(recovery.length>=20);
-  await page.locator('[data-action=recovery-continue]').click();
+  const recovery=await page.locator('#recoveryPassword').inputValue();assert.ok(recovery.length>=20);
+  assert.equal(await page.locator('#recoveryUsername').inputValue(),'VeggTester');
+  assert.equal(await page.locator('#recoveryPassword').getAttribute('autocomplete'),'new-password');
+  assert.equal(await page.locator('#recoverySaveForm').getAttribute('method'),'post');
+  await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/recovery/confirm')),page.locator('#recoverySaveForm button[type=submit]').click()]);
+  await page.waitForLoadState('domcontentloaded');await ready(page);assert.equal(await page.locator('#profileLabel').textContent(),'VeggTester');
+  await page.locator('.create-button').click();
   await page.locator('input[name=postCategory][value=question]').check();
   await page.locator('#postTitle').fill('KOR E BUSSEN?');
   await page.locator('#postBody').fill('Et spørsmål fra en isolert test.');
