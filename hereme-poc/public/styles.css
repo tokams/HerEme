@@ -231,6 +231,13 @@ details summary { min-height:44px; display:list-item; padding:12px 0; font-size:
 .desktop-crop .field { margin:12px 0; }
 .connection-details { margin-top:24px; }
 .connection-details img { display:block; }
+.account-summary { display:flex; align-items:center; gap:14px; padding:4px 0 18px; border-bottom:1px solid var(--line); }
+.account-summary h3,.account-summary p { margin:0; }
+.account-avatar { width:52px; height:52px; display:grid; place-items:center; flex:0 0 auto; border:2px solid var(--accent); background:var(--panel2); font-size:22px; font-weight:800; }
+.account-actions { display:flex; gap:10px; flex-wrap:wrap; padding:18px 0; }
+.account-login { margin-top:18px; }
+.account-register { margin-top:24px; padding-top:18px; border-top:1px solid var(--line); }
+.account-links { margin-top:24px; }
 .admin-row { padding:12px 0; border-bottom:1px solid #38413b; }
 .admin-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .toast-container { position:fixed; bottom:max(20px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); z-index:40; width:max-content; max-width:calc(100% - 32px); pointer-events:none; }

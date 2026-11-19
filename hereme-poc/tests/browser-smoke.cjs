@@ -62,6 +62,13 @@ async function publish(page,title) {
   assert.equal(await page.locator('#simpleCategories button:visible').count(),5);
   assert.equal(await page.locator('#simpleCategories svg').count(),5);
   assert.equal(await page.locator('#feed').evaluate(el=>getComputedStyle(el).columnGap),'10px');
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('.menu-button').click();
+  assert.equal(await page.locator('.modal-header h2').textContent(),'Logg inn');
+  await page.locator('#recoverForm').waitFor();
+  await page.getByRole('button',{name:'Opprett nytt pseudonym →'}).waitFor();
+  await page.locator('.modal-close').click();
+  await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:path.join(screenshots,'desktop-simple-dark.png'),fullPage:true});
   for(const width of [350,390,700,900,1280,1700]){
     await page.setViewportSize({width,height:844});await fits(page);
@@ -258,7 +265,12 @@ async function publish(page,title) {
   assert.equal((await (await fetch(base+'/api/posts/'+imageId)).json()).post.text_position,'center');
   // Detail-only reporting remains public, while moderation is private operator work.
   await phone.locator('[data-action=report]').click();await phone.locator('#reportForm button').click();
-  await phone.locator('.menu-button').click();assert.equal(await phone.locator('[data-action=admin],#adminPin').count(),0);await phone.locator('.modal-close').click();
+  await phone.locator('.menu-button').click();assert.equal(await phone.locator('[data-action=admin],#adminPin').count(),0);
+  assert.equal(await phone.locator('.modal-header h2').textContent(),'Din profil');
+  await phone.locator('.account-summary').filter({hasText:'VeggTester'}).waitFor();
+  await phone.getByRole('button',{name:'Logg ut'}).waitFor();
+  await phone.getByRole('button',{name:'Ny gjenopprettingsnøkkel'}).waitFor();
+  await phone.locator('.modal-close').click();
   assert.equal((await fetch(base+'/api/admin/queue')).status,404);
   await phone.emulateMedia({reducedMotion:'reduce'});
   await phone.locator('[data-post-id="'+textId+'"] .tile-open').click();
