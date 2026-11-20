@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {cropRect,surface}=require('../public/poster');
+const {cropRect,surface,image}=require('../public/poster');
 const {card,filters}=require('../public/feed');
 const {themes}=require('../public/themes');
 test('poster crop always covers the output at every supported aspect and pan extreme',()=>{
@@ -26,4 +26,14 @@ test('five themes share tile anatomy, accessible votes and category filters with
   }
   assert.equal((filters(['question','alert']).match(/checked/g)||[]).length,2);
   assert.throws(()=>surface({category:'unknown'}),/Unknown/);
+});
+test('stored media paths render while arbitrary and traversal paths remain rejected',()=>{
+  const media='/media/485e8895-bed3-4e31-ae71-013fbeabcc3d/display.jpg';
+  assert.equal(image(media),media);
+  assert.match(surface({category:'tip',title:'Uploaded photo',image_url:media}),/poster-photo/);
+  for(const unsafe of ['/media/../secret.jpg','/media/not-a-uuid/display.jpg','https://example.test/photo.jpg'])assert.equal(image(unsafe),'');
+});
+test('video duration badge is rendered inside the card media button',()=>{
+  const html=card({id:7,type:'video',duration_ms:125000,category:'story',title:'Local video',created_at:'2026-11-20 12:00:00',score:0,my_vote:0,comment_count:0});
+  assert.match(html,/<button class="tile-open"[^>]*>[\s\S]*<span class="video-tile-badge">[^<]*2:05<\/span><\/button>/);
 });

@@ -31,7 +31,10 @@ async function snapshotData(sourceDir, destinationDir) {
     if (snapshot.prepare('PRAGMA foreign_key_check').all().length) {
       throw new Error('Snapshot contains broken foreign keys.');
     }
-    fs.cpSync(path.join(source, 'uploads'), path.join(staging, 'uploads'), { recursive: true, errorOnExist: true, force: false });
+    for(const directory of ['uploads','media']){
+      const from=path.join(source,directory),to=path.join(staging,directory);
+      if(fs.existsSync(from))fs.cpSync(from,to,{recursive:true,errorOnExist:true,force:false});else fs.mkdirSync(to,{recursive:true});
+    }
     for (const { id, image_url } of snapshot.prepare('SELECT id,image_url FROM posts WHERE image_url IS NOT NULL').all()) {
       if (!image_url.startsWith('/uploads/')) continue; // Packaged /assets are versioned with the app.
       const filename = image_url.slice('/uploads/'.length);
@@ -41,6 +44,16 @@ async function snapshotData(sourceDir, destinationDir) {
       const original = fs.readFileSync(path.join(source, 'uploads', filename));
       const copied = fs.readFileSync(path.join(staging, 'uploads', filename));
       if (!original.equals(copied)) throw new Error(`Media changed during snapshot: ${image_url}`);
+    }
+    if(snapshot.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='media'").get()){
+      for(const row of snapshot.prepare('SELECT id,original_path,display_path,thumbnail_path,sha256 FROM media').all()){
+        for(const relative of new Set([row.original_path,row.display_path,row.thumbnail_path].filter(Boolean))){
+          const file=path.resolve(staging,relative);if(file!==staging&&!file.startsWith(staging+path.sep))throw new Error(`Unsafe media record ${row.id}: ${relative}`);
+          if(!fs.existsSync(file))throw new Error(`Missing media record ${row.id}: ${relative}`);
+        }
+        const original=fs.readFileSync(path.resolve(staging,row.original_path));
+        if(crypto.createHash('sha256').update(original).digest('hex')!==row.sha256)throw new Error(`Media checksum mismatch: ${row.id}`);
+      }
     }
     counts = Object.fromEntries(['users', 'rooms', 'posts', 'votes', 'comments', 'reports'].map(table =>
       [table, snapshot.prepare(`SELECT count(*) AS count FROM ${table}`).get().count]));
@@ -52,11 +65,13 @@ async function snapshotData(sourceDir, destinationDir) {
   } finally {
     snapshot.close();
   }
-  const manifest = { version: 1, source, createdAt: new Date().toISOString(), counts };
+  const checksums={};for(const directory of ['uploads','media'])for(const file of walk(path.join(staging,directory)))checksums[path.relative(staging,file).replaceAll('\\','/')]=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  const manifest = { version: 2, source, createdAt: new Date().toISOString(), counts, checksums };
   fs.writeFileSync(path.join(staging, 'snapshot.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
   fs.renameSync(staging, destination);
   return manifest;
 }
+function walk(directory){if(!fs.existsSync(directory))return [];const result=[];for(const entry of fs.readdirSync(directory,{withFileTypes:true})){const item=path.join(directory,entry.name);if(entry.isDirectory())result.push(...walk(item));else if(entry.isFile())result.push(item);else throw new Error(`Unexpected media entry: ${item}`);}return result;}
 
 if (require.main === module) {
   const [source, destination, ...extra] = process.argv.slice(2);

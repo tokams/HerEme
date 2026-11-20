@@ -12,7 +12,7 @@ const screenshots=path.join(root,'docs/screenshots/wall-v3');
 fs.mkdirSync(screenshots,{recursive:true});
 let child,browser;
 async function start(){
-  child=spawn(process.execPath,['server/index.js'],{cwd:root,env:{...process.env,HEREME_DATA_DIR:data,PORT:'3300'},stdio:['ignore','pipe','pipe'],windowsHide:true});
+  child=spawn(process.execPath,['server/index.js'],{cwd:root,env:{...process.env,HEREME_DATA_DIR:data,PORT:'3300',HEREME_ENABLE_VIDEO:'1'},stdio:['ignore','pipe','pipe'],windowsHide:true});
   return new Promise((resolve,reject)=>{
     let output='';const timer=setTimeout(()=>reject(new Error('Test server startup timed out.')),15000);
     child.on('error',error=>{clearTimeout(timer);reject(error);});
@@ -52,6 +52,15 @@ async function publish(page,title) {
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await page.goto(base);await ready(page);await fits(page);
+  const videoBadgeBounds=await page.evaluate(()=>{
+    const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:260px;z-index:-1';
+    host.innerHTML=HeremeFeed.card({id:987,type:'video',duration_ms:125000,category:'story',title:'Video boundary check',created_at:'2026-11-20 12:00:00',score:0,my_vote:0,comment_count:0});
+    document.body.append(host);
+    const card=host.querySelector('.post-card').getBoundingClientRect(),button=host.querySelector('.tile-open').getBoundingClientRect(),badge=host.querySelector('.video-tile-badge').getBoundingClientRect();
+    const result={label:host.querySelector('.video-tile-badge').textContent.trim(),position:getComputedStyle(host.querySelector('.tile-open')).position,insideCard:badge.left>=card.left&&badge.top>=card.top&&badge.right<=card.right&&badge.bottom<=card.bottom,insideButton:badge.left>=button.left&&badge.top>=button.top&&badge.right<=button.right&&badge.bottom<=button.bottom};
+    host.remove();return result;
+  });
+  assert.deepEqual(videoBadgeBounds,{label:'▶ 2:05',position:'relative',insideCard:true,insideButton:true});
   assert.equal(await page.locator('.post-card').count(),13);
   assert.equal(await page.locator('#categoryFilters input:checked').count(),5);
   assert.equal(await page.locator('#feed [data-action="report"],[data-action="room"],[data-action="browse-rooms"]').count(),0);
@@ -62,8 +71,18 @@ async function publish(page,title) {
   assert.equal(await page.locator('#simpleCategories button:visible').count(),5);
   assert.equal(await page.locator('#simpleCategories svg').count(),5);
   assert.equal(await page.locator('#feed').evaluate(el=>getComputedStyle(el).columnGap),'10px');
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('.menu-button').click();
+  assert.equal(await page.locator('.modal-header h2').textContent(),'Logg inn');
+  await page.locator('#recoverForm').waitFor();
+  await page.getByRole('button',{name:'Opprett nytt pseudonym →'}).waitFor();
+  await page.locator('.modal-close').click();
+  await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:path.join(screenshots,'desktop-simple-dark.png'),fullPage:true});
-  for(const width of [900,1100]){await page.setViewportSize({width,height:844});await fits(page);assert.equal(await page.locator('#simpleCategories button:visible').count(),5);}
+  for(const width of [350,390,700,900,1280,1700]){
+    await page.setViewportSize({width,height:844});await fits(page);
+    assert.equal(await page.locator('#simpleCategories button:visible').count(),width>=900?5:0);
+  }
   await page.setViewportSize({width:1440,height:1000});
   await page.locator('#simpleCategories [data-category=tip]').click();await settleWall(page);
   assert.equal(await page.locator('.post-card[data-category=tip]').count(),0);
@@ -97,9 +116,9 @@ async function publish(page,title) {
   await page.locator('#discussion').waitFor();
   await page.screenshot({path:path.join(screenshots,'desktop-detail.png')});
   await page.locator('.modal-close').click();
-  for(const width of [320,390,768,1100]){
+  for(const width of [350,390,700,900,1280,1700]){
     await page.setViewportSize({width,height:844});await fits(page);
-    assert.equal(await page.locator('#rightPanel').isVisible(),false);
+    assert.equal(await page.locator('#rightPanel').isVisible(),width>=1280);
     assert.equal(await page.locator('#leftPanel').isVisible(),width>=900);
   }
   await page.setViewportSize({width:1440,height:1000});
@@ -124,11 +143,35 @@ async function publish(page,title) {
   await page.locator('#sortSelect').selectOption('new');await settleWall(page);
   // Desktop category-only creation is a complete poster, with no required image or room.
   await page.locator('.create-button').click();
+  assert.equal(await page.locator('#recoverName').getAttribute('autocomplete'),'username');
+  assert.equal(await page.locator('#recoverKey').getAttribute('autocomplete'),'current-password');
   await page.locator('#nicknameInput').fill('VeggTester');
   await page.locator('#profileForm button').click();
+  const recovery=await page.locator('#recoveryPassword').inputValue();assert.ok(recovery.length>=20);
+  assert.equal(await page.locator('#recoveryUsername').inputValue(),'VeggTester');
+  assert.equal(await page.locator('#recoveryPassword').getAttribute('autocomplete'),'new-password');
+  assert.equal(await page.locator('#recoverySaveForm').getAttribute('method'),'post');
+  await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/recovery/confirm')),page.locator('#recoverySaveForm button[type=submit]').click()]);
+  await page.waitForLoadState('domcontentloaded');await ready(page);assert.equal(await page.locator('#profileLabel').textContent(),'VeggTester');
+  await page.locator('.create-button').click();
+  assert.equal(await page.locator('input[name=postMode]:checked').count(),0);
+  assert.deepEqual(await page.locator('.post-type-card strong').allTextContents(),['Bare innlegg','Bildeplakat','Videoplakat']);
+  assert.equal(await page.locator('.post-type-icon .icon').count(),3);
+  assert.equal(await page.locator('#postFileInput,#postVideoInput').count(),0);
+  await page.screenshot({path:path.join(screenshots,'desktop-create-choose.png')});
+  await page.locator('input[name=postMode][value=video]').click({force:true});
+  await page.locator('.video-workspace #postVideoInput').waitFor();
+  const cameraInput=page.locator('#postVideoCameraInput');await cameraInput.waitFor();
+  assert.equal(await cameraInput.getAttribute('accept'),'video/*');
+  assert.equal(await cameraInput.getAttribute('capture'),'environment');
+  assert.equal(await page.locator('[data-action=start-recording],#recordingPreview').count(),0);
+  await page.getByText('Ta opp video',{exact:true}).waitFor();
+  await page.locator('[data-action=compose-back]').click();
+  await page.locator('input[name=postMode][value=text]').click({force:true});
+  await page.locator('#postBody').fill('Et spørsmål fra en isolert test.');
+  await page.locator('#publishButton').click();
   await page.locator('input[name=postCategory][value=question]').check();
   await page.locator('#postTitle').fill('KOR E BUSSEN?');
-  await page.locator('#postBody').fill('Et spørsmål fra en isolert test.');
   await page.locator('#posterPreview .without-image').waitFor();
   await page.screenshot({path:path.join(screenshots,'desktop-create-text.png')});
   const textPost=await publish(page,'KOR E BUSSEN?');
@@ -136,15 +179,18 @@ async function publish(page,title) {
   const textId=await textPost.getAttribute('data-post-id');
   // Desktop offers crop within the chosen template, without free-form fonts/styles.
   await page.locator('.create-button').click();
-  await page.locator('input[name=postCategory][value=alert]').check();
-  await page.locator('#postTitle').fill('REGN PÅ VEIEN');
+  await page.locator('input[name=postMode][value=image]').click({force:true});
+  await page.locator('.image-workspace').waitFor();
   await page.locator('#postFileInput').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('#photoFilename').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
-  await page.locator('.desktop-crop summary').click();
+  assert.equal(await page.locator('.picture-crop').getAttribute('open'),'');
   await page.locator('#editorZoom').focus();await page.locator('#editorZoom').press('Home');
   for(let i=0;i<10;i++)await page.locator('#editorZoom').press('ArrowRight');
   await page.locator('#editorX').focus();await page.locator('#editorX').press('Home');
   for(let i=0;i<30;i++)await page.locator('#editorX').press('ArrowRight');
+  await page.locator('#publishButton').click();
+  await page.locator('input[name=postCategory][value=alert]').check();
+  await page.locator('#postTitle').fill('REGN PÅ VEIEN');
   await page.locator('#textPosition').selectOption('center');
   await page.screenshot({path:path.join(screenshots,'desktop-create-photo.png')});
   const imagePost=await publish(page,'REGN PÅ VEIEN');
@@ -185,10 +231,10 @@ async function publish(page,title) {
   assert.ok(Math.abs(await phone.evaluate(()=>scrollY)-priorScroll)<2);
   assert.equal(await phone.locator('#categoryFilters input[value=tip]').isChecked(),false);
   await phone.locator('[data-post-id="'+imageId+'"] .tile-open').click();
+  await phone.locator('.detail-toolbar [data-action=report]').waitFor();
   await phone.locator('.detail-modal').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)));
   const bounds=await phone.locator('.detail-modal').boundingBox();
   assert.equal(bounds.x,0);assert.equal(bounds.y,0);assert.equal(bounds.width,390);assert.equal(bounds.height,844);
-  await phone.locator('.detail-toolbar [data-action=report]').waitFor();
   await phone.waitForFunction(id=>location.search==='?post='+id,imageId);
   await phone.locator('.modal-close').focus();
   await phone.keyboard.press('Shift+Tab');
@@ -211,6 +257,9 @@ async function publish(page,title) {
   await phone.screenshot({path:path.join(screenshots,'mobile-comments.png')});
   await phone.locator('.modal-close').click();
   await phone.locator('.create-button').click();
+  await phone.locator('input[name=postMode][value=text]').click({force:true});
+  await phone.locator('#postBody').fill('En enkel tanke fra mobil.');
+  await phone.locator('#publishButton').click();
   await phone.locator('input[name=postCategory][value=opinion]').check();
   const longTitle='EtVeldigLangtSammenhengendeOrd'.repeat(5);
   await phone.locator('#postTitle').fill(longTitle);
@@ -232,8 +281,12 @@ async function publish(page,title) {
   assert.ok(placements.every(p=>p.fits),'Desktop placement must also fit narrow mobile tiles: '+JSON.stringify(placements));
   await phone.locator('#postFileInput').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await phone.locator('#photoFilename').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
-  assert.equal(await phone.locator('.desktop-crop').isVisible(),false);
+  assert.equal(await phone.locator('.picture-crop').isVisible(),true);
   await phone.locator('[data-action=remove-photo]').click();
+  await phone.locator('[data-action=compose-back]').click();
+  await phone.locator('input[name=postMode][value=text]').click({force:true});
+  await phone.locator('#postBody').fill('En enkel tanke fra mobil.');
+  await phone.locator('#publishButton').click();
   await phone.locator('#postTitle').fill('Ei lita meining');
   await phone.screenshot({path:path.join(screenshots,'mobile-create.png')});
   await publish(phone,'Ei lita meining');
@@ -244,12 +297,15 @@ async function publish(page,title) {
   const persisted=await(await fetch(base+'/api/posts/'+textId)).json();
   assert.equal(persisted.post.category,'question');assert.equal(persisted.post.room_id,null);
   assert.equal((await (await fetch(base+'/api/posts/'+imageId)).json()).post.text_position,'center');
-  // Detail-only reporting still reaches the real moderator queue.
+  // Detail-only reporting remains public, while moderation is private operator work.
   await phone.locator('[data-action=report]').click();await phone.locator('#reportForm button').click();
-  await phone.locator('.menu-button').click();await phone.locator('[data-action=admin]').click();
-  await phone.locator('#adminPin').fill('2468');await phone.locator('#adminLoginForm button').click();
-  await phone.locator('.admin-row').filter({hasText:'REGN PÅ VEIEN'}).waitFor();
+  await phone.locator('.menu-button').click();assert.equal(await phone.locator('[data-action=admin],#adminPin').count(),0);
+  assert.equal(await phone.locator('.modal-header h2').textContent(),'Din profil');
+  await phone.locator('.account-summary').filter({hasText:'VeggTester'}).waitFor();
+  await phone.getByRole('button',{name:'Logg ut'}).waitFor();
+  await phone.getByRole('button',{name:'Ny gjenopprettingsnøkkel'}).waitFor();
   await phone.locator('.modal-close').click();
+  assert.equal((await fetch(base+'/api/admin/queue')).status,404);
   await phone.emulateMedia({reducedMotion:'reduce'});
   await phone.locator('[data-post-id="'+textId+'"] .tile-open').click();
   await phone.waitForFunction(()=>getComputedStyle(document.querySelector('.detail-modal')).animationName==='none');
@@ -257,7 +313,7 @@ async function publish(page,title) {
   assert.equal(await phone.locator('.modal-panel').count(),0);
   assert.deepEqual(errors,[],'Browser errors');
   await mobile.close();
-  console.log(JSON.stringify({desktop:'1440x1000',mobile:'390x844',widths:[320,390,768],themes:5,seedPosts:13,createdPosts:3,filters:true,fullScreenDetail:true,reporting:true,persistence:true,screenshots}));
+  console.log(JSON.stringify({desktop:'1440x1000',mobile:'390x844',widths:[350,390,700,900,1280,1700],themes:5,seedPosts:13,createdPosts:3,filters:true,fullScreenDetail:true,reporting:true,persistence:true,screenshots}));
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
   if(browser)await browser.close();await stop();fs.rmSync(data,{recursive:true});
 });

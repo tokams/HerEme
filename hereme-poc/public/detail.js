@@ -14,7 +14,7 @@ window.HeremeDetail={
   },
   body(post,comments,replyTo) {
     const E=HeremePoster.escape,theme=HeremeThemes.get(post.category);
-    return `<div class="detail-poster">${HeremePoster.surface(post,{detail:true})}</div>
+    return `<div class="detail-poster">${post.type==='video'&&post.media_url?`<video class="detail-video" controls preload="metadata" poster="${E(post.media_thumbnail_url||post.image_url||'')}"><source src="${E(post.media_url)}" type="video/mp4">Videoen kan ikke spilles i denne nettleseren.</video>`:HeremePoster.surface(post,{detail:true})}</div>
       <div class="detail-copy">
         ${HeremeFeed.controls(post,{detail:true})}
         <p class="detail-meta"><b>${E(theme.label)}</b> · ${E(post.author)} · <time>${E(post.created_at)} UTC</time>${post.room_slug==='ryktetorget'?' · Ubekreftet':''}</p>

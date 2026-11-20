@@ -6,7 +6,7 @@ const { applyMigrations } = require('./migrations');
 const { runtimeConfig } = require('./config');
 
 const { dataDir } = runtimeConfig();
-fs.mkdirSync(path.join(dataDir, 'uploads'), { recursive: true });
+for(const directory of ['uploads','media','tmp'])fs.mkdirSync(path.join(dataDir,directory),{recursive:true});
 const databasePath = path.join(dataDir, 'hereme.sqlite');
 const freshDatabase = !fs.existsSync(databasePath);
 const db = new DatabaseSync(databasePath);
@@ -74,5 +74,6 @@ db.exec(`
 `);
 
 applyMigrations(db);
+require('./domain/media').backfillLegacyMedia(db,dataDir);
 if (freshDatabase) require('./seed').seedDemo(db);
-module.exports = { db, dataDir };
+module.exports = { db, dataDir, databasePath };

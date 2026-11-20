@@ -1,7 +1,7 @@
 # Isolated preview and data migration
 
-The original checkout stays on `master` and its running server stays on port 3000.
-The `feat/local-poster-wall` worktree's regular `run.cmd` starts at port 3001 and
+The original checkout can stay running on port 3000. A feature worktree's regular
+`run.cmd` starts at port 3001 and
 tries the next port if occupied, up to 20 attempts. Read its printed URL.
 Each instance has its own SQLite file and uploads directory. Browser profiles are
 also separate because local storage is scoped to the origin, including the port.
@@ -71,10 +71,11 @@ use the merge command to retain its real posts.
 
 ## Final cutover
 
-Schema 5 adds bounded `post_design.text_position` with default `auto`. Existing
-content, categories and crops are retained. The same migration runs on startup
-and before merging. Keep the pre-v3 snapshot (`data/preview.before-wall-v3`) and
-the merge's own backups; upgrading the UI does not require reimporting examples.
+Schema 10 includes the bounded poster design plus secure identity/session, media,
+search, audit and disabled future-feature tables. Existing content, categories
+and crops are retained. Legacy uploaded images are registered deterministically;
+new release media keeps its database links and immutable file tree during merges.
+The same migration runs on startup and before merging.
 
 This is a repeatable merge, not continuous two-way synchronization. Preview posts
 appear in the new instance only. Before making it authoritative, stop writes to

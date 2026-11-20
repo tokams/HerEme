@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-11-20 — Deployed image and video media
+
+- Reworked **+** into a three-choice entry screen for **Bare innlegg**,
+  **Bildeplakat** and **Videoplakat**. Each choice now has a focused first action
+  and one small finish step for title, poster style and optional reflection.
+- Allowed canonical immutable `/media/<uuid>/display|thumbnail` image paths in
+  the poster renderer while continuing to reject arbitrary and traversal URLs.
+- Completed the Docker video path with FFmpeg/FFprobe, the durable media worker,
+  shared persistent storage and the production video feature flag.
+- Replaced the custom in-page recorder with the device-native video capture
+  interface and normalized codec-qualified and common mobile video MIME types.
+- Anchored each video duration chip to its own card media button so it remains
+  within the card at every wall layout and viewport width.
+- Moved the public PoC from its inconsistently reachable `sslip.io` hostname to
+  `hereme.46.251.249.110.nip.io`, retaining the existing application data and
+  issuing a new automatically renewed HTTPS certificate.
+
+## 2026-11-19 — Isolated Docker deployment
+
+- Added a production Node 24 image and Compose deployment that keeps the app on
+  loopback in a shared network namespace with Caddy, publishes only HTTP/HTTPS,
+  persists application and certificate state, gates proxy startup on readiness
+  and restarts both services unless explicitly stopped.
+- Deployed a fresh instance without migrating users or live data. The supplied
+  demonstration seed remains the only initial content.
+
+## 2026-11-19 — Account-first mobile menu
+
+- The burger menu now opens directly on account state. Signed-in users see their
+  pseudonym, recovery-key rotation and logout without another profile step.
+- Anonymous visitors see the recovery login form immediately and a prominent
+  create-pseudonym action, with password-manager autofill metadata retained.
+
+## 2026-11-19 — Recovery credential save and autofill
+
+- Replaced the copy-only recovery screen with a prefilled username/new-password
+  form and validated native POST/redirect so browser and mobile password managers
+  can offer to save the generated credential. Returning recovery login now exposes
+  standard username/current-password autofill metadata.
+- Added reveal plus clipboard, selection-copy and manual-prompt fallbacks. The
+  server confirms the key against its existing scrypt hash and never stores or
+  logs the plaintext credential.
+
+## 2026-11-19 — Public-release architecture and optional capability boundaries
+
+- Added secure pseudonym recovery and browser sessions, canonical domain services,
+  stable APIs, indexed pagination/search, audited private moderation and account
+  lifecycle operations while preserving and upgrading legacy identities.
+- Added server-decoded immutable image storage with display/thumbnail derivatives,
+  durable resumable video upload/worker states, native playback and explicit
+  location/verification feature boundaries that remain disabled by default.
+- Added schema 6–10 migrations, cross-instance media-aware merging, checksummed
+  backup/restore, production config validation, systemd/Caddy deployment, health
+  checks, threat model, policies, runbooks, CI and a truthful go/no-go gate.
+- Validated source syntax, 27 automated contracts and an isolated Chromium flow at
+  350/390/700/900/1280/1700 widths. External VM, DNS/TLS, cellular, off-host backup,
+  licensed Norway geometry and BankID-provider evidence remain operator gates.
+
 ## 2026-11-18 — Square wall v3 and desktop display choices
 
 - Applied supplied v3 square geometry, muted category palettes, gradients, badges

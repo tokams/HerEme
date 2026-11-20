@@ -19,8 +19,8 @@ eller manglende moduler.
 - Hvis porten er opptatt, prøves neste, maksimalt 20 porter. Bruk adressen
   terminalen skriver ut. API, mobiladresse og QR bruker faktisk åpnet port.
 - `run-preview.cmd` velger samme preview-oppsett.
-- `PORT` velger første port, `HEREME_DATA_DIR` datamappen, og
-  `HEREME_ADMIN_PIN` demo-PIN (standard `2468`).
+- `PORT` velger første port og `HEREME_DATA_DIR` datamappen. Offentlig
+  moderering har ingen PIN eller nettleserendepunkt; operatøren bruker privat CLI.
 
 Telefonen må være på samme Wi-Fi/LAN. Mobiladresse og QR ligger i
 **Meny → Åpne på mobilen**. Tillat Node i Windows-brannmuren for private nettverk
@@ -43,21 +43,31 @@ oppstemme, rød nedstemme, nettoscore og kommentarantall. Stemmeknappene er mins
 Åpne flisen for hele innlegget, forfatter, tekst, lenke og trådede svar.
 På mobil fyller detaljvisningen skjermen, med **Lukk**, **Del** og **Rapporter**
 øverst. Rapportering finnes bare inne i innlegget. Animasjon respekterer
-redusert bevegelse. Menyen gir tilgang til den lokale moderatorkøen.
+redusert bevegelse. Moderatorkø, roller og anonymisering finnes bare som private
+operatørkommandoer.
 
 ## Legg ut
 
-1. Trykk **Legg ut** og velg et kallenavn hvis nødvendig.
-2. Velg kategori og skriv overskrift.
-3. Ta/velg et bilde hvis du ønsker; uten bilde brukes kategoriens bakgrunn.
-4. Legg eventuelt til tekst og lenke. Se den samme plakatflaten i forhåndsvisningen.
-5. Publiser direkte på fellesveggen — intet romvalg.
+1. Trykk **Legg ut** og velg et unikt pseudonym hvis nødvendig. Ta vare på
+   gjenopprettingsnøkkelen som bare vises én gang. Velg **Lagre med enheten** for
+   å la nettleseren eller mobilens passordbehandler tilby å lagre innloggingen.
+2. **+** viser bare tre store valg: **Bare innlegg**, **Bildeplakat** og
+   **Videoplakat**. Hvert valg åpner sin egen korte arbeidsflyt.
+3. Bare innlegg starter med ett skrivefelt. Bildeplakat starter med kamera eller
+     fil og et enkelt utsnitt. Videoplakat åpner enhetens vanlige kameraopptak
+     eller lar deg velge en eksisterende videofil.
+4. Trykk **Neste** og gi innlegget en tittel. Velg en av fem plakatstiler og legg
+   eventuelt til en kort beskrivelse av tanken, bildet eller opptaket. Tekstflyten
+   tilbyr også å bytte til bildeplakat, men krever det ikke.
+5. Publiser direkte på fellesveggen — intet romvalg. Video behandles av
+   mediearbeideren før den blir synlig.
 
 Desktop har i tillegg **Tilpass bildeutsnitt** med zoom og vannrett/loddrett
 plassering, samt automatisk/topp/midt/bunn for tekst. Cascadia Code er fast og
 leveres lokalt; farger og form følger en av de fem kategoriene.
-Originalfoto lagres som JPEG uten innbrent tittel; kategori og utsnitt lagres i
-SQLite. Vegg, forhåndsvisning og detalj bruker samme plakatkomponent.
+Originalfoto lagres uendret og immutabelt; serveren validerer dekoding, retter
+orientering og lager egne JPEG-varianter for visning og miniatyr. Kategori og
+utsnitt lagres i SQLite. Vegg, forhåndsvisning og detalj bruker samme komponent.
 
 Ekte ferdige plakatbilder vises uten et nytt tekstoverlegg. Syntetiske eksempler
 med kildebilder bruker den nye v3-malen og lenker til den urørte originalplakaten.
@@ -81,9 +91,10 @@ npm run seed:demo
 Alle gamle ID-er, romtilknytninger, tidspunkt, medier, stemmer, kommentarer,
 rapporter og modereringsstatus bevares. Versjon 4 gjør kun romtilknytning valgfri
 og legger til `post_design` for kategorier og utsnitt. Nye innlegg har
-`room_id = NULL`. Gamle rom-API-er beholdes for eksisterende klienter og databevaring;
-den nye UI-en bruker dem ikke. Versjon 5 legger til tekstplassering med standard
-`auto`, uten å endre innhold eller eksisterende kategorier/utsnitt.
+`room_id = NULL`. Gamle romdata bevares, men rom-API-et er eksplisitt avviklet.
+Migrasjon 6–10 legger til sikre sesjoner og recovery, revisjonsspor,
+medielivssyklus, FTS-søk, områdegrenser og fremtidig verifikasjonsstatus uten å
+endre eksisterende innlegg.
 
 Kategori kommer fra en eksplisitt mapping for seed-settet, ellers fra gammelt
 rom/type og en dokumentert standardkategori Historie. Se
@@ -97,6 +108,7 @@ Dette er en eksplisitt operatørhandling, ikke kontinuerlig synkronisering.
 ## Tester og dokumentasjon
 
 ```powershell
+npm run check
 npm test
 npm run test:browser
 ```
@@ -112,6 +124,10 @@ Testene bruker midlertidige databaser. Playwright åpner en egen headless browse
 aldri brukerens eksisterende nettleser. De dekker migrering, begge skriveinstanser,
 konflikter, metadata, API, fem temaer, kategoriutvalg, publisering med/uten bilde,
 44-pikslers knapper, mobil fullskjerm, deling, rapportering, kommentarer og omstart.
+Se [releaseimplementasjonen](docs/issue-implementation.md),
+[operatørhåndboken](docs/operator-runbook.md) og
+[go/no-go-listen](docs/release-checklist.md). Video, områder og verifikasjon er
+funksjonsflagg; offentlig v1 starter med dem avslått.
 
 - [Design, komponenter og visuelle eksempler](docs/wall-v3.md)
 - [Valideringsrapport](docs/validation.md)

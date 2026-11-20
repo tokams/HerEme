@@ -10,7 +10,8 @@ const { snapshotData } = require('../scripts/snapshot-data');
 const { mergeData } = require('../scripts/merge-data');
 const { nextId } = require('../server/migrations');
 const tables = ['users', 'rooms', 'posts', 'votes', 'comments', 'reports'];
-const rows = db => Object.fromEntries(tables.map(name => [name, db.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all()]));
+const legacyColumns={users:'id,token_hash,name,created_at',rooms:'id,slug,name,description,emoji,created_by,created_at',posts:'id,room_id,author_id,demo_author,title,body,type,link_url,image_url,base_score,status,created_at',votes:'post_id,user_id,value',comments:'id,post_id,parent_id,author_id,demo_author,body,depth,created_at',reports:'id,post_id,user_id,reason,resolved,created_at'};
+const rows = db => Object.fromEntries(tables.map(name => [name, db.prepare(`SELECT ${legacyColumns[name]} FROM ${name} ORDER BY rowid`).all()]));
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hereme-migration-'));
@@ -88,6 +89,11 @@ test('missing media fails visibly without publishing a usable snapshot', async t
   await assert.rejects(snapshotData(source, destination), /ENOENT/);
   assert.equal(fs.existsSync(destination), false);
 });
+test('legacy duplicate pseudonyms are deterministically disambiguated without losing identities',async t=>{
+  const {root,source,db}=fixture(t);db.prepare("insert into users(id,token_hash,name) values('legacy-duplicate','other-token','REGNVENN')").run();
+  const destination=path.join(root,'deduplicated');await snapshotData(source,destination);const copy=new DatabaseSync(path.join(destination,'hereme.sqlite'),{readOnly:true});
+  try{const users=copy.prepare("select id,name,normalized_name from users where id in ('legacy-user','legacy-duplicate') order by created_at,id").all();assert.equal(users.length,2);assert.equal(new Set(users.map(user=>user.normalized_name)).size,2);assert.ok(users.some(user=>user.name.toLocaleLowerCase('no')==='regnvenn'));assert.ok(users.some(user=>/-2$/.test(user.name)));}finally{copy.close();}
+});
 
 test('merge preserves real writes from both instances, relationships, votes, moderation, uploads and IDs', async t => {
   const { root, source, db, png } = fixture(t);
@@ -96,7 +102,7 @@ test('merge preserves real writes from both instances, relationships, votes, mod
   const preview = new DatabaseSync(path.join(destination, 'hereme.sqlite'));
   preview.exec(`
     PRAGMA foreign_keys=ON;
-    INSERT INTO users(id,token_hash,name) VALUES ('preview-user','preview-token','Preview');
+    INSERT INTO users(id,token_hash,name,normalized_name) VALUES ('preview-user','preview-token','Preview','preview');
     INSERT INTO rooms(id,slug,name,created_by) VALUES (-1,'preview-room','Preview room','preview-user');
     INSERT INTO posts(id,room_id,author_id,title,type,image_url) VALUES (-1,-1,'preview-user','Preview photo','image','/uploads/preview.png');
     INSERT INTO comments(id,post_id,parent_id,author_id,body,depth) VALUES
