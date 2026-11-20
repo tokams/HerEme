@@ -22,7 +22,6 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   if(production){
     if(!/^https:\/\/[^/]+$/.test(publicOrigin))throw new Error('Production HEREME_PUBLIC_ORIGIN must be an HTTPS origin without a path.');
     if(host!=='127.0.0.1'&&host!=='::1')throw new Error('Production HOST must be loopback behind the reverse proxy.');
-    if(env.HEREME_ENABLE_REMOTE_ADMIN==='1')throw new Error('Remote administration is not approved for v1.');
   }
   const sessionDays=Number(env.HEREME_SESSION_DAYS||30);
   const minFreeBytes=Number(env.HEREME_MIN_FREE_BYTES||256*1024*1024);
@@ -33,7 +32,7 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   return {dataDir,port,preview,environment,production,host,publicOrigin,sessionDays,minFreeBytes,
     trustProxy:env.HEREME_TRUST_PROXY==='loopback',uploadsSuspended:env.HEREME_UPLOADS_SUSPENDED==='1',
     enableVideo:env.HEREME_ENABLE_VIDEO==='1',enableLocations:env.HEREME_ENABLE_LOCATIONS==='1',
-    enableVerification:env.HEREME_ENABLE_VERIFICATION==='1',enableRemoteAdmin:false,
+    enableVerification:env.HEREME_ENABLE_VERIFICATION==='1',enableStaffPanel:true,
     maxVideoBytes,ffprobe:env.HEREME_FFPROBE||'ffprobe',ffmpeg:env.HEREME_FFMPEG||'ffmpeg'};
 }
 module.exports = { runtimeConfig };

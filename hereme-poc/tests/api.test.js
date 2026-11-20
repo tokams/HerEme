@@ -14,10 +14,36 @@ async function profile(name){
   const result=await request('/api/session',{method:'POST',body:{name}});assert.equal(result.status,201);
   const cookies=result.headers.getSetCookie();return {user:result.body.user,recovery:result.body.recovery_key,csrf:result.body.csrf_token,cookie:cookies.map(value=>value.split(';')[0]).join('; ')};
 }
-test('liveness, readiness, public pages and retired room/admin surfaces',async()=>{
+test('liveness, readiness, public pages and protected staff surfaces',async()=>{
   assert.equal((await request('/api/live')).status,200);const ready=await request('/api/ready');assert.equal(ready.status,200);assert.ok(Object.values(ready.body.checks).every(Boolean));
-  assert.equal((await request('/api/rooms')).status,410);assert.equal((await request('/api/admin/queue')).status,404);
+  assert.equal((await request('/api/rooms')).status,410);assert.equal((await request('/api/admin/queue')).status,401);
   assert.match((await request('/privacy.html')).body,/Personvern/);assert.match((await request('/rules.html')).body,/Fellesskapsregler/);
+});
+test('moderator censorship and audited administrator content and user controls',async()=>{
+  const author=await profile('ManagedAuthor');
+  const created=await request('/api/posts',{method:'POST',session:author,body:{title:'Content to manage',body:'Original body',type:'text',category:'story'}});const postId=created.body.id;
+  assert.equal((await request('/api/admin/overview',{session:author})).status,403);
+
+  const moderator=await profile('PanelModerator');S.db.prepare("insert into user_roles(user_id,role) values(?,'moderator')").run(moderator.user.id);
+  const moderatorMe=await request('/api/me',{session:moderator});moderator.user=moderatorMe.body.user;
+  assert.ok(moderator.user.capabilities.includes('moderate'));assert.equal((await request('/api/admin/overview',{session:moderator})).body.users.length,0);
+  assert.equal((await request(`/api/admin/posts/${postId}/moderation`,{method:'POST',session:moderator,body:{action:'hide',reason:'violates local rules'}})).status,200);
+  assert.equal((await request('/api/posts/'+postId)).status,404);
+  assert.equal((await request(`/api/admin/posts/${postId}`,{method:'PATCH',session:moderator,body:{title:'No',body:'',category:'story',status:'published',score:1,reason:'not allowed'}})).status,403);
+  await request(`/api/admin/posts/${postId}/moderation`,{method:'POST',session:moderator,body:{action:'publish',reason:'review complete'}});
+
+  const admin=await profile('PanelAdmin');S.db.prepare("insert into user_roles(user_id,role) values(?,'moderator'),(?,'admin')").run(admin.user.id,admin.user.id);
+  admin.user=(await request('/api/me',{session:admin})).body.user;assert.ok(admin.user.capabilities.includes('content:manage'));assert.ok(admin.user.capabilities.includes('moderate'));
+  const overview=await request('/api/admin/overview',{session:admin});assert.equal(overview.status,200);assert.ok(overview.body.posts.some(post=>post.id===postId));assert.ok(overview.body.users.some(user=>user.id===author.user.id));
+  assert.equal((await request(`/api/admin/posts/${postId}`,{method:'PATCH',session:admin,body:{title:'Managed title',body:'Managed body',category:'tip',status:'published',score:42,reason:'corrected by administrator'}})).status,200);
+  const managed=(await request('/api/posts/'+postId)).body.post;assert.equal(managed.title,'Managed title');assert.equal(managed.body,'Managed body');assert.equal(managed.category,'tip');assert.equal(managed.score,42);
+
+  const preserved=await profile('PreservedUser'),preservedPost=(await request('/api/posts',{method:'POST',session:preserved,body:{title:'Preserve my post',body:'Keep this',type:'text',category:'question'}})).body.id;
+  const deletePreserved=await request(`/api/admin/users/${preserved.user.id}`,{method:'DELETE',session:admin,body:{delete_posts:false,reason:'account removal requested'}});assert.equal(deletePreserved.status,200,JSON.stringify(deletePreserved.body));assert.equal((await request('/api/posts/'+preservedPost)).body.post.author,'slettet bruker');
+  const removed=await profile('RemovedUser'),removedPost=(await request('/api/posts',{method:'POST',session:removed,body:{title:'Remove my post',body:'Delete this',type:'text',category:'alert'}})).body.id;
+  const deleteRemoved=await request(`/api/admin/users/${removed.user.id}`,{method:'DELETE',session:admin,body:{delete_posts:true,reason:'account and content removal requested'}});assert.equal(deleteRemoved.body.posts_deleted,1);assert.equal((await request('/api/posts/'+removedPost)).status,404);
+  assert.equal((await request(`/api/admin/posts/${postId}`,{method:'DELETE',session:admin,body:{reason:'content deletion requested'}})).status,200);assert.equal((await request('/api/posts/'+postId)).status,404);
+  assert.ok(S.db.prepare("select id from audit_events where action='admin.user.deleted'").get());
 });
 test('pseudonym creation, CSRF, recovery, rotation and session revocation',async()=>{
   const first=await profile('ReleaseUser');assert.ok(first.recovery.length>=20);assert.match(first.headers||'',/^$/);

@@ -9,7 +9,7 @@
     category:'story',postMode:null,composeStep:'select',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set()
+    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set(),staff:null,staffTab:'posts',staffReason:''
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={};
@@ -102,9 +102,26 @@
   function accountMenu(){
     const links=`<p class="account-links"><a href="/rules.html">Fellesskapsregler</a> · <a href="/privacy.html">Personvern</a></p>`;
     const connection=state.meta?.addresses?`<details class="connection-details"><summary>Åpne på mobilen lokalt</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="QR-kode til denne instansen"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">Kopier adressen</button></details>`:'';
-    if(state.user)return wrapper('Din profil',`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">Logget inn som</p><h3>${E(state.user.name)}</h3><p class="muted-note">Pseudonym konto</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-danger" data-action="logout">Logg ut</button></div>${connection}${links}`);
+    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?'<button class="btn btn-primary" data-action="staff-panel">Administrasjon og moderering</button>':'';return wrapper('Din profil',`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">Logget inn som</p><h3>${E(state.user.name)}</h3><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions">${staff}<button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-danger" data-action="logout">Logg ut</button></div>${connection}${links}`);}
     return wrapper('Logg inn',`<p>Bruk pseudonymet og gjenopprettingsnøkkelen din.</p>${loginForm()}<div class="account-register"><p><b>Ny på HerEme?</b></p><button class="btn btn-secondary" data-action="register">Opprett nytt pseudonym →</button></div>${connection}${links}`);
   }
+  const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error('Skriv en begrunnelse på minst tre tegn.');state.staffReason=value;return value;};
+  function staffPanel(){
+    if(!state.staff)return wrapper('Administrasjon og moderering','<p class="loading-card">Henter serverinnhold …</p>','','staff-modal');
+    const admin=state.user.capabilities.includes('content:manage'),tabs=admin?['posts','users','comments','reports']:['posts'];
+    const labels={posts:'Innlegg',users:'Brukere',comments:'Kommentarer',reports:'Rapporter'};
+    const nav=`<nav class="staff-tabs">${tabs.map(tab=>`<button class="btn btn-secondary" data-action="staff-tab" data-tab="${tab}" aria-pressed="${state.staffTab===tab}">${labels[tab]}</button>`).join('')}</nav>`;
+    let rows='';
+    if(state.staffTab==='posts')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>Innhold</th><th>Forfatter</th><th>Status</th><th>Poeng</th><th>Handling</th></tr></thead><tbody>${state.staff.posts.map(post=>`<tr><td>${post.id}</td><td>${admin?`<input data-staff-field="title" data-id="${post.id}" value="${E(post.title)}" maxlength="160"><textarea data-staff-field="body" data-id="${post.id}" maxlength="3000">${E(post.body)}</textarea><select data-staff-field="category" data-id="${post.id}">${HeremeThemes.ids.map(id=>`<option value="${id}"${id===post.category?' selected':''}>${E(HeremeThemes.get(id).label)}</option>`).join('')}</select>`:`<b>${E(post.title)}</b>`}</td><td>${E(post.author)}</td><td>${admin?`<select data-staff-field="status" data-id="${post.id}">${['published','review','hidden','rejected'].map(value=>`<option${value===post.status?' selected':''}>${value}</option>`).join('')}</select>`:E(post.status)}</td><td>${admin?`<input type="number" data-staff-field="score" data-id="${post.id}" value="${post.score}" min="-1000000" max="1000000">`:post.score}</td><td class="staff-actions">${admin?`<button class="btn btn-primary" data-action="staff-save-post" data-id="${post.id}">Lagre</button><button class="btn btn-danger" data-action="staff-delete-post" data-id="${post.id}">Slett</button>`:''}<button class="btn btn-secondary" data-action="staff-moderate" data-mode="${post.status==='hidden'?'publish':'hide'}" data-id="${post.id}">${post.status==='hidden'?'Gjenopprett':'Sensurer'}</button></td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='users')rows=`<table class="staff-table"><thead><tr><th>Pseudonym</th><th>Roller</th><th>Innhold</th><th>Slett</th></tr></thead><tbody>${state.staff.users.map(user=>`<tr><td>${E(user.name)}<br><small>${E(user.status)}</small></td><td>${E(user.roles.join(', '))}</td><td>${user.post_count} innlegg · ${user.comment_count} kommentarer · ${user.vote_count} stemmer</td><td><label><input type="checkbox" data-delete-posts="${E(user.id)}"> Slett også innlegg</label><button class="btn btn-danger" data-action="staff-delete-user" data-user-id="${E(user.id)}"${user.id===state.user.id?' disabled':''}>Slett bruker</button></td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='comments')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>Innlegg</th><th>Forfatter</th><th>Kommentar</th><th>Handling</th></tr></thead><tbody>${state.staff.comments.map(comment=>`<tr><td>${comment.id}</td><td>${E(comment.post_title)}</td><td>${E(comment.author)}</td><td><textarea data-comment-body="${comment.id}" maxlength="1200">${E(comment.body)}</textarea></td><td class="staff-actions"><button class="btn btn-primary" data-action="staff-save-comment" data-id="${comment.id}">Lagre</button><button class="btn btn-danger" data-action="staff-delete-comment" data-id="${comment.id}">Slett tråd</button></td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='reports')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>Innlegg</th><th>Rapportør</th><th>Grunn</th><th>Status</th></tr></thead><tbody>${state.staff.reports.map(report=>`<tr><td>${report.id}</td><td>${E(report.post_title)}</td><td>${E(report.reporter||'slettet')}</td><td>${E(report.reason)}</td><td>${report.resolved?'løst':'åpen'}</td></tr>`).join('')}</tbody></table>`;
+    const summary=admin?`${state.staff.stats.posts} innlegg · ${state.staff.stats.users} brukere · ${state.staff.stats.comments} kommentarer · ${state.staff.stats.reports} rapporter`:`${state.staff.stats.posts} innlegg`;
+    return wrapper('Administrasjon og moderering',`<p class="notice">${summary}. Alle endringer loggføres.</p><label class="field"><span>Begrunnelse for neste handling</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="Hvorfor gjøres endringen?"></label>${nav}<div class="staff-table-wrap">${rows}</div>`,'','staff-modal');
+  }
+  async function loadStaff(){state.staff=await api('/api/admin/overview');if(!state.user.capabilities.includes('content:manage'))state.staffTab='posts';}
+  async function openStaffPanel(){state.staff=null;openModal('staff');await loadStaff();renderModal();}
+  async function refreshStaff(message){await loadStaff();renderModal({preserve:true});await loadPosts();if(message)toast(message);}
   function requireUser(action) {
     if(state.user)return true;
     state.pending=action;openModal('profile');return false;
@@ -129,6 +146,7 @@
     }
     if(state.modal==='report')html=wrapper('Rapporter innlegg',`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>Hva er problemet?</span><select id="reportReason"><option>Personopplysninger</option><option>Trakassering</option><option>Ulovlig innhold</option><option>Spam / svindel</option><option>Annet</option></select></label><p class="notice">Tre forskjellige demokontoers rapporter setter innlegget på vent for vurdering.</p><button class="btn btn-primary" type="submit">Send rapport</button></form>`);
     if(state.modal==='menu')html=accountMenu();
+    if(state.modal==='staff')html=staffPanel();
     $('#modalRoot').innerHTML=html;
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
@@ -301,6 +319,21 @@
     if(action==='discussion'){await openDetail(id);$('#discussion')?.scrollIntoView({block:'start',behavior:'smooth'});return;}
     if(action==='retry-feed'){await loadPosts();return;}
     if(action==='load-more'){await loadPosts({append:true});return;}
+    if(action==='staff-panel'){await openStaffPanel();return;}
+    if(action==='staff-tab'){state.staffReason=$('#staffReason')?.value||state.staffReason;state.staffTab=target.dataset.tab;renderModal();return;}
+    if(action==='staff-moderate'){await api(`/api/admin/posts/${id}/moderation`,{method:'POST',body:{action:target.dataset.mode,reason:staffReason()}});await refreshStaff(target.dataset.mode==='hide'?'Innlegget er sensurert.':'Innlegget er gjenopprettet.');return;}
+    if(action==='staff-save-post'){
+      const value=name=>document.querySelector(`[data-staff-field="${name}"][data-id="${id}"]`).value;
+      await api(`/api/admin/posts/${id}`,{method:'PATCH',body:{title:value('title'),body:value('body'),category:value('category'),status:value('status'),score:Number(value('score')),reason:staffReason()}});await refreshStaff('Innlegget er oppdatert.');return;
+    }
+    if(action==='staff-delete-post'){if(!confirm('Slette innlegget permanent, inkludert kommentarer, stemmer og media?'))return;await api(`/api/admin/posts/${id}`,{method:'DELETE',body:{reason:staffReason()}});await refreshStaff('Innlegget er slettet permanent.');return;}
+    if(action==='staff-save-comment'){const body=document.querySelector(`[data-comment-body="${id}"]`).value;await api(`/api/admin/comments/${id}`,{method:'PATCH',body:{body,reason:staffReason()}});await refreshStaff('Kommentaren er oppdatert.');return;}
+    if(action==='staff-delete-comment'){if(!confirm('Slette kommentaren og alle svar under den permanent?'))return;await api(`/api/admin/comments/${id}`,{method:'DELETE',body:{reason:staffReason()}});await refreshStaff('Kommentartråden er slettet.');return;}
+    if(action==='staff-delete-user'){
+      const userId=target.dataset.userId,deletePosts=document.querySelector(`[data-delete-posts="${CSS.escape(userId)}"]`).checked;
+      if(!confirm(`Slette brukeren permanent${deletePosts?' og alle brukerens innlegg':' mens innleggene anonymiseres'}?`))return;
+      await api(`/api/admin/users/${encodeURIComponent(userId)}`,{method:'DELETE',body:{delete_posts:deletePosts,reason:staffReason()}});await refreshStaff('Brukeren er slettet permanent.');return;
+    }
     if(action==='menu'){openModal('menu');return;}
     if(action==='areas'){state.draftAreas=[...state.selectedAreas];openModal('areas');return;}
     if(action==='area-toggle'){const area=target.dataset.areaId;state.draftAreas=state.draftAreas.includes(area)?state.draftAreas.filter(id=>id!==area):[...state.draftAreas,area];for(const item of document.querySelectorAll(`[data-area-id="${CSS.escape(area)}"]`))item.setAttribute('aria-pressed',state.draftAreas.includes(area));return;}

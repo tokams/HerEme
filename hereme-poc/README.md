@@ -19,8 +19,9 @@ eller manglende moduler.
 - Hvis porten er opptatt, prøves neste, maksimalt 20 porter. Bruk adressen
   terminalen skriver ut. API, mobiladresse og QR bruker faktisk åpnet port.
 - `run-preview.cmd` velger samme preview-oppsett.
-- `PORT` velger første port og `HEREME_DATA_DIR` datamappen. Offentlig
-  moderering har ingen PIN eller nettleserendepunkt; operatøren bruker privat CLI.
+- `PORT` velger første port og `HEREME_DATA_DIR` datamappen. Moderatorer og
+  administratorer bruker vanlig, personlig recovery-innlogging; ingen delt PIN
+  eller separat policyflate finnes.
 
 Telefonen må være på samme Wi-Fi/LAN. Mobiladresse og QR ligger i
 **Meny → Åpne på mobilen**. Tillat Node i Windows-brannmuren for private nettverk
@@ -35,6 +36,10 @@ knapper med ikoner over veggen og litt luft mellom flisene. **Avansert** viser
 navigasjon og faktiske samtaler/svar i sidepaneler. Begge deler samme utvalg.
 Velg **Lys modus / Mørk modus**; visning og fargevalg huskes i nettleseren.
 Mobil beholder en kompakt header, sammenhengende fliser og sammenleggbare filtre.
+Staff-brukere åpner **Administrasjon og moderering** fra profilmenyen. Moderator
+kan sensurere eller gjenopprette hele innlegg. Administrator kan i tillegg se
+tabeller over innlegg, brukere, kommentarer og rapporter, endre innhold, status
+og poeng, og utføre eksplisitt begrunnede slettinger.
 
 Hver flis har kategori/tid, plakatflate og en felles handlingsrad med grønn
 oppstemme, rød nedstemme, nettoscore og kommentarantall. Stemmeknappene er minst
@@ -92,9 +97,14 @@ Alle gamle ID-er, romtilknytninger, tidspunkt, medier, stemmer, kommentarer,
 rapporter og modereringsstatus bevares. Versjon 4 gjør kun romtilknytning valgfri
 og legger til `post_design` for kategorier og utsnitt. Nye innlegg har
 `room_id = NULL`. Gamle romdata bevares, men rom-API-et er eksplisitt avviklet.
-Migrasjon 6–10 legger til sikre sesjoner og recovery, revisjonsspor,
+Migrasjon 6–11 legger til sikre sesjoner og recovery, revisjonsspor,
 medielivssyklus, FTS-søk, områdegrenser og fremtidig verifikasjonsstatus uten å
 endre eksisterende innlegg.
+
+Eldre brukerinnhold kan importeres uten demoinnhold, med både kilde- og
+målbackup, via `npm run content:import-users -- <gammel-data> <nåværende-data>`.
+Engangsoppretting av lokale staff-kontoer gjøres med `npm run staff:provision`;
+kommandoen nekter å overskrive eksisterende legitimasjon.
 
 Kategori kommer fra en eksplisitt mapping for seed-settet, ellers fra gammelt
 rom/type og en dokumentert standardkategori Historie. Se

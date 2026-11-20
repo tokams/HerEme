@@ -29,4 +29,6 @@ regular-user access and anonymous moderation are forbidden.
 Feature flags default off. Enabling location requires approved geometry/source,
 privacy review and map/list UX tests. Enabling verification requires a contracted
 OIDC provider, exact claim policy, negative-claim tests and owner acceptance.
-Enabling remote admin requires its security ADR and penetration tests.
+ADR 0008 supplies the role-based staff security decision and automated contract
+coverage. Independent penetration testing remains an operator release gate for
+internet exposure.

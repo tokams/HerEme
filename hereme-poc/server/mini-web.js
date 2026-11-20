@@ -58,7 +58,7 @@ function createApp(){
   return app;
 }
 createApp.json=({limit='128kb'}={})=> (req,res,next)=>{
-  if(!['POST','PUT','PATCH'].includes(req.method)||!req.headers['content-type']?.startsWith('application/json'))return next();
+  if(!['POST','PUT','PATCH','DELETE'].includes(req.method)||!req.headers['content-type']?.startsWith('application/json'))return next();
   const max=parseLimit(limit);readBody(req,max).then(buffer=>{
     try{req.body=JSON.parse(buffer.toString('utf8')||'{}');next();}
     catch{res.status(400).json({error:'Ugyldig JSON.'});}

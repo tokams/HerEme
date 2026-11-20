@@ -1,5 +1,20 @@
 ﻿# Validation — Square wall v3, 2026-11-18
 
+## 2026-11-20 staff administration and historical import
+
+- `npm run check`: 61 JavaScript files passed syntax validation.
+- `npm test`: 31 contracts passed, including staff authorization, moderator
+  censorship/restoration, administrator edits and score changes, both user
+  deletion choices, permanent post deletion, audit records, schema 11 and an
+  idempotent user-content-only import with relationships and uploads.
+- `npm run test:browser`: passed the existing responsive flow plus a real
+  role-elevated session opening the four-tab administrator panel. The rendered
+  panel was visually inspected at 1440 × 1000.
+- The actual local SQLite target passed `integrity_check`, had zero foreign-key
+  violations and schema 11 after importing 8 missing user posts, 4 users, 15
+  votes, 8 comments and 8 uploads. Both saved staff recovery credentials were
+  verified against their required roles without printing the keys.
+
 Implements the updated poster-wall issue and subsequent user requests for fixed
 Cascadia Code, Simple/Advanced desktop layouts, visible category icon buttons in
 Simple, slightly spaced tiles and light/dark modes. See [design](wall-v3.md).

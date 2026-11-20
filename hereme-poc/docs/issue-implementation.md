@@ -49,7 +49,8 @@ requires FFmpeg and physical Safari/Chrome devices in the target environment.
   hashed subject and status; verification never grants moderator/operator roles.
   A production BankID contract and provider adapter are external prerequisites.
 - Remote administration is intentionally disabled and rejected by production
-  config. Moderation remains private CLI work until a later security decision.
+  config. ADR 0008 later replaced private-only moderation with audited,
+  capability-checked staff sessions and same-origin endpoints.
 
 No placeholder Norway geometry, fake BankID integration, public admin backdoor or
 fabricated deployment evidence is included.

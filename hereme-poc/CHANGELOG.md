@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-20 — Role-based staff control and historical user content
+
+- Added authenticated moderator and administrator panels over canonical domain
+  services. Moderators can reversibly censor whole posts; administrators can
+  edit displayed content and scores, delete comment subtrees and posts, and
+  delete users while explicitly preserving/anonymizing or deleting their posts.
+- Added explicit `admin` capabilities, CSRF-protected staff APIs, mandatory
+  reasons, audit events, last-admin/self-deletion protections and permanent media
+  cleanup for destructive post operations.
+- Added local one-time staff provisioning and stored the generated admin and
+  moderator recovery credentials outside Git in the project `secrets` folder.
+- Added a backed-up, repeatable selective import for user-authored historical
+  posts. The local data set gained 8 missing posts, 4 users, 15 votes, 8 comments
+  and 8 uploads; synthetic/demo-only content was not imported.
+- Added schema 11 and ADR 0008; extended API and migration contracts for staff
+  authorization, censorship, content edits, deletion choices and idempotent
+  historical import.
+
 ## 2026-11-20 — Deployed image and video media
 
 - Reworked **+** into a three-choice entry screen for **Bare innlegg**,

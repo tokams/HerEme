@@ -18,8 +18,9 @@ missing production path.
 The public socket binds to 127.0.0.1 and Caddy terminates HTTPS. Production uses
 an explicit canonical origin, secure HttpOnly session cookies, CSRF tokens,
 host validation and forwarded client addresses only from the loopback proxy.
-Moderation is private CLI work for v1. Public remote admin endpoints and the old
-shared PIN are disabled.
+Moderation was private CLI work for v1 and the old shared PIN was disabled.
+ADR 0008 supersedes this boundary with personal role-based staff sessions and
+audited same-origin endpoints.
 
 Background media work uses a durable SQLite queue. One bounded worker process is
 enough for the initial VM and can move behind the same queue contract later.
@@ -36,9 +37,10 @@ Release flags:
 - `HEREME_ENV=production` enables strict production validation.
 - `HEREME_PUBLIC_ORIGIN` is the one canonical HTTPS origin.
 - `HEREME_ENABLE_VIDEO=1` requires working ffprobe/ffmpeg and a worker.
-- `HEREME_ENABLE_LOCATIONS=0`, `HEREME_ENABLE_VERIFICATION=0` and
-  `HEREME_ENABLE_REMOTE_ADMIN=0` remain off until their later gates pass.
+- `HEREME_ENABLE_LOCATIONS=0` and `HEREME_ENABLE_VERIFICATION=0` remain off until
+  their later gates pass. The staff panel is governed by persisted roles, not a
+  deployment-wide feature switch.
 
-Three-minute video is P1. Location, map, BankID and remote admin are later work.
+Three-minute video is P1. Location, map and BankID are later work.
 Provider/data-dependent features have schema and authorization seams but are not
 silently simulated.

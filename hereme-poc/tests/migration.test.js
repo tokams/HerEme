@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const { DatabaseSync } = require('node:sqlite');
 const { snapshotData } = require('../scripts/snapshot-data');
 const { mergeData } = require('../scripts/merge-data');
+const { importUserContent } = require('../scripts/import-user-content');
 const { nextId } = require('../server/migrations');
 const tables = ['users', 'rooms', 'posts', 'votes', 'comments', 'reports'];
 const legacyColumns={users:'id,token_hash,name,created_at',rooms:'id,slug,name,description,emoji,created_by,created_at',posts:'id,room_id,author_id,demo_author,title,body,type,link_url,image_url,base_score,status,created_at',votes:'post_id,user_id,value',comments:'id,post_id,parent_id,author_id,demo_author,body,depth,created_at',reports:'id,post_id,user_id,reason,resolved,created_at'};
@@ -88,6 +89,15 @@ test('missing media fails visibly without publishing a usable snapshot', async t
   const destination = path.join(root, 'broken-preview');
   await assert.rejects(snapshotData(source, destination), /ENOENT/);
   assert.equal(fs.existsSync(destination), false);
+});
+test('selective import restores user-authored posts and relationships without importing demo-only content twice',async t=>{
+  const {root,source,png}=fixture(t),target=path.join(root,'current');await snapshotData(source,target);
+  const current=new DatabaseSync(path.join(target,'hereme.sqlite'));current.exec(`DELETE FROM reports WHERE post_id=43; DELETE FROM comments WHERE post_id=41; DELETE FROM votes WHERE post_id IN (41,43); DELETE FROM posts WHERE id IN (41,43);`);current.close();
+  const first=await importUserContent(source,target);assert.equal(first.source_posts,2);assert.equal(first.imported.posts,2);assert.equal(first.imported.comments,2);assert.equal(first.imported.reports,1);
+  const restored=new DatabaseSync(path.join(target,'hereme.sqlite'),{readOnly:true});
+  try{assert.deepEqual(restored.prepare('SELECT id FROM posts ORDER BY id').all().map(row=>row.id),[41,42,43,44]);assert.equal(restored.prepare("SELECT count(*) n FROM posts WHERE demo_author='Demovenn'").get().n,2);assert.equal(restored.prepare('SELECT parent_id FROM comments WHERE id=52').get().parent_id,51);assert.deepEqual(restored.prepare('PRAGMA foreign_key_check').all(),[]);}finally{restored.close();}
+  assert.deepEqual(fs.readFileSync(path.join(target,'uploads','legacy.png')),png);
+  const second=await importUserContent(source,target);assert.equal(second.imported.posts,0);assert.equal(second.imported.comments,0);
 });
 test('legacy duplicate pseudonyms are deterministically disambiguated without losing identities',async t=>{
   const {root,source,db}=fixture(t);db.prepare("insert into users(id,token_hash,name) values('legacy-duplicate','other-token','REGNVENN')").run();

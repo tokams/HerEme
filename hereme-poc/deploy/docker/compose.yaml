@@ -14,7 +14,6 @@ x-hereme-environment: &hereme-environment
   HEREME_FFMPEG: /usr/bin/ffmpeg
   HEREME_ENABLE_LOCATIONS: 0
   HEREME_ENABLE_VERIFICATION: 0
-  HEREME_ENABLE_REMOTE_ADMIN: 0
 
 services:
   app:

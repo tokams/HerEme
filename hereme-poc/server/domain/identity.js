@@ -6,7 +6,12 @@ const sha256=value=>crypto.createHash('sha256').update(value).digest('hex');
 const secretHash=(secret,salt)=>crypto.scryptSync(secret,Buffer.from(salt,'base64url'),32,{N:16384,r:8,p:1}).toString('base64url');
 const normalize=name=>name.normalize('NFKC').toLocaleLowerCase('no');
 function createIdentityService(db,{sessionDays=30,production=false}={}){
-  const capabilities={member:['post:create','vote','comment','report'],moderator:['moderate'],operator:['moderate','roles:manage','users:anonymize']};
+  const capabilities={
+    member:['post:create','vote','comment','report'],
+    moderator:['staff:read','moderate'],
+    admin:['staff:read','moderate','content:manage','users:delete','roles:manage'],
+    operator:['staff:read','moderate','content:manage','users:delete','roles:manage']
+  };
   const cookieName='hereme_session';
   const parseCookies=req=>Object.fromEntries(String(req.headers.cookie||'').split(';').map(part=>part.trim()).filter(Boolean).map(part=>{const i=part.indexOf('=');return [decodeURIComponent(part.slice(0,i)),decodeURIComponent(part.slice(i+1))];}));
   const roleRows=db.prepare('SELECT role FROM user_roles WHERE user_id=?');

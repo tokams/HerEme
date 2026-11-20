@@ -24,6 +24,7 @@ function lanIps(){
   found.sort((a,b)=>{const score=x=>/vpn|virtual|docker|vethernet|veth|tailscale|wsl|hyper-v/i.test(x.name)?2:/wi-?fi|wireless|wlan|ethernet|eth\d/i.test(x.name)?0:1;return score(a)-score(b);});return found;
 }
 function write(capability,limit=60){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);S.identity.requireCsrf(req,req.auth);if(capability)S.identity.requireCapability(req.auth,capability);S.rate.check(`${capability||'write'}:${req.auth.id}`,limit);next();};}
+function read(capability){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);S.identity.requireCapability(req.auth,capability);next();};}
 function activity(items){
   const selected=new Map(items.map(post=>[post.id,post]));if(!selected.size)return {stats:{posts:0,comments:0},discussions:[],recent_comments:[]};
   const placeholders=[...selected].map(()=>'?').join(',');
@@ -57,9 +58,9 @@ app.get('/api/health',(req,res)=>res.json({ok:true,name:'HerEme',storage:'SQLite
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=10').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=11').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===10;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===11;
     checks.media=['media','uploads','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();});
     const stat=fs.statfsSync(S.dataDir);checks.disk=stat.bavail*stat.bsize>=S.config.minFreeBytes;
   }catch(error){message=error.message;}
@@ -68,14 +69,14 @@ app.get('/api/ready',(req,res)=>{
 app.get('/api/categories',(req,res)=>res.json({categories:themes}));
 app.get('/api/meta',(req,res)=>{
   const port=req.socket.localPort;
-  const features={video:S.config.enableVideo,locations:S.config.enableLocations,verification:S.config.enableVerification,remote_admin:false};
+  const features={video:S.config.enableVideo,locations:S.config.enableLocations,verification:S.config.enableVerification,staff_panel:true};
   if(S.config.production)return res.json({port,public_origin:S.config.publicOrigin,connect_url:S.config.publicOrigin,features});
   const ips=lanIps();res.json({port,connect_url:ips.length?`http://${ips[0].ip}:${port}`:`http://localhost:${port}`,addresses:ips.map(item=>({...item,url:`http://${item.ip}:${port}`})),features});
 });
 app.get('/api/connect-qr.svg',async(req,res,next)=>{if(S.config.production)return errors(res,404,'NOT_FOUND','Ikke tilgjengelig.');try{const ips=lanIps(),url=ips.length?`http://${ips[0].ip}:${req.socket.localPort}`:`http://localhost:${req.socket.localPort}`;res.type('svg').send(await qrcode.toString(url,{type:'svg',margin:2,width:260}));}catch(error){next(error);}});
 
 app.post('/api/session',(req,res)=>{
-  S.rate.check('profile:'+ipKey(req),10);const result=S.identity.createProfile({name:req.body?.name,userAgent:req.headers['user-agent']});S.identity.setCookie(res,result.session);
+  S.rate.check('profile:'+ipKey(req),30);const result=S.identity.createProfile({name:req.body?.name,userAgent:req.headers['user-agent']});S.identity.setCookie(res,result.session);
   recordSecurity(req,'session.created','allowed',result.user.id);
   res.status(201).json({user:result.user,csrf_token:result.session.csrf,recovery_key:result.recoveryKey,recovery_key_shown_once:true});
 });
@@ -119,8 +120,14 @@ app.put('/api/me/areas',write(null,20),(req,res)=>res.json({areas:S.locations.se
 app.get('/api/rooms',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rom er historiske data. Bruk den felles veggen.'));
 app.post('/api/rooms',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rom kan ikke opprettes i den nye veggen.'));
 app.post('/api/rooms/:id/membership',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rommedlemskap er avviklet.'));
-app.get('/api/admin/queue',(req,res)=>errors(res,404,'NOT_FOUND','Ikke tilgjengelig.'));
-app.post('/api/admin/posts/:id',(req,res)=>errors(res,404,'NOT_FOUND','Ikke tilgjengelig.'));
+app.get('/api/admin/overview',read('staff:read'),(req,res)=>res.json(S.administration.overview(req.auth)));
+app.get('/api/admin/queue',read('moderate'),(req,res)=>res.json({posts:S.moderation.queue()}));
+app.post('/api/admin/posts/:id/moderation',write('moderate',60),(req,res)=>res.json(S.moderation.act(req.auth,req.params.id,req.body?.action,req.body?.reason)));
+app.patch('/api/admin/posts/:id',write('content:manage',120),(req,res)=>res.json(S.administration.updatePost(req.auth,req.params.id,req.body||{})));
+app.delete('/api/admin/posts/:id',write('content:manage',30),(req,res)=>res.json(S.administration.deletePost(req.auth,req.params.id,req.body||{})));
+app.patch('/api/admin/comments/:id',write('content:manage',120),(req,res)=>res.json(S.administration.updateComment(req.auth,req.params.id,req.body||{})));
+app.delete('/api/admin/comments/:id',write('content:manage',30),(req,res)=>res.json(S.administration.deleteComment(req.auth,req.params.id,req.body||{})));
+app.delete('/api/admin/users/:id',write('users:delete',20),(req,res)=>res.json(S.administration.deleteUser(req.auth,req.params.id,req.body||{})));
 app.use('/api',(req,res)=>errors(res,404,'NOT_FOUND','Ukjent API-endepunkt.'));
 app.use((error,req,res,next)=>{
   if(error instanceof upload.MulterError)return errors(res,error.code==='LIMIT_FILE_SIZE'?413:400,error.code,error.code==='LIMIT_FILE_SIZE'?'Bildet er for stort.':'Ugyldig bildeopplasting.');

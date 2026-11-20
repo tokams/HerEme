@@ -9,6 +9,7 @@ data/uploads/*
 
 .hereme-deps-ready
 data/preview*/
+data.before-*/
 data/*.log
 .venv/
 tmp/

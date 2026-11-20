@@ -207,6 +207,16 @@ textarea { min-height:100px; resize:vertical; }
 input[type=range] { width:100%; accent-color:var(--accent); min-height:30px; }
 .form-stack { display:grid; gap:18px; }
 .notice { background:#202724; padding:15px; font-size:12px; }
+.staff-modal { width:min(1400px,100%); }
+.staff-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.staff-tabs [aria-pressed=true] { border-color:var(--accent); color:var(--accent); }
+.staff-table-wrap { overflow:auto; margin-top:14px; border:1px solid var(--line); }
+.staff-table { width:100%; border-collapse:collapse; min-width:850px; font-size:12px; }
+.staff-table th,.staff-table td { padding:9px; border:1px solid var(--line); text-align:left; vertical-align:top; }
+.staff-table th { position:sticky; top:0; z-index:1; background:var(--panel2); }
+.staff-table input:not([type=checkbox]),.staff-table textarea,.staff-table select { width:100%; min-width:120px; margin-bottom:6px; }
+.staff-table textarea { min-height:64px; resize:vertical; }
+.staff-actions { display:grid; gap:6px; min-width:120px; }
 .muted-note { color:var(--muted); font-size:11px; line-height:1.5; }
 .compose-modal { width:min(980px,100%); }
 .composer { display:grid; grid-template-columns:1fr .85fr; gap:28px; align-items:start; }

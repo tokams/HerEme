@@ -1,5 +1,18 @@
 # Operator runbook
 
+## Staff accounts and panel
+
+Run `npm run staff:provision` once against the intended `HEREME_DATA_DIR`. It
+creates `HerEmeAdmin` with `member`, `moderator` and `admin`, plus
+`HerEmeModerator` with `member` and `moderator`. Recovery credentials are written
+to `../secrets/staff-credentials.txt` by default and must remain outside Git.
+The command refuses to overwrite that file or silently rotate an existing staff
+identity.
+
+Staff sign in through the normal profile menu. Every mutation requires a reason
+and is recorded in `audit_events`. Censorship is reversible (`hidden`); delete is
+permanent. Before bulk destructive work, take and verify the normal data backup.
+
 ## Provision and deploy
 
 Use a supported Linux VM with Node 24+, Caddy, SQLite-compatible local storage

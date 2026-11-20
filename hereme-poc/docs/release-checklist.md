@@ -22,4 +22,5 @@ external rows complete. Any unresolved P0 row is NO-GO.
 - [ ] Owner records release version/tag, operator contact and GO approval.
 
 Video is tracked separately and is not a v1 launch gate. Location, verification
-and remote admin flags must be off.
+flags must match the reviewed release configuration; staff access is controlled
+by personal persisted roles rather than a shared feature flag.

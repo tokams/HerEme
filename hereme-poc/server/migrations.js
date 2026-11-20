@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 10) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 11) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -227,6 +227,25 @@ function applyMigrations(db) {
         CREATE TRIGGER users_normalized_update BEFORE UPDATE OF name,normalized_name ON users WHEN new.normalized_name IS NULL OR new.normalized_name='' BEGIN SELECT raise(ABORT,'normalized_name required'); END;
         INSERT INTO schema_migrations(version) VALUES(10); COMMIT;`);
     }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<11){
+    const foreignKeys=db.prepare('PRAGMA foreign_keys').get().foreign_keys;
+    db.exec('PRAGMA foreign_keys=OFF; BEGIN IMMEDIATE;');
+    try{
+      db.exec(`CREATE TABLE user_roles_admin (
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK(role IN ('member','moderator','admin','operator')),
+          granted_at TEXT NOT NULL DEFAULT (datetime('now')), granted_by TEXT,
+          PRIMARY KEY(user_id,role)
+        );
+        INSERT INTO user_roles_admin SELECT * FROM user_roles;
+        DROP TABLE user_roles;
+        ALTER TABLE user_roles_admin RENAME TO user_roles;
+        INSERT INTO schema_migrations(version) VALUES(11);`);
+      if(db.prepare('PRAGMA foreign_key_check').all().length)throw new Error('Admin-role migration would break foreign keys.');
+      db.exec('COMMIT');
+    }catch(error){db.exec('ROLLBACK');throw error;}
+    finally{db.exec('PRAGMA foreign_keys='+foreignKeys);}
   }
 }
 function readRows(db) {

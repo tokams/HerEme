@@ -18,7 +18,7 @@ production. The app does not fetch user-submitted links.
 | Spam/fake voting/recovery guessing | Per-IP and per-session fixed-window limits, generic recovery errors and security events without credentials. |
 | Upload/media attacks | Stream to private temporary storage, reserve disk, signature/decode/probe validation, bounded concurrency/time; publish only ready media. |
 | Disk/CPU denial | Readiness minimum-free-space threshold, upload suspension, request limits, one video worker by default and retained failure state. |
-| Privilege escalation | Capabilities are checked in services; verification never grants moderator; remote admin disabled; CLI requires local filesystem access. |
+| Privilege escalation | Capabilities are checked in services; verification never grants staff roles; the staff panel requires personal sessions, CSRF and persisted roles; CLI provisioning requires local filesystem access. |
 
 Default budgets per five-minute window: account creation 10/IP, recovery 10/IP,
 posts 12/account and 20/IP, comments 40/account, votes 180/account, reports
