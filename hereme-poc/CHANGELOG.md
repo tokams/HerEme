@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-11-20 — Deployed image and video media
+
+- Reworked **+** into a three-choice entry screen for **Bare innlegg**,
+  **Bildeplakat** and **Videoplakat**. Each choice now has a focused first action
+  and one small finish step for title, poster style and optional reflection.
+- Allowed canonical immutable `/media/<uuid>/display|thumbnail` image paths in
+  the poster renderer while continuing to reject arbitrary and traversal URLs.
+- Completed the Docker video path with FFmpeg/FFprobe, the durable media worker,
+  shared persistent storage and the production video feature flag.
+- Replaced the custom in-page recorder with the device-native video capture
+  interface and normalized codec-qualified and common mobile video MIME types.
+- Anchored each video duration chip to its own card media button so it remains
+  within the card at every wall layout and viewport width.
+- Moved the public PoC from its inconsistently reachable `sslip.io` hostname to
+  `hereme.46.251.249.110.nip.io`, retaining the existing application data and
+  issuing a new automatically renewed HTTPS certificate.
+
+## 2026-11-19 — Isolated Docker deployment
+
+- Added a production Node 24 image and Compose deployment that keeps the app on
+  loopback in a shared network namespace with Caddy, publishes only HTTP/HTTPS,
+  persists application and certificate state, gates proxy startup on readiness
+  and restarts both services unless explicitly stopped.
+- Deployed a fresh instance without migrating users or live data. The supplied
+  demonstration seed remains the only initial content.
+
 ## 2026-11-19 — Account-first mobile menu
 
 - The burger menu now opens directly on account state. Signed-in users see their

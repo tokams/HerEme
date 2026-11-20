@@ -6,8 +6,8 @@
   const state={
     legacyToken:localStorage.getItem('hereme_token')||'',csrf:'',user:null,posts:[],meta:null,nextCursor:null,
     categories:[...HeremeThemes.ids],sort:'new',query:'',filtersOpen:false,activity:null,textPosition:'auto',modal:null,detailPost:null,comments:[],replyTo:null,
-    category:'story',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
-    editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,recording:false,recordStream:null,recorder:null,
+    category:'story',postMode:null,composeStep:'select',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
+    editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
     loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set()
   };
@@ -75,15 +75,14 @@
   }
   function resetPhoto() {
     state.imageRequest++;state.photoLoading=false;
-    if(state.recorder?.state==='recording')state.recorder.stop();for(const track of state.recordStream?.getTracks?.()||[])track.stop();
     if(state.tempUrl)URL.revokeObjectURL(state.tempUrl);
-    state.tempUrl=null;state.editorFile=null;state.editorImage=null;state.editorSynthetic=false;state.editorVideo=false;state.videoDuration=0;state.videoThumbnail='';state.videoProgress=0;state.videoUploading=false;state.videoPaused=false;state.videoCancelled=false;state.videoUpload=null;state.recording=false;state.recordStream=null;state.recorder=null;
+    state.tempUrl=null;state.editorFile=null;state.editorImage=null;state.editorSynthetic=false;state.editorVideo=false;state.videoDuration=0;state.videoThumbnail='';state.videoProgress=0;state.videoUploading=false;state.videoPaused=false;state.videoCancelled=false;state.videoUpload=null;
     state.editorZoom=1;state.editorX=50;state.editorY=50;
   }
   function openModal(type) {
     if(!state.modal)state.returnFocus=document.activeElement;
     state.modal=type;lockBackground(true);
-    if(type==='compose'){resetPhoto();state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';state.draft={title:'',body:'',link:''};}
+    if(type==='compose'){resetPhoto();state.postMode=null;state.composeStep='select';state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';state.draft={title:'',body:'',link:''};}
     renderModal();
   }
   function closeModal() {
@@ -118,8 +117,10 @@
     if(state.modal==='profile')html=profileModal();
     if(state.modal==='recovery-key')html=wrapper('Lagre innloggingen nå',`<p>Enheten kan lagre pseudonymet og nøkkelen som en vanlig innlogging. Nøkkelen vises bare nå og kan brukes på en annen enhet.</p><form id="recoverySaveForm" class="form-stack recovery-save-form" action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${E(state.csrf)}"><label class="field" for="recoveryUsername"><span>Pseudonym</span><input id="recoveryUsername" name="username" value="${E(state.user?.name||'')}" autocomplete="username" required></label><label class="field" for="recoveryPassword"><span>Gjenopprettingsnøkkel</span><span class="credential-row"><input id="recoveryPassword" class="recovery-key" name="password" type="password" value="${E(state.recoveryKey)}" autocomplete="new-password" required><button class="btn btn-secondary" type="button" data-action="toggle-recovery">Vis</button></span></label><div class="recovery-actions"><button class="btn btn-secondary" type="button" data-action="copy-recovery">Kopier nøkkel</button><button class="btn btn-primary" type="submit">Lagre med enheten →</button></div></form><p class="notice">Nettleseren bestemmer om den viser et lagringsspørsmål. Mister du både sesjonen og nøkkelen, kan kontoen ikke gjenopprettes sikkert.</p>`, '<button class="text-button" data-action="recovery-continue">Fortsett uten automatisk lagring</button>');
     if(state.modal==='areas')html=wrapper('Områder',HeremeLocations.body(state.areas,state.areaGeometry,state.draftAreas),'<button class="btn btn-primary" data-action="save-areas">Lagre områder</button>','area-modal');
-    if(state.modal==='compose')html=wrapper('Legg noe på veggen',HeremeCompose.body(state),
-      '<span class="muted-note">Fem stiler. Plass til alle.</span><button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">Publiser ↗</button>','compose-modal');
+    if(state.modal==='compose'){
+      const footer=state.composeStep==='select'?'':`<span class="muted-note">${state.composeStep==='edit'?'Ett steg til.':'Klar når du er.'}</span><button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${state.composeStep==='edit'?'Neste →':`Publiser ${state.postMode==='video'?'video':state.postMode==='image'?'bilde':'innlegg'} ↗`}</button>`;
+      html=wrapper('Legg noe på veggen',HeremeCompose.body(state),footer,'compose-modal');
+    }
     if(state.modal==='detail') {
       const p=state.detailPost;
       html=`<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel detail-modal" role="dialog" aria-modal="true" aria-label="Innlegg">
@@ -131,20 +132,19 @@
     $('#modalRoot').innerHTML=html;
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
-    if(state.modal==='compose'&&state.photoLoading)$('#publishButton').disabled=true;
+    if(state.modal==='compose'&&state.photoLoading&&$('#publishButton'))$('#publishButton').disabled=true;
     if(comment!==undefined&&$('#commentText'))$('#commentText').value=comment;
     if(preserve&&$('.modal-content'))$('.modal-content').scrollTop=scroll;
     if(focus&&document.getElementById(focus))document.getElementById(focus).focus({preventScroll:true});
     else $('.modal-close')?.focus({preventScroll:true});
   }
   function saveDraft() {
-    state.draft={title:$('#postTitle').value,body:$('#postBody').value,link:$('#postLink').value};
+    state.draft={title:$('#postTitle')?.value??state.draft.title,body:$('#postBody')?.value??state.draft.body,link:$('#postLink')?.value??state.draft.link};
   }
   function updatePreview() {
     saveDraft();
-    $('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.editorVideo?'<span class="video-preview-badge">▶ Video · spiller først i innlegget</span>':'');
-    $('#categoryHint').textContent=HeremeThemes.get(state.category).description;
-    HeremePoster.enhance($('#posterPreview'));
+    if($('#posterPreview')){$('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.postMode==='video'?'<span class="video-preview-badge">'+HeremeIcons.icon('video')+' Video</span>':'');HeremePoster.enhance($('#posterPreview'));}
+    if($('#categoryHint'))$('#categoryHint').textContent=HeremeThemes.get(state.category).description;
   }
   async function openDetail(id) {
     const request=++state.detailRequest;
@@ -191,9 +191,9 @@
     if(!file)return;
     if(!file.type.startsWith('image/'))throw new Error('Velg en bildefil.');
     if(file.size>25*1024*1024)throw new Error('Velg et bilde under 25 MB.');
-    saveDraft();resetPhoto();const request=state.imageRequest;
-    state.photoLoading=true;$('#publishButton').disabled=true;
-    $('#photoFilename').textContent='Åpner bildet …';
+    saveDraft();resetPhoto();state.postMode='image';state.composeStep='edit';const request=state.imageRequest;
+    state.photoLoading=true;if($('#publishButton'))$('#publishButton').disabled=true;
+    if($('#photoFilename'))$('#photoFilename').textContent='Åpner bildet …';
     const url=URL.createObjectURL(file),image=new Image();
     try {
       image.src=url;await image.decode();
@@ -207,25 +207,17 @@
   }
   async function loadVideo(file) {
     if(!file)return;if(!file.type.startsWith('video/'))throw new Error('Velg en videofil.');
-    saveDraft();resetPhoto();const url=URL.createObjectURL(file),video=document.createElement('video');video.preload='metadata';video.muted=true;video.src=url;
+    saveDraft();resetPhoto();state.postMode='video';state.composeStep='edit';const url=URL.createObjectURL(file),video=document.createElement('video');video.preload='metadata';video.muted=true;video.src=url;
     await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=()=>reject(new Error('Videoen kunne ikke åpnes.'));});
     if(!Number.isFinite(video.duration)||video.duration<=0||video.duration>180){URL.revokeObjectURL(url);throw new Error('Videoen må være maks 180 sekunder.');}
     video.currentTime=Math.min(.2,video.duration/2);await new Promise(resolve=>{video.onseeked=resolve;setTimeout(resolve,500);});
     const canvas=document.createElement('canvas');canvas.width=640;canvas.height=Math.max(1,Math.round(640*(video.videoHeight||360)/(video.videoWidth||640)));canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
     state.tempUrl=url;state.editorFile=file;state.editorVideo=true;state.videoDuration=video.duration;state.videoThumbnail=canvas.toDataURL('image/jpeg',.8);renderModal({preserve:true});
   }
-  async function startRecording() {
-    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)throw new Error('Direkte videoopptak støttes ikke her. Velg en videofil i stedet.');
-    saveDraft();resetPhoto();const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:true}),chunks=[];
-    const recorder=new MediaRecorder(stream);state.recording=true;state.recordStream=stream;state.recorder=recorder;
-    recorder.ondataavailable=event=>{if(event.data.size)chunks.push(event.data);};
-    recorder.onstop=async()=>{for(const track of stream.getTracks())track.stop();state.recording=false;const file=new File(chunks,'hereme-video.webm',{type:recorder.mimeType||'video/webm'});await loadVideo(file).catch(error=>toast(error.message));};
-    recorder.start(1000);renderModal({preserve:true});const preview=$('#recordingPreview');if(preview)preview.srcObject=stream;state.recordTimer=setTimeout(()=>{if(recorder.state==='recording')recorder.stop();},180000);
-  }
   async function uploadVideo(file,input) {
     let started=state.videoUpload,offset=0;
     if(started){const existing=await api(started.upload_url);if(existing.status!=='uploading')return started;offset=existing.uploaded_bytes;if(existing.bytes!==file.size)throw new Error('Den lagrede opplastingen tilhører en annen fil. Avbryt og prøv igjen.');}
-    else started=await api('/api/video-uploads',{method:'POST',body:{...input,bytes:file.size,mime_type:file.type}});
+    else started=await api('/api/video-uploads',{method:'POST',body:{...input,bytes:file.size,mime_type:String(file.type||'').split(';')[0].trim().toLowerCase()}});
     state.videoUpload=started;state.videoUploading=true;state.videoCancelled=false;state.videoPaused=false;state.videoProgress=1;renderModal({preserve:true});
     const chunkSize=4*1024*1024;
     try{
@@ -234,7 +226,7 @@
         if(state.videoCancelled)throw new Error('Videoopplastingen ble avbrutt.');
         const end=Math.min(offset+chunkSize,file.size),blob=file.slice(offset,end);let result,lastError;
         for(let attempt=1;attempt<=3&&!result;attempt++)try{result=await sendVideoChunk(started.upload_url,blob,offset,end,file.size);}catch(error){lastError=error;if(state.videoCancelled)throw error;if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*500));}
-        if(!result)throw lastError;offset=end;state.videoProgress=Math.round(offset/file.size*100);const progress=$('.photo-field progress');if(progress)progress.value=state.videoProgress;const label=$('.upload-progress span');if(label)label.textContent=state.videoProgress+'%';
+        if(!result)throw lastError;offset=end;state.videoProgress=Math.round(offset/file.size*100);const progress=$('.media-workspace progress');if(progress)progress.value=state.videoProgress;const label=$('.upload-progress span');if(label)label.textContent=state.videoProgress+'%';
       }
       state.videoUpload=null;return started;
     } finally {state.videoUploading=false;state.videoXhr=null;}
@@ -254,18 +246,20 @@
     saveDraft();
     const title=state.draft.title.trim();
     if(title.length<3||title.length>160)throw new Error('Skriv en overskrift med 3–160 tegn.');
+    if(state.postMode==='image'&&!state.editorImage)throw new Error('Velg et bilde til bildeinnlegget.');
+    if(state.postMode==='video'&&!state.editorVideo)throw new Error('Velg eller ta opp en video til videoinnlegget.');
     const button=$('#publishButton');button.disabled=true;button.textContent='Publiserer …';
     if(!state.editorVideo)$('#composeForm').inert=true;
     state.publishing=true;
     try {
-      if(state.editorVideo){await uploadVideo(state.editorFile,{title,body:state.draft.body.trim(),category:state.category,poster_style:state.category,text_position:state.textPosition,area_id:state.postArea||undefined});state.publishing=false;closeModal();toast('Videoen behandles og vises når den er klar.');return;}
+      if(state.postMode==='video'){await uploadVideo(state.editorFile,{title,body:state.draft.body.trim(),category:state.category,poster_style:state.category,text_position:state.textPosition,area_id:state.postArea||undefined});state.publishing=false;closeModal();toast('Videoen behandles og vises når den er klar.');return;}
       const form=new FormData();
       form.set('title',title);form.set('body',state.draft.body.trim());form.set('category',state.category);
       form.set('poster_style',state.category);form.set('text_position',state.textPosition);
-      form.set('type',state.editorImage?'image':state.draft.link.trim()?'link':'text');
-      if(state.draft.link.trim())form.set('link_url',state.draft.link.trim());
+      form.set('type',state.postMode==='image'?'image':state.draft.link.trim()?'link':'text');
+      if(state.postMode==='text'&&state.draft.link.trim())form.set('link_url',state.draft.link.trim());
       if(state.postArea)form.set('area_id',state.postArea);
-      if(state.editorImage) {
+      if(state.postMode==='image') {
         form.set('image',await imageToBlob(state.editorImage),'hereme-bilde.jpg');
         for(const [key,value]of Object.entries({image_zoom:state.editorZoom,image_x:state.editorX,image_y:state.editorY}))form.set(key,value);
         if(state.editorSynthetic)form.set('synthetic_demo','true');
@@ -277,7 +271,7 @@
       closeModal();renderFilters();await loadPosts();
       document.querySelector(`[data-post-id="${result.id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'});
       toast('Innlegget er på veggen!');
-    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.textContent='Publiser ↗';throw error;}
+    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.textContent=`Publiser ${state.postMode==='video'?'video':state.postMode==='image'?'bilde':'innlegg'} ↗`;throw error;}
   }
   async function submitComment() {
     const id=state.detailPost.id;
@@ -319,9 +313,8 @@
     if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast('Nøkkelen er kopiert.');return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast('Nøkkelen er kopiert.');return;}}window.prompt('Kopier gjenopprettingsnøkkelen:',state.recoveryKey);return;}
     if(action==='recovery-continue'){const pending=state.pending;state.pending=null;state.recoveryKey='';closeModal();await loadPosts();if(pending)await pending();return;}
     if(action==='compose'){if(requireUser(()=>openModal('compose')))openModal('compose');return;}
+    if(action==='compose-back'){saveDraft();if(state.composeStep==='finish')state.composeStep='edit';else{resetPhoto();state.postMode=null;state.composeStep='select';}renderModal();return;}
     if(action==='remove-photo'){saveDraft();resetPhoto();renderModal({preserve:true});return;}
-    if(action==='start-recording'){await startRecording();return;}
-    if(action==='stop-recording'){clearTimeout(state.recordTimer);if(state.recorder?.state==='recording')state.recorder.stop();return;}
     if(action==='pause-upload'){state.videoPaused=true;target.dataset.action='resume-upload';target.textContent='Fortsett';return;}
     if(action==='resume-upload'){state.videoPaused=false;state.videoResume?.();state.videoResume=null;target.dataset.action='pause-upload';target.textContent='Pause';return;}
     if(action==='cancel-upload'){state.videoCancelled=true;state.videoPaused=false;state.videoResume?.();state.videoXhr?.abort();if(state.videoUpload)await api(state.videoUpload.upload_url,{method:'DELETE'}).catch(()=>{});return;}
@@ -338,7 +331,7 @@
       if(!source)throw new Error('Ugyldig kildebilde.');
       const response=await fetch(source);if(!response.ok)throw new Error('Kildebildet kunne ikke lastes.');
       const blob=await response.blob();openModal('compose');
-      state.category=post.category;state.draft.title=post.title;renderModal();
+      state.postMode='image';state.composeStep='edit';state.category=post.category;state.draft.title=post.title;renderModal();
       await loadPhoto(new File([blob],'plakat-kilde.jpg',{type:blob.type}),Boolean(post.synthetic_demo));return;
     }
     if(action==='copy-connect') {
@@ -358,7 +351,16 @@
       state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');state.recoveryKey=result.recovery_key;state.modal='recovery-key';renderModal();
     }
     if(id==='recoverForm') {const result=await api('/api/session/recover',{method:'POST',body:{name:$('#recoverName').value.trim(),recovery_key:$('#recoverKey').value}});state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');const pending=state.pending;state.pending=null;closeModal();await loadPosts();if(pending)await pending();}
-    if(id==='composeForm')await submitCompose();
+    if(id==='composeForm'){
+      if(state.composeStep==='edit'){
+        saveDraft();
+        if(state.postMode==='text'&&!state.draft.body.trim())throw new Error('Skriv noe du vil dele først.');
+        if(state.postMode==='image'&&!state.editorImage)throw new Error('Ta eller velg et bilde først.');
+        if(state.postMode==='video'&&!state.editorVideo)throw new Error('Ta opp eller velg en video først.');
+        state.composeStep='finish';renderModal();$('#postTitle')?.focus();return;
+      }
+      await submitCompose();
+    }
     if(id==='commentForm')await submitComment();
     if(id==='reportForm') {
       const result=await api(`/api/posts/${state.reportId}/report`,{method:'POST',body:{reason:$('#reportReason').value}});
@@ -372,8 +374,9 @@
     if(input.id==='textPosition'){state.textPosition=input.value;updatePreview();}
     if(input.id==='postArea'){state.postArea=input.value;}
     if(input.name==='postCategory'){state.category=input.value;updatePreview();}
+    if(input.name==='postMode'){saveDraft();resetPhoto();state.postMode=input.value;state.composeStep='edit';renderModal();(state.postMode==='text'?$('#postBody'):$('.media-action'))?.focus();return;}
     if(['postFileInput','postCameraInput'].includes(input.id))await loadPhoto(input.files?.[0]);
-    if(input.id==='postVideoInput')await loadVideo(input.files?.[0]);
+    if(['postVideoInput','postVideoCameraInput'].includes(input.id))await loadVideo(input.files?.[0]);
   }
   async function init() {
     renderPreferences();

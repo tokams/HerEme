@@ -3,7 +3,7 @@
   const themes=typeof module!=='undefined'&&module.exports?require('./themes'):root.HeremeThemes;
   const {icon}=typeof module!=='undefined'&&module.exports?require('./icons'):root.HeremeIcons;
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const image=url=>typeof url==='string'&&(/^\/uploads\/[a-zA-Z0-9_-]+\.(png|jpg|webp)$/.test(url)||/^\/assets\/[a-z0-9_-]+\.svg$/.test(url)||/^\/assets\/demo\/(posts|sources)\/[a-z0-9_-]+\.(jpg|webp|png)$/.test(url))?url:'';
+  const image=url=>typeof url==='string'&&(/^\/uploads\/[a-zA-Z0-9_-]+\.(png|jpg|webp)$/.test(url)||/^\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(display|thumbnail)\.(jpg|webp|png)$/.test(url)||/^\/assets\/[a-z0-9_-]+\.svg$/.test(url)||/^\/assets\/demo\/(posts|sources)\/[a-z0-9_-]+\.(jpg|webp|png)$/.test(url))?url:'';
   function cropRect(iw,ih,w,h,zoom=1,x=50,y=50) {
     if(![iw,ih,w,h,zoom,x,y].every(Number.isFinite)||Math.min(iw,ih,w,h)<=0||zoom<1||zoom>3||x<0||x>100||y<0||y>100)throw new Error('Invalid poster crop.');
     const scale=Math.max(w/iw,h/ih)*zoom,width=iw*scale,height=ih*scale;

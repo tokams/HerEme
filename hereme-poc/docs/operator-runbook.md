@@ -10,6 +10,37 @@ Caddyfile and open only 22 (restricted SSH), 80 and 443. The Node port stays on
 127.0.0.1. Copy a pinned release to `/opt/hereme/releases/<version>`, owned by
 root and not writable by the service, then run `scripts/deploy.sh`.
 
+For an isolated Docker host, copy a reviewed release to a dedicated directory,
+set `HEREME_DOMAIN` in `deploy/docker/.env`, and run:
+
+```sh
+docker compose -f deploy/docker/compose.yaml up -d --build --wait
+```
+
+The application and Caddy share one network namespace so the production Node
+listener remains loopback-only. Only ports 80 and 443 are published. Application
+data and Caddy certificate state live in named volumes and both containers use
+`unless-stopped`. The worker shares the application volume and uses the FFmpeg
+and FFprobe binaries pinned into the application image. Use a distinct Compose
+project name when the host runs more than one HerEme deployment.
+
+### Current public PoC target
+
+The public PoC is `https://hereme.46.251.249.110.nip.io/` on
+`46.251.249.110`. Connect as the non-root admin account with the dedicated key:
+
+```sh
+ssh -i ~/.ssh/dongjel_relay dongjel@46.251.249.110
+cd /home/dongjel/services/hereme
+docker compose -f deploy/docker/compose.yaml up -d --build --wait
+```
+
+The remote directory is a reviewed release copy, not a Git checkout. Back up the
+files being replaced before copying a new release, retain `deploy/docker/.env`,
+and never replace or remove the `docker_hereme-data` volume during a code deploy.
+Root SSH is disabled. Verify the existing SSH host key instead of accepting a
+changed key during deployment.
+
 Never put cookies, recovery keys, CSRF values or provider secrets on command
 lines or in logs. Keep the environment file root-owned and group-readable only.
 
@@ -21,6 +52,11 @@ lines or in logs. Keep the environment file root-owned and group-readable only.
 - `journalctl -u hereme --since today`
 - verify the latest backup manifest and off-host copy
 - review disk free space before enabling uploads or video
+
+For Docker deployments, replace the systemd checks with
+`docker compose -f deploy/docker/compose.yaml ps` and `... logs`; query readiness
+through the configured public HTTPS origin because production host validation
+intentionally rejects requests for an unconfigured host.
 
 Readiness checks database read/write transaction, media paths, schema and free
 disk. A failed check removes the instance from service but keeps liveness up for

@@ -6,7 +6,9 @@ function createVideoService(db,dataDir,config,{audit,run=spawnSync}={}){
   function enabled(){if(!config.enableVideo)fail('VIDEO_DISABLED','Video er ikke aktivert på denne instansen.',404);}
   function begin(input,user){
     enabled();const title=V.text(input.title,{name:'Overskrift',min:3,max:160}),body=V.optionalText(input.body,{name:'Innlegg',max:3000});
-    const bytes=V.integer(input.bytes,{name:'Filstørrelse',min:1,max:config.maxVideoBytes});const mime=V.enumValue(input.mime_type,['video/mp4','video/quicktime','video/webm'],'Videotype');
+    const bytes=V.integer(input.bytes,{name:'Filstørrelse',min:1,max:config.maxVideoBytes});
+    const normalizedMime=String(input.mime_type||'').split(';')[0].trim().toLowerCase();
+    const mime=V.enumValue(normalizedMime,['video/mp4','video/quicktime','video/webm','video/x-m4v','video/3gpp'],'Videotype');
     const design=parseDesign({...input,poster_style:input.category},input.category);
     const stat=fs.statfsSync(dataDir);if(stat.bavail*stat.bsize-bytes<config.minFreeBytes)fail('DISK_PRESSURE','Ikke nok reservert lagringsplass.',503);
     const mediaId=crypto.randomUUID(),relative=`tmp/${mediaId}.upload`;
@@ -75,7 +77,7 @@ function createVideoService(db,dataDir,config,{audit,run=spawnSync}={}){
       const parsed=JSON.parse(probe.stdout),duration=Math.round(Number(parsed.format?.duration)*1000),video=parsed.streams?.find(stream=>stream.codec_type==='video');
       if(!video||!Number.isFinite(duration)||duration<1)throw new Error('Video stream or duration missing.');
       if(duration>180000){db.exec('BEGIN IMMEDIATE');db.prepare("UPDATE media SET status='rejected',error_code='DURATION_LIMIT',duration_ms=?,updated_at=datetime('now') WHERE id=?").run(duration,media.id);db.prepare("UPDATE posts SET status='rejected' WHERE id=(SELECT post_id FROM post_media WHERE media_id=?)").run(media.id);db.prepare("UPDATE media_jobs SET status='failed',error='DURATION_LIMIT' WHERE id=?").run(job.id);db.exec('COMMIT');return {id:media.id,status:'rejected'};}
-      const transcode=run(config.ffmpeg,['-nostdin','-y','-i',input,'-map_metadata','-1','-vf','scale=trunc(min(1280,iw)/2)*2:-2','-c:v','libx264','-preset','medium','-crf','23','-c:a','aac','-b:a','128k','-movflags','+faststart',output],{encoding:'utf8',timeout:30*60*1000,windowsHide:true});
+      const transcode=run(config.ffmpeg,['-nostdin','-y','-i',input,'-map_metadata','-1','-vf','scale=trunc(min(1280\\,iw)/2)*2:-2','-c:v','libx264','-preset','medium','-crf','23','-c:a','aac','-b:a','128k','-movflags','+faststart',output],{encoding:'utf8',timeout:30*60*1000,windowsHide:true});
       if(transcode.status!==0)throw new Error('ffmpeg transcode failed: '+String(transcode.stderr).slice(-400));
       const frame=run(config.ffmpeg,['-nostdin','-y','-ss',String(Math.min(duration/2000,3)),'-i',output,'-frames:v','1','-vf','scale=960:-2',thumbnail],{encoding:'utf8',timeout:120000,windowsHide:true});
       if(frame.status!==0)throw new Error('ffmpeg thumbnail failed: '+String(frame.stderr).slice(-300));

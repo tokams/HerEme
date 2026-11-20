@@ -1,0 +1,68 @@
+x-hereme-environment: &hereme-environment
+  HEREME_ENV: production
+  HEREME_DATA_DIR: /var/lib/hereme
+  HOST: 127.0.0.1
+  PORT: 3000
+  HEREME_PUBLIC_ORIGIN: https://${HEREME_DOMAIN}
+  HEREME_TRUST_PROXY: loopback
+  HEREME_MIN_FREE_BYTES: 2147483648
+  HEREME_SESSION_DAYS: 30
+  HEREME_LOG_FORMAT: json
+  HEREME_ENABLE_VIDEO: 1
+  HEREME_MAX_VIDEO_BYTES: 2147483648
+  HEREME_FFPROBE: /usr/bin/ffprobe
+  HEREME_FFMPEG: /usr/bin/ffmpeg
+  HEREME_ENABLE_LOCATIONS: 0
+  HEREME_ENABLE_VERIFICATION: 0
+  HEREME_ENABLE_REMOTE_ADMIN: 0
+
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    image: hereme-local-forum:latest
+    restart: unless-stopped
+    environment: *hereme-environment
+    volumes:
+      - hereme-data:/var/lib/hereme
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get({host:'127.0.0.1',port:3000,path:'/api/ready',headers:{Host:new URL(process.env.HEREME_PUBLIC_ORIGIN).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  worker:
+    image: hereme-local-forum:latest
+    restart: unless-stopped
+    command: ["node", "server/media-worker.js"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment: *hereme-environment
+    volumes:
+      - hereme-data:/var/lib/hereme
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    network_mode: service:app
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      HEREME_DOMAIN: ${HEREME_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  hereme-data:
+  caddy-data:
+  caddy-config:

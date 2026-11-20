@@ -38,8 +38,11 @@ overlay with poster and discussion side by side.
   Photo faces have height/width 1.12; image-free faces are square.
 - Action order is upvote, downvote, score, comments. Supplied green/red square
   vote SVGs have at least 44px targets. Reporting is inside detail only.
-- Composition offers category, title, optional photo/body/link. Desktop adds
-  bounded crop and auto/top/center/bottom text placement in the same template.
+- Composition opens on only three explicit choices: bare post, picture poster
+  and video poster. Each choice has its own focused first screen—writing,
+  camera/image plus simple crop, or the device-native camera/video picker plus
+  progress. A small final
+  screen asks for the title, poster style and optional personal description.
 - One `poster.js` component renders tile, composer preview and detail.
   `themes.js` is the canonical palette; `feed.js` renders filters and actions;
   `shell.js` renders activity; `preferences.js` applies display settings;
@@ -76,6 +79,7 @@ No network font service or font selection UI is used.
 - [Mobile detail](screenshots/wall-v3/mobile-detail.png)
 - [Desktop detail](screenshots/wall-v3/desktop-detail.png)
 - [Desktop composition](screenshots/wall-v3/desktop-create-photo.png)
+- [Desktop post-type choice](screenshots/wall-v3/desktop-create-choose.png)
 
 See [validation](validation.md), [schema decision](adr/0005-square-wall-views.md)
 and [migration/cutover instructions](migration.md).

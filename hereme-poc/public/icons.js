@@ -28,6 +28,7 @@
   "tip": "<svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"square\" stroke-linejoin=\"miter\"><path d=\"M9 18h6M10 21h4M9 15c0-2-4-3-4-7a7 7 0 0 1 14 0c0 4-4 5-4 7H9Z\"/></svg>",
   "type": "<svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"square\" stroke-linejoin=\"miter\"><path d=\"M3 5h18M12 5v16M8 21h8M3 9V5M21 9V5\"/></svg>",
   "user": "<svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"square\" stroke-linejoin=\"miter\"><circle cx=\"12\" cy=\"8\" r=\"4\"/><path d=\"M4 22c0-5 3-8 8-8s8 3 8 8\"/></svg>",
+  "video": "<svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"square\" stroke-linejoin=\"miter\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"14\"/><path d=\"m10 9 5 3-5 3V9Z\"/><path d=\"M6 5v14M18 5v14\"/></svg>",
   "vote-down": "<svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 64 64\"><rect width=\"64\" height=\"64\" fill=\"#93494F\"/><path d=\"M13 18H51L32 50 13 18Z\" fill=\"#F6E3E4\"/></svg>",
   "vote-up": "<svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 64 64\"><rect width=\"64\" height=\"64\" fill=\"#2E6E4F\"/><path d=\"M32 14 51 47H13L32 14Z\" fill=\"#DDEFE2\"/></svg>"
 };

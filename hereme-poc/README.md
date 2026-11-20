@@ -51,10 +51,16 @@ operatørkommandoer.
 1. Trykk **Legg ut** og velg et unikt pseudonym hvis nødvendig. Ta vare på
    gjenopprettingsnøkkelen som bare vises én gang. Velg **Lagre med enheten** for
    å la nettleseren eller mobilens passordbehandler tilby å lagre innloggingen.
-2. Velg kategori og skriv overskrift.
-3. Ta/velg et bilde hvis du ønsker; uten bilde brukes kategoriens bakgrunn.
-4. Legg eventuelt til tekst og lenke. Se den samme plakatflaten i forhåndsvisningen.
-5. Publiser direkte på fellesveggen — intet romvalg.
+2. **+** viser bare tre store valg: **Bare innlegg**, **Bildeplakat** og
+   **Videoplakat**. Hvert valg åpner sin egen korte arbeidsflyt.
+3. Bare innlegg starter med ett skrivefelt. Bildeplakat starter med kamera eller
+     fil og et enkelt utsnitt. Videoplakat åpner enhetens vanlige kameraopptak
+     eller lar deg velge en eksisterende videofil.
+4. Trykk **Neste** og gi innlegget en tittel. Velg en av fem plakatstiler og legg
+   eventuelt til en kort beskrivelse av tanken, bildet eller opptaket. Tekstflyten
+   tilbyr også å bytte til bildeplakat, men krever det ikke.
+5. Publiser direkte på fellesveggen — intet romvalg. Video behandles av
+   mediearbeideren før den blir synlig.
 
 Desktop har i tillegg **Tilpass bildeutsnitt** med zoom og vannrett/loddrett
 plassering, samt automatisk/topp/midt/bunn for tekst. Cascadia Code er fast og
