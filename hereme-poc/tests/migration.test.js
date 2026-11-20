@@ -93,7 +93,7 @@ test('missing media fails visibly without publishing a usable snapshot', async t
 test('selective import restores user-authored posts and relationships without importing demo-only content twice',async t=>{
   const {root,source,png}=fixture(t),target=path.join(root,'current');await snapshotData(source,target);
   const current=new DatabaseSync(path.join(target,'hereme.sqlite'));current.exec(`DELETE FROM reports WHERE post_id=43; DELETE FROM comments WHERE post_id=41; DELETE FROM votes WHERE post_id IN (41,43); DELETE FROM posts WHERE id IN (41,43);`);current.close();
-  const first=await importUserContent(source,target);assert.equal(first.source_posts,2);assert.equal(first.imported.posts,2);assert.equal(first.imported.comments,2);assert.equal(first.imported.reports,1);
+  const snapshots=path.join(root,'durable-import-snapshots'),first=await importUserContent(source,target,{snapshotRoot:snapshots});assert.equal(first.source_posts,2);assert.equal(first.imported.posts,2);assert.equal(first.imported.comments,2);assert.equal(first.imported.reports,1);assert.equal(path.dirname(first.backup),snapshots);assert.ok(fs.existsSync(first.backup));
   const restored=new DatabaseSync(path.join(target,'hereme.sqlite'),{readOnly:true});
   try{assert.deepEqual(restored.prepare('SELECT id FROM posts ORDER BY id').all().map(row=>row.id),[41,42,43,44]);assert.equal(restored.prepare("SELECT count(*) n FROM posts WHERE demo_author='Demovenn'").get().n,2);assert.equal(restored.prepare('SELECT parent_id FROM comments WHERE id=52').get().parent_id,51);assert.deepEqual(restored.prepare('PRAGMA foreign_key_check').all(),[]);}finally{restored.close();}
   assert.deepEqual(fs.readFileSync(path.join(target,'uploads','legacy.png')),png);

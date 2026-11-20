@@ -13,6 +13,7 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY public ./public
 COPY seed ./seed
 COPY server ./server
+COPY scripts ./scripts
 
 RUN install -d -o node -g node /var/lib/hereme
 

@@ -6,15 +6,16 @@ To bring genuine user-authored posts from an older instance into the current
 data directory without adding synthetic/demo posts:
 
 ```powershell
-npm run content:import-users -- C:\path\to\old\data C:\path\to\current\data
+npm run content:import-users -- C:\path\to\old\data C:\path\to\current\data C:\path\to\durable-backups
 ```
 
 The command takes online SQLite/media snapshots of both sides before writing,
 selects posts with a real `author_id` and no synthetic-demo marker, maps existing
 identities, preserves dependent votes/comments/reports and immutable uploads,
-and is idempotent. It prints the exact source snapshot and pre-import target
-backup paths. Stop the application before importing so the cutover is bounded
-and observable.
+and is idempotent. The optional third path keeps both snapshots outside the data
+directories and should always be supplied in production. The command prints the
+exact source snapshot and pre-import target backup paths. Stop the application
+before importing so the cutover is bounded and observable.
 
 The original checkout can stay running on port 3000. A feature worktree's regular
 `run.cmd` starts at port 3001 and

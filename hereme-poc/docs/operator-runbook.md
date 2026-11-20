@@ -36,6 +36,9 @@ data and Caddy certificate state live in named volumes and both containers use
 `unless-stopped`. The worker shares the application volume and uses the FFmpeg
 and FFprobe binaries pinned into the application image. Use a distinct Compose
 project name when the host runs more than one HerEme deployment.
+The production image includes the reviewed operational scripts so backup,
+verification, staff provisioning and selective import run against the exact
+server/domain code shipped in that image.
 
 ### Current public PoC target
 

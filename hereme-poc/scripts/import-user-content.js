@@ -12,9 +12,12 @@ const same=(a,b,fields)=>fields.every(field=>a[field]===b[field]);
 const insertRow=(db,table,row,mode='')=>{const columns=Object.keys(row);return db.prepare(`INSERT ${mode} INTO ${table}(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...columns.map(column=>row[column]));};
 const allocateId=(db,table)=>db.prepare(`SELECT min(COALESCE(min(id),0),0)-1 id FROM ${table}`).get().id;
 
-async function importUserContent(sourceDirectory,targetDirectory){
+async function importUserContent(sourceDirectory,targetDirectory,{snapshotRoot=null}={}){
   const source=fs.realpathSync(sourceDirectory),target=fs.realpathSync(targetDirectory);if(source===target)throw new Error('Source and target must differ.');
-  const suffix=crypto.randomUUID(),incoming=source+'.user-content-'+suffix,backup=target+'.before-user-content-'+suffix;
+  const suffix=crypto.randomUUID(),root=snapshotRoot?path.resolve(snapshotRoot):null;
+  if(root)fs.mkdirSync(root,{recursive:true});
+  const incoming=root?path.join(root,'source-'+suffix):source+'.user-content-'+suffix;
+  const backup=root?path.join(root,'target-before-'+suffix):target+'.before-user-content-'+suffix;
   await snapshotData(source,incoming);await snapshotData(target,backup);
   const from=new DatabaseSync(path.join(incoming,'hereme.sqlite'),{readOnly:true}),to=new DatabaseSync(path.join(target,'hereme.sqlite'));
   to.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000;');applyMigrations(to);
@@ -68,5 +71,5 @@ async function importUserContent(sourceDirectory,targetDirectory){
   }finally{from.close();to.close();}
 }
 
-if(require.main===module){const [source,target,...extra]=process.argv.slice(2);if(!source||!target||extra.length){console.error('Usage: node scripts/import-user-content.js <old-data-dir> <current-data-dir>');process.exitCode=1;}else importUserContent(source,target).then(result=>console.log(JSON.stringify(result,null,2))).catch(error=>{console.error(error);process.exitCode=1;});}
+if(require.main===module){const [source,target,snapshotRoot,...extra]=process.argv.slice(2);if(!source||!target||extra.length){console.error('Usage: node scripts/import-user-content.js <old-data-dir> <current-data-dir> [durable-snapshot-root]');process.exitCode=1;}else importUserContent(source,target,{snapshotRoot}).then(result=>console.log(JSON.stringify(result,null,2))).catch(error=>{console.error(error);process.exitCode=1;});}
 module.exports={importUserContent};
