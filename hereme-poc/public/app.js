@@ -143,7 +143,7 @@
   async function openStaffPanel(){state.staff=null;openModal('staff');await loadStaff();renderModal();}
   async function refreshStaff(message){await loadStaff();renderModal({preserve:true});await loadPosts();if(message)toast(message);}
   async function refreshIdentity(){const current=await api('/api/me');state.user=current.user;state.csrf=current.csrf_token||csrfCookie();state.legacyToken='';localStorage.removeItem('hereme_token');}
-  function openAuth(message,onSuccess){window.HeremeAuth.open({message,onSuccess:async(result,{created})=>{await refreshIdentity();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast('Lagre gjenopprettingsnøkkelen din på et trygt sted.');}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
+  function openAuth(message,onSuccess,mode='login'){window.HeremeAuth.open({mode,message,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast('Lagre gjenopprettingsnøkkelen din på et trygt sted.');}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
   function requireUser(action) {
     if(state.user)return true;
     openAuth('',async()=>action?.());return false;
@@ -363,8 +363,8 @@
     if(action==='profile'){if(state.user)await navigate('/me');else openAuth('',async()=>{});return;}
     if(action==='my-profile'){closeModal({fromRoute:true});await navigate('/me');return;}
     if(action==='auth-login'){closeModal({fromRoute:true});openAuth('',async()=>{});return;}
-    if(action==='auth-register'){closeModal({fromRoute:true});openAuth('',async()=>{});return;}
-    if(action==='register'){openAuth('',async()=>{});return;}
+    if(action==='auth-register'){closeModal({fromRoute:true});openAuth('',async()=>{},'register');return;}
+    if(action==='register'){openAuth('',async()=>{},'register');return;}
     if(action==='profile-post'){await openDetail(id);return;}
     if(action==='profile-more'){await loadProfile({append:true});return;}
     if(action==='logout'){await api('/api/session/logout',{method:'POST'});state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');closeModal();await loadPosts();return;}
