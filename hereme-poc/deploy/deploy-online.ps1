@@ -48,7 +48,7 @@ previous="$(dirname "$target")/hereme-previous-$stamp"
 staged="$(dirname "$target")/hereme-staged-$stamp"
 rollback_image="hereme-local-forum:rollback-$stamp"
 compose='deploy/docker/compose.yaml'
-for command in docker tar curl; do command -v "$command" >/dev/null; done
+for command in docker tar curl install; do command -v "$command" >/dev/null; done
 docker compose version >/dev/null
 test -f "$target/$compose"
 test -f "$target/deploy/docker/.env"
@@ -56,14 +56,20 @@ test -f "$upload.tar.gz"
 mkdir -p "$backup_root" "$staged"
 tar -xzf "$upload.tar.gz" -C "$staged"
 cp -p "$target/deploy/docker/.env" "$staged/deploy/docker/.env"
-docker image tag hereme-local-forum:latest "$rollback_image"
+# Keep the private environment outside the root-owned snapshot directory.
+# install applies restrictive permissions at creation, before any container runs.
+install -m 0600 "$target/deploy/docker/.env" "$backup_root/$stamp.production.env"
+# A failed build/preflight may already have replaced :latest on a previous run.
+# Rollback must use the image actually running the live app.
+live_container=$(cd "$target" && docker compose -p docker -f "$compose" ps -q app)
+test -n "$live_container"
+live_image=$(docker inspect --format '{{.Image}}' "$live_container")
+docker image tag "$live_image" "$rollback_image"
 docker run --rm --user 0 -v docker_hereme-data:/var/lib/hereme:ro -v "$backup_root":/backup "$rollback_image" node scripts/snapshot-data.js /var/lib/hereme "/backup/$stamp"
 # SQLite may need to create a transient -shm file even with a read-only connection.
 docker run --rm --user 0 -v "$backup_root":/backup "$rollback_image" node scripts/verify-backup.js "/backup/$stamp"
 docker run --rm --user 0 -v docker_hereme-data:/data:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'if [ -d /data/chat ]; then find /data/chat -maxdepth 1 -type f -printf "%f\n"; fi > /backup/'"$stamp"'/chat-files.txt'
 (cd "$staged" && docker compose -p docker -f "$compose" build app)
-cp -p "$target/deploy/docker/.env" "$backup/production.env"
-chmod 600 "$backup/production.env"
 docker run --rm --user "$(id -u):$(id -g)" -v "$staged/deploy/docker:/config" hereme-local-forum:latest node scripts/configure-domain.js /config/.env "$domain" "$expected"
 chmod 600 "$staged/deploy/docker/.env"
 (cd "$staged" && docker compose -p docker -f "$compose" run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile)

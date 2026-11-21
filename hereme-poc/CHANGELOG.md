@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-21 — Deployment environment backup permissions
+
+- Save the private environment as an operator-owned mode-0600 sibling of the
+  root-owned snapshot, before running containers or builds.
+- Resolve rollback image from the live app container so retries after a failed
+  build cannot mistake the newly built latest tag for the deployed version.
+
 ## 2026-11-21 — Passkey authentication
 
 - Added optional passkey sign-in and account security enrollment with recovery

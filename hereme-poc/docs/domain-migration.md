@@ -48,13 +48,20 @@ longer calls configure-push-env during deployment, so disabled push stays disabl
 and VAPID cannot rotate as a domain side effect.
 
 Backups live beside the installation under `hereme-backups/<UTC timestamp>`.
-Database/public-media snapshot is verified; `production.env` is mode 0600 and must
+Database/public-media snapshot is verified; the sibling `<UTC timestamp>.production.env` is mode 0600 and must
 never be printed or committed. Private chat bytes remain on the existing volume
 and are never deleted/restored by domain rollback. Previous code/config/env remain
 at `hereme-previous-<timestamp>`. Automatic rollback restores that directory and
 image, reusing current data. Never restore an old database over concurrent writes.
 Application schema incompatibility after rollback requires operator intervention;
 do not automatically restore snapshots. Domain-only changes do not change schema.
+
+If a deployment stopped with permission denied saving production.env after the
+build, cutover had not started. The root container owns its snapshot directory;
+the private environment is now saved by the SSH user as a protected sibling file
+before snapshots/builds. Retry with a new timestamp after committing this fix.
+No manual chmod/chown of the snapshot and no data restore is needed. Rollback image
+is resolved from the running app container, since a failed build can replace latest.
 
 Before calling migration complete, verify canonical ready/health, all three TLS
 certificates, HTTP-to-HTTPS, 307 www/legacy path and query preservation, existing
