@@ -34,13 +34,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .install-endcap { display:grid; place-items:center; width:54px; flex:none; border-left:1px solid #111714; background:#2d684a; }
 .install-endcap img { width:24px; height:24px; }
 .install-banner { display:none; }
-.install-menu-button { width:100%; margin-bottom:16px; }
+.install-reason { display:none; }
+.install-menu-reason { margin:0 0 16px; color:var(--muted); font-size:12px; }
+.install-menu-button { width:100%; margin-bottom:6px; }
 .install-help { width:min(440px,calc(100% - 32px)); padding:24px; border:2px solid #397c58; background:#171a1d; color:#eceae3; }
 .install-help::backdrop { background:#000b; }
 .install-help h2 { margin-top:0; }
 .install-help li { margin:12px 0; }
 .install-help>div { display:flex; flex-wrap:wrap; gap:8px; }
-@media (max-width:699px) { .install-banner:not([hidden]) { display:flex; width:calc(100% - 20px); margin:10px 10px 0; } }
+@media (max-width:699px) { .install-banner:not([hidden]) { display:flex; width:calc(100% - 20px); margin:10px 10px 0; } .install-reason:not([hidden]) { display:block; margin:6px 10px 10px; font-size:12px; color:var(--muted); } }
 .utility-line { background:#16191a; color:#dfe5da; display:flex; justify-content:space-between; gap:12px; padding:5px 20px; font-size:9px; letter-spacing:.1em; border-bottom:1px solid #000; }
 .masthead-inner { display:flex; align-items:center; gap:22px; min-height:84px; max-width:1920px; margin:auto; padding:14px 20px; }
 .logo { display:flex; align-items:center; gap:12px; font-weight:800; font-size:34px; letter-spacing:-.09em; padding:0; }

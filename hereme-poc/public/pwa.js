@@ -8,26 +8,27 @@
   const eligible=()=>window.isSecureContext&&'serviceWorker' in navigator&&!standalone()&&!localStorage.getItem(installedKey)&&(ios()||Boolean(installPrompt));
   const bannerVisible=()=>eligible()&&Number(localStorage.getItem(dismissalKey)||0)<Date.now();
   const installMarkup='<span>INSTALL HEREME</span><span class="install-endcap"><img src="/assets/install-arrow-down.svg" alt=""></span>';
+  const installReason='Legg til appen for å kunne få varsler om meldinger og aktivitet på innlegg. Du velger selv hvilke varsler du vil tillate etterpå.';
   function updateInstallUi(){
     const banner=document.getElementById('installBanner');
-    if(banner)banner.hidden=!bannerVisible()||location.pathname!=='/';
+    if(banner){banner.hidden=!bannerVisible()||location.pathname!=='/';document.getElementById('installReason').hidden=banner.hidden;}
     const menu=document.getElementById('installMenuButton');
-    if(menu)menu.hidden=!eligible();
+    if(menu){menu.hidden=!eligible();document.getElementById('installMenuReason').hidden=menu.hidden;}
     if(standalone())document.getElementById('installHelp')?.close();
   }
   function dismiss(){localStorage.setItem(dismissalKey,String(Date.now()+30*24*60*60*1000));document.getElementById('installHelp')?.close();updateInstallUi();}
   function help(){
     let sheet=document.getElementById('installHelp');
-    if(!sheet){sheet=document.createElement('dialog');sheet.id='installHelp';sheet.className='install-help';sheet.innerHTML='<h2>Legg HerEme til på Hjem-skjermen</h2><ol><li>Åpne Del-menyen i nettleseren.</li><li>Velg «Legg til på Hjem-skjermen».</li><li>Åpne HerEme fra ikonet på Hjem-skjermen.</li></ol><div><button type="button" class="btn btn-secondary" data-install-close>Lukk</button><button type="button" class="btn btn-secondary" data-install-later>Ikke nå</button><button type="button" class="btn btn-secondary" data-install-already>Allerede installert</button></div>';document.body.append(sheet);sheet.querySelector('[data-install-close]').onclick=()=>sheet.close();sheet.querySelector('[data-install-later]').onclick=dismiss;sheet.querySelector('[data-install-already]').onclick=dismiss;}
+    if(!sheet){sheet=document.createElement('dialog');sheet.id='installHelp';sheet.className='install-help';sheet.innerHTML='<h2>Legg HerEme til på Hjem-skjermen</h2><p>'+installReason+'</p><ol><li>Åpne Del-menyen i nettleseren.</li><li>Velg «Legg til på Hjem-skjermen».</li><li>Åpne HerEme fra ikonet på Hjem-skjermen.</li></ol><div><button type="button" class="btn btn-secondary" data-install-close>Lukk</button><button type="button" class="btn btn-secondary" data-install-later>Ikke nå</button><button type="button" class="btn btn-secondary" data-install-already>Allerede installert</button></div>';document.body.append(sheet);sheet.querySelector('[data-install-close]').onclick=()=>sheet.close();sheet.querySelector('[data-install-later]').onclick=dismiss;sheet.querySelector('[data-install-already]').onclick=dismiss;}
     sheet.showModal();
   }
   function mountInstallUi(){
     if(!document.querySelector('.masthead')||document.getElementById('installBanner'))return;
-    const button=document.createElement('button');button.id='installBanner';button.type='button';button.className='install-button install-banner';button.innerHTML=installMarkup;button.onclick=installAction;document.querySelector('.masthead').after(button);updateInstallUi();
+    const button=document.createElement('button');button.id='installBanner';button.type='button';button.className='install-button install-banner';button.innerHTML=installMarkup;button.onclick=installAction;const reason=document.createElement('p');reason.id='installReason';reason.className='install-reason';reason.textContent=installReason;document.querySelector('.masthead').after(button,reason);updateInstallUi();
   }
   function mountMenu(container){
     if(!container||container.querySelector('#installMenuButton'))return;
-    const button=document.createElement('button');button.id='installMenuButton';button.type='button';button.className='install-button install-menu-button';button.innerHTML=installMarkup;button.onclick=installAction;container.prepend(button);updateInstallUi();
+    const button=document.createElement('button');button.id='installMenuButton';button.type='button';button.className='install-button install-menu-button';button.innerHTML=installMarkup;button.onclick=installAction;const reason=document.createElement('p');reason.id='installMenuReason';reason.className='install-menu-reason';reason.textContent=installReason;container.prepend(button,reason);updateInstallUi();
   }
   function installAction(){if(ios())help();else if(installPrompt)void install();}
   const ready='serviceWorker' in navigator&&window.isSecureContext?navigator.serviceWorker.register('/service-worker.js',{scope:'/'}).then(value=>registration=value).catch(()=>null):Promise.resolve(null);

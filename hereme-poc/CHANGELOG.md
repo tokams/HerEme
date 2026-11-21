@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Install notification explanation
+
+- Explain beside the install controls and in the iPhone instructions that
+  installing enables message and post-activity notifications after opt-in.
+
 ## 2026-11-22 — PWA installation entry points
 
 - Added a mobile install button above the forum wall and an install action in
