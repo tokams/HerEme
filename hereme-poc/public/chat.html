@@ -56,12 +56,17 @@
         <button id="olderMessages" class="older-messages" type="button" hidden>Vis eldre meldinger</button>
         <div id="messages" class="message-list" role="log" aria-live="polite" aria-relevant="additions"></div>
         <div class="composer-wrap">
-          <form id="messageForm" class="message-form"><label class="sr-only" for="messageInput">Melding</label><textarea id="messageInput" rows="1" maxlength="5000" placeholder="Skriv en melding…" required></textarea><button id="sendMessage" class="primary-action" type="submit">Send</button></form>
-          <div class="attachment-line"><label class="attachment-label">Del fil (slettes etter 7 dager)<input id="fileInput" type="file"></label><progress id="uploadProgress" max="100" value="0" hidden></progress><button id="pauseUpload" type="button" hidden>Pause</button><span id="uploadStatus" role="status"></span></div>
+          <form id="messageForm"><div class="message-form"><label class="sr-only" for="messageInput">Melding</label><textarea id="messageInput" rows="1" maxlength="5000" placeholder="Skriv en melding…"></textarea><button id="sendMessage" class="primary-action" type="submit" disabled>Send</button></div>
+            <div class="attachment-line"><button class="attachment-button" id="pickImage" type="button" aria-label="Ta eller velg bilde" title="Ta eller velg bilde"><img src="/assets/icons/chat-attach-image.svg" alt=""></button><button class="attachment-button" id="pickVideo" type="button" aria-label="Ta eller velg video" title="Ta eller velg video"><img src="/assets/icons/chat-attach-video.svg" alt=""></button><button class="attachment-button" id="pickFile" type="button" aria-label="Legg ved filer" title="Legg ved filer"><img src="/assets/icons/chat-attach-file.svg" alt=""></button><span>Filer slettes etter 7 dager</span></div>
+            <div id="stagedFiles" class="staged-files" aria-live="polite" hidden></div><progress id="uploadProgress" max="100" value="0" hidden></progress><button id="pauseUpload" type="button" hidden>Pause</button><span id="uploadStatus" role="status"></span>
+          </form>
+          <input id="imageInput" type="file" accept="image/*" capture="environment" multiple hidden><input id="videoInput" type="file" accept="video/*" capture="environment" multiple hidden><input id="fileInput" type="file" multiple hidden>
         </div>
       </div>
     </section>
   </main>
   <div id="chatError" class="chat-error" role="alert" hidden></div>
+  <div id="connectionStatus" class="connection-status" role="status" hidden>Kobler til chat…</div>
+  <dialog id="attachmentViewer" aria-label="Vedlegg"><header><strong id="viewerTitle">Vedlegg</strong><button id="closeViewer" type="button">Lukk</button></header><div id="viewerBody"></div></dialog>
 </body>
 </html>

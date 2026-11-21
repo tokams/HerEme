@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-21 — Staged chat attachments and live delivery
+
+- Added schema 14 with ordered attachment metadata, private staging and a
+  durable chat event log. File selection stays local until Send; one message
+  can contain optional text and multiple ordered files.
+- Added three supplied SVG picker icons, a removable draft tray, private image
+  and video previews, bundle viewer, resumable upload status and retry-safe
+  message finalization.
+- Added authenticated, recipient-scoped WebSocket updates with session
+  revocation checks and HTTP history sync after reconnect. Caddy already
+  forwards upgrades through the existing reverse proxy.
+- Expanded API and browser coverage for staging, privacy, idempotency and live
+  delivery.
+
 ## 2026-11-21 — Unified chat interface and pending-message flow
 
 - Rebuilt Chat around the supplied mobile inbox and desktop two-pane wireframes,

@@ -59,8 +59,11 @@ Søk etter et brukernavn mens du skriver; å velge en person åpner samtalen ute
 før innholdet blir synlig for dem. Gruppeinvitasjoner sendes først når du har
 bekreftet den redigerbare deltakerlisten; hver invitert person godtar selv.
 Nye forespørsler, invitasjoner og meldinger vises i innboksen også etter ny
-innlogging. Filer i chat slettes permanent etter syv dager. Online-status er
-valgfri og styres fra samtaledetaljene.
+innlogging. Innkommende meldinger oppdateres direkte når chatten er åpen.
+Velg ett eller flere bilder, videoer eller filer, fjern eventuelle vedlegg fra
+utkastet og trykk **Send** for å dele dem som én melding. Filer i chat slettes
+permanent etter syv dager. Online-status er valgfri og styres fra
+samtaledetaljene.
 
 ## Legg ut
 

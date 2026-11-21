@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 13) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 14) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -279,6 +279,18 @@ function applyMigrations(db) {
       CREATE INDEX chat_requests_chat ON chat_requests(chat_id,state);
       CREATE INDEX users_name_second_character ON users(substr(normalized_name,2,1));
       INSERT INTO schema_migrations(version) VALUES(13); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<14){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`ALTER TABLE chat_files ADD COLUMN media_kind TEXT NOT NULL DEFAULT 'file' CHECK(media_kind IN ('image','video','file'));
+      ALTER TABLE chat_files ADD COLUMN mime_type TEXT NOT NULL DEFAULT 'application/octet-stream';
+      ALTER TABLE chat_files ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0;
+      CREATE INDEX chat_files_message_order ON chat_files(message_id,display_order);
+      CREATE TABLE chat_staged_files(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE,target_user_id TEXT REFERENCES users(id) ON DELETE CASCADE,name TEXT NOT NULL,bytes INTEGER NOT NULL CHECK(bytes>0),received INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL CHECK(status IN ('uploading','staged')),media_kind TEXT NOT NULL CHECK(media_kind IN ('image','video','file')),mime_type TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')),CHECK((chat_id IS NULL)!=(target_user_id IS NULL)));
+      CREATE INDEX chat_staged_sender ON chat_staged_files(sender_id,status,created_at);
+      CREATE TABLE chat_events(id INTEGER PRIMARY KEY AUTOINCREMENT,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN ('conversation.updated','message.created','invitation.created','invitation.decided')),created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE INDEX chat_events_recipient ON chat_events(recipient_id,id);
+      INSERT INTO schema_migrations(version) VALUES(14); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

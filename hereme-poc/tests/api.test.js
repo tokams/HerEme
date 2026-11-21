@@ -30,8 +30,11 @@ test('chat consent, membership, groups, blocked delivery, resumable files and ex
   assert.equal((await request('/api/chats',{session:alice})).body.chats[0].name,'ChatBob');
   assert.equal((await request(`/api/chats/${chat}/messages`,{session:third})).status,403);
   assert.equal((await request(`/api/chats/${chat}/messages`,{session:bob})).body.messages[0].body,'Hello');
-  const started=await request(`/api/chats/${chat}/files`,{method:'POST',session:alice,body:{name:'sample.bin',bytes:5}});assert.equal(started.status,201);
-  for(const [offset,part] of [[0,'ab'],[2,'cde']]){const uploaded=await fetch(url+'/api/chat/files/'+started.body.id,{method:'PATCH',headers:{cookie:alice.cookie,'x-csrf-token':alice.csrf,'x-upload-offset':String(offset)},body:new Blob([part])});assert.equal(uploaded.status,200);}
+  const started=await request('/api/chat-uploads/stage',{method:'POST',session:alice,body:{chat_id:chat,name:'sample.bin',bytes:5,media_kind:'file'}});assert.equal(started.status,201);
+  for(const [offset,part] of [[0,'ab'],[2,'cde']]){const uploaded=await fetch(url+'/api/chat-uploads/'+started.body.id,{method:'PATCH',headers:{cookie:alice.cookie,'x-csrf-token':alice.csrf,'x-upload-offset':String(offset)},body:new Blob([part])});assert.equal(uploaded.status,200);}
+  assert.equal((await request('/api/chat-uploads/'+started.body.id,{session:alice})).body.status,'staged');
+  assert.equal((await request(`/api/chats/${chat}/messages`,{session:bob})).body.messages.length,1);
+  const sentFile=await request(`/api/chats/${chat}/messages`,{method:'POST',session:alice,body:{attachment_ids:[started.body.id],client_key:'single-staged-file-test'}});assert.equal(sentFile.status,201);
   assert.equal((await request('/api/chat/files/'+started.body.id,{session:alice})).body.status,'ready');
   assert.equal(await (await fetch(url+'/api/chat/files/'+started.body.id+'/download',{headers:{cookie:bob.cookie}})).text(),'abcde');
   const backupDir=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-chat-backup-'));try{await require('../scripts/snapshot-data').snapshotData(testData,path.join(backupDir,'snapshot'));assert.equal(fs.existsSync(path.join(backupDir,'snapshot','chat')),false);}finally{fs.rmSync(backupDir,{recursive:true,force:true});}
@@ -88,6 +91,44 @@ test('unified chat creates one pending request on first send and delivers durabl
   assert.equal((await request('/api/chat/notifications',{session:recipient})).body.notifications.filter(item=>item.kind==='message').length,1);
   assert.equal((await request(`/api/chats/${chatId}/read`,{method:'POST',session:recipient})).status,200);
   assert.equal((await request('/api/chats',{session:recipient})).body.chats.find(chat=>chat.id===chatId).unread,0);
+});
+test('staged mixed attachments send as one private retry-safe message',async()=>{
+  const sender=await profile('BundleSender'),recipient=await profile('BundleRecipient'),stranger=await profile('BundleStranger');
+  const png=await require('sharp')({create:{width:3,height:3,channels:3,background:'#376949'}}).png().toBuffer();
+  async function stageFile(name,kind,bytes){
+    const started=await request('/api/chat-uploads/stage',{method:'POST',session:sender,body:{target_user_id:recipient.user.id,name,bytes:bytes.length,media_kind:kind}});assert.equal(started.status,201,JSON.stringify(started.body));
+    assert.equal((await request('/api/chat-uploads/'+started.body.id,{session:stranger})).status,404);
+    const response=await fetch(url+'/api/chat-uploads/'+started.body.id,{method:'PATCH',headers:{cookie:sender.cookie,'x-csrf-token':sender.csrf,'x-upload-offset':'0'},body:new Blob([bytes])});assert.equal(response.status,200,await response.text());return started.body.id;
+  }
+  const image=await stageFile('photo.png','image',png),document=await stageFile('notes.txt','file',Buffer.from('notes'));
+  assert.equal((await request('/api/chats',{session:recipient})).body.chats.length,0);
+  const body={target_user_id:recipient.user.id,body:'',attachment_ids:[image,document],client_key:'bundle-first-message'};
+  const sent=await request('/api/chats/direct',{method:'POST',session:sender,body});assert.equal(sent.status,201,JSON.stringify(sent.body));
+  const repeated=await request('/api/chats/direct',{method:'POST',session:sender,body});assert.equal(repeated.body.message_id,sent.body.message_id);
+  assert.equal((await request(`/api/chats/${sent.body.chat_id}/messages`,{session:recipient})).status,403);
+  const pending=(await request('/api/chats',{session:recipient})).body.chats[0];assert.equal(pending.last_body,null);
+  assert.equal((await request('/api/chat/requests/'+pending.request_id,{method:'POST',session:recipient,body:{accept:true}})).status,200);
+  const messages=(await request(`/api/chats/${sent.body.chat_id}/messages`,{session:recipient})).body.messages;assert.equal(messages.length,1);assert.deepEqual(messages[0].attachments.map(file=>file.name),['photo.png','notes.txt']);
+  assert.equal((await request(`/api/chats/${sent.body.chat_id}/messages`,{session:stranger})).status,403);
+  assert.equal((await request('/api/chat/files/'+image+'/preview',{session:recipient})).status,200);
+  assert.equal((await request('/api/chat/files/'+image+'/preview',{session:stranger})).status,403);
+  assert.equal((await request('/api/chat/files/'+document+'/preview',{session:recipient})).status,404);
+  assert.equal((await request('/api/chat/files/'+document+'/download',{session:recipient})).body,'notes');
+  assert.equal(S.db.prepare('SELECT count(*) n FROM chat_messages WHERE chat_id=?').get(sent.body.chat_id).n,1);
+});
+test('WebSocket live events require a session and remain recipient-scoped',async()=>{
+  const WebSocket=require('ws'),alice=await profile('SocketAlice'),bob=await profile('SocketBob'),stranger=await profile('SocketStranger');
+  const address=url.replace(/^http/,'ws')+'/api/chat-socket';
+  const denied=await new Promise(resolve=>{const socket=new WebSocket(address,{headers:{Origin:url}});socket.on('unexpected-response',(_,response)=>{resolve(response.statusCode);response.resume();});socket.on('error',()=>{});});assert.equal(denied,401);
+  async function connect(session){const socket=new WebSocket(address,{headers:{Origin:url,Cookie:session.cookie}});await new Promise((resolve,reject)=>{socket.once('open',resolve);socket.once('error',reject);});return socket;}
+  const recipient=await connect(bob),outsider=await connect(stranger);let outsiderEvent=false;outsider.on('message',raw=>{if(JSON.parse(raw).type!=='connected')outsiderEvent=true;});
+  try{
+    const event=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Live event did not arrive')),4000);recipient.on('message',raw=>{const item=JSON.parse(raw);if(item.type==='invitation.created'){clearTimeout(timer);resolve(item);}});});
+    const sent=await request('/api/chats/direct',{method:'POST',session:alice,body:{target_user_id:bob.user.id,body:'Socket hello',client_key:'socket-first-message'}});assert.equal(sent.status,201);
+    const notice=await event;assert.equal(notice.chat_id,sent.body.chat_id);assert.equal(outsiderEvent,false);
+    await request('/api/session/revoke-all',{method:'POST',session:bob});
+    const closed=await new Promise(resolve=>{const timer=setTimeout(()=>resolve(false),4000);recipient.once('close',()=>{clearTimeout(timer);resolve(true);});});assert.equal(closed,true);
+  }finally{recipient.terminate();outsider.terminate();}
 });
 test('reciprocal contact accepts one direct thread and decline is terminal',async()=>{
   const first=await profile('ReciprocalOne'),second=await profile('ReciprocalTwo');
