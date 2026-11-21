@@ -94,7 +94,11 @@ from `hereme-poc`. The script uses the pinned public host, dedicated SSH key,
 strict host-key verification and existing remote `.env`. It packages the
 committed `hereme-poc` tree, copies it to the Docker host, makes and verifies
 a data snapshot, builds the new image, restarts Compose and checks public
-readiness. On failed cutover it restores the previous image, code and snapshot.
+readiness, retrying while the proxy acquires its TLS certificate. On failed
+cutover the script restores the previous release only if it can verify the
+live schema version is unchanged. If migrations advanced or the schema cannot
+be read, it keeps the new release and live volume for forward recovery. Inspect
+Compose logs and public readiness before retrying. Snapshot restoration is manual.
 The backup verifier mounts its snapshot directory writable because SQLite may
 need to create a temporary shared-memory sidecar even for a read-only database
 connection. The verifier does not modify the snapshot database.

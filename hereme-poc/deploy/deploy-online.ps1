@@ -35,7 +35,7 @@ $archive = Join-Path $scratch 'release.tar.gz'
 $remoteScript = Join-Path $scratch 'release.sh'
 $script = @'
 #!/usr/bin/env bash
-set -Eeuo pipefail
+set -euo pipefail
 stamp=$1
 revision=$2
 target=$3
@@ -74,9 +74,17 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$staged/deploy/docker:/config" he
 chmod 600 "$staged/deploy/docker/.env"
 (cd "$staged" && docker compose -p docker -f "$compose" run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile)
 deployed=0
+schema_version() {
+  docker run --rm --network none --user 0 -v "$1:/db:ro" "$rollback_image" node -e 'const {DatabaseSync}=require("node:sqlite"); const db=new DatabaseSync("/db/hereme.sqlite",{readOnly:true}); console.log(db.prepare("SELECT max(version) AS version FROM schema_migrations").get().version); db.close()'
+}
+previous_schema=$(schema_version docker_hereme-data)
 rollback() {
   trap - ERR
   if [ "$deployed" -eq 1 ]; then return; fi
+  if ! live_schema=$(schema_version docker_hereme-data) || [ "$live_schema" != "$previous_schema" ]; then
+    echo 'Schema changed or could not be checked. Keeping the new release and current data for forward recovery.' >&2
+    return 1
+  fi
   echo 'Deployment failed; restoring previous release and environment while preserving live data.' >&2
   (cd "$target" && docker compose -p docker -f "$compose" down) || true
   if [ -d "$previous" ]; then
@@ -84,13 +92,13 @@ rollback() {
     mv "$previous" "$target"
   fi
   docker image tag "$rollback_image" hereme-local-forum:latest
-  (cd "$target" && docker compose -p docker -f "$compose" up -d --no-build --force-recreate --wait) || true
+  (cd "$target" && docker compose -p docker -f "$compose" up -d --no-build --force-recreate --wait)
 }
 trap rollback ERR
 mv "$target" "$previous"
 mv "$staged" "$target"
 (cd "$target" && docker compose -p docker -f "$compose" up -d --no-build --force-recreate --wait)
-curl --fail --silent --show-error --max-time 15 "https://$domain/api/ready" >/dev/null
+curl --retry 12 --retry-all-errors --retry-delay 5 --retry-max-time 120 --fail --silent --show-error --max-time 15 "https://$domain/api/ready" >/dev/null
 deployed=1
 trap - ERR
 rm -f "$upload.tar.gz" "$upload.sh"

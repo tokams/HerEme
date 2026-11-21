@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-21 — Domain cutover recovery
+
+- Retry public readiness during TLS startup and check the live database schema
+  before automatically switching back to the previous application image.
+
 ## 2026-11-21 — Deployment environment backup permissions
 
 - Save the private environment as an operator-owned mode-0600 sibling of the
