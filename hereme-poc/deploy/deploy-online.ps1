@@ -46,7 +46,8 @@ cp -p "$target/deploy/docker/.env" "$staged/deploy/docker/.env"
 grep -Fx "HEREME_DOMAIN=$domain" "$staged/deploy/docker/.env" >/dev/null
 docker image tag hereme-local-forum:latest "$rollback_image"
 docker run --rm --user 0 -v docker_hereme-data:/var/lib/hereme:ro -v "$backup_root":/backup "$rollback_image" node scripts/snapshot-data.js /var/lib/hereme "/backup/$stamp"
-docker run --rm --user 0 -v "$backup_root":/backup:ro "$rollback_image" node scripts/verify-backup.js "/backup/$stamp"
+# SQLite may need to create a transient -shm file even with a read-only connection.
+docker run --rm --user 0 -v "$backup_root":/backup "$rollback_image" node scripts/verify-backup.js "/backup/$stamp"
 docker run --rm --user 0 -v docker_hereme-data:/data:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'if [ -d /data/chat ]; then find /data/chat -maxdepth 1 -type f -printf "%f\n"; fi > /backup/'"$stamp"'/chat-files.txt'
 (cd "$staged" && docker compose -p docker -f "$compose" build app)
 deployed=0

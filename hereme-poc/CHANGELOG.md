@@ -2,6 +2,10 @@
 
 ## 2026-11-21 — Private chat and repeatable public deployment
 
+- Corrected the deployment backup verifier to mount snapshots writable while
+  SQLite opens its read-only database connection; SQLite may need a temporary
+  shared-memory sidecar. The failed first attempt stopped before cutover.
+
 - Added username discovery, consent-based direct messages, invited groups,
   opt-in online presence, private file sharing with resumable chunk uploads,
   and server-enforced membership and blocking.

@@ -32,6 +32,9 @@ strict host-key verification and existing remote `.env`. It packages the
 committed `hereme-poc` tree, copies it to the Docker host, makes and verifies
 a data snapshot, builds the new image, restarts Compose and checks public
 readiness. On failed cutover it restores the previous image, code and snapshot.
+The backup verifier mounts its snapshot directory writable because SQLite may
+need to create a temporary shared-memory sidecar even for a read-only database
+connection. The verifier does not modify the snapshot database.
 The script never removes the named data volume. Previous code and backups are
 retained on the host for operator review; prune them only under the retention
 policy. It requires `git`, `ssh` and `scp` locally, and Docker Compose and
