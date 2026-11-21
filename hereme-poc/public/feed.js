@@ -5,18 +5,20 @@
   const Themes=node?require('./themes'):root.HeremeThemes;
   const {icon}=node?require('./icons'):root.HeremeIcons;
   const E=Poster.escape;
+  const fallback={'time.now':'nå','feed.synthetic_demo':'Syntetisk demo','post.vote_up':'Stem opp','post.vote_down':'Stem ned'};
+  const t=(key,params)=>root.HeremeI18n?.t(`wall.${key}`,params)||fallback[key]||({'time.minutes':`${params?.count} min`,'time.hours':`${params?.count} t`,'time.days':`${params?.count} d`,'post.net_score':`Nettoscore ${params?.score}`,'post.comment_count':`${params?.count} kommentarer`,'post.open':`Åpne ${params?.title}`}[key])||key;
   function ago(value) {
     const ts=Date.parse(value.replace(' ','T')+(/Z$|[+-]\d\d:\d\d$/.test(value)?'':'Z'));
     const minutes=Math.max(0,(Date.now()-ts)/60000);
-    return minutes<1?'nå':minutes<60?`${Math.floor(minutes)} min`:minutes<1440?`${Math.floor(minutes/60)} t`:`${Math.floor(minutes/1440)} d`;
+    return minutes<1?t('time.now'):minutes<60?t('time.minutes',{count:Math.floor(minutes)}):minutes<1440?t('time.hours',{count:Math.floor(minutes/60)}):t('time.days',{count:Math.floor(minutes/1440)});
   }
-  const demo=p=>p.synthetic_demo?'<span class="demo-tag">Syntetisk demo</span>':'';
+  const demo=p=>p.synthetic_demo?`<span class="demo-tag">${E(t('feed.synthetic_demo'))}</span>`:'';
   function controls(p,{detail=false}={}) {
     return `<div class="tile-actions">
-      <button class="vote-btn vote-up" data-action="vote" data-id="${p.id}" data-value="1" aria-label="Stem opp" aria-pressed="${p.my_vote===1}">${icon('vote-up')}</button>
-      <button class="vote-btn vote-down" data-action="vote" data-id="${p.id}" data-value="-1" aria-label="Stem ned" aria-pressed="${p.my_vote===-1}">${icon('vote-down')}</button>
-      <span class="vote-number ${p.score<0?'negative':''}" aria-label="Nettoscore ${p.score}">${p.score>0?'+':''}${p.score}</span>
-      <button class="comment-count" data-action="${detail?'comments':'detail'}" data-id="${p.id}" aria-label="${p.comment_count} kommentarer">${icon('comment')}<span>${p.comment_count}</span></button>
+      <button class="vote-btn vote-up" data-action="vote" data-id="${p.id}" data-value="1" aria-label="${E(t('post.vote_up'))}" aria-pressed="${p.my_vote===1}">${icon('vote-up')}</button>
+      <button class="vote-btn vote-down" data-action="vote" data-id="${p.id}" data-value="-1" aria-label="${E(t('post.vote_down'))}" aria-pressed="${p.my_vote===-1}">${icon('vote-down')}</button>
+      <span class="vote-number ${p.score<0?'negative':''}" aria-label="${E(t('post.net_score',{score:p.score}))}">${p.score>0?'+':''}${p.score}</span>
+      <button class="comment-count" data-action="${detail?'comments':'detail'}" data-id="${p.id}" aria-label="${E(t('post.comment_count',{count:p.comment_count}))}">${icon('comment')}<span>${p.comment_count}</span></button>
     </div>`;
   }
   function header(p) {
@@ -25,14 +27,14 @@
   }
   function card(p) {
     return `<article class="post-card theme-${p.category} ${Poster.image(p.image_url)?'is-photo':'is-text'}" data-post-id="${p.id}" data-category="${p.category}">${header(p)}
-      <button class="tile-open" data-action="detail" data-id="${p.id}" aria-label="Åpne ${E(p.title)}">${Poster.surface(p)}${p.type==='video'?`<span class="video-tile-badge">▶ ${Math.floor((p.duration_ms||0)/60000)}:${String(Math.floor((p.duration_ms||0)/1000)%60).padStart(2,'0')}</span>`:''}</button>
+      <button class="tile-open" data-action="detail" data-id="${p.id}" aria-label="${E(t('post.open',{title:p.title}))}">${Poster.surface(p)}${p.type==='video'?`<span class="video-tile-badge">▶ ${Math.floor((p.duration_ms||0)/60000)}:${String(Math.floor((p.duration_ms||0)/1000)%60).padStart(2,'0')}</span>`:''}</button>
       ${controls(p)}</article>`;
   }
   function filters(selected) {
-    return Themes.themes.map(t=>`<label class="category-filter theme-${t.id}"><input type="checkbox" name="category" value="${t.id}" ${selected.includes(t.id)?'checked':''}>${icon(t.id)}<span>${t.label}<small>${E(t.description)}</small></span></label>`).join('');
+    return Themes.themes.map(theme=>{const localized=Themes.get(theme.id);return `<label class="category-filter theme-${theme.id}"><input type="checkbox" name="category" value="${theme.id}" ${selected.includes(theme.id)?'checked':''}>${icon(theme.id)}<span>${E(localized.label)}<small>${E(localized.description)}</small></span></label>`;}).join('');
   }
   function categoryButtons(selected) {
-    return Themes.themes.map(t=>`<button class="category-button theme-${t.id}" data-action="category" data-category="${t.id}" aria-pressed="${selected.includes(t.id)}" title="${E(t.description)}">${icon(t.id)}<span>${E(t.label)}</span></button>`).join('');
+    return Themes.themes.map(theme=>{const localized=Themes.get(theme.id);return `<button class="category-button theme-${theme.id}" data-action="category" data-category="${theme.id}" aria-pressed="${selected.includes(theme.id)}" title="${E(localized.description)}">${icon(theme.id)}<span>${E(localized.label)}</span></button>`;}).join('');
   }
   const api={card,header,controls,filters,categoryButtons,ago,demo,escape:E,image:Poster.image};
   if(node)module.exports=api;else root.HeremeFeed=api;

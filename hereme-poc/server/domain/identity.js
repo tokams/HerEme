@@ -18,7 +18,7 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
   function userProjection(user){
     const roles=roleRows.all(user.id).map(row=>row.role);
     const caps=new Set();for(const role of roles)for(const cap of capabilities[role]||[])caps.add(cap);
-    return {id:user.id,name:user.name,status:user.status,secured:Boolean(user.secured_at),roles,capabilities:[...caps]};
+    return {id:user.id,name:user.name,status:user.status,secured:Boolean(user.secured_at),preferred_language:user.preferred_language??null,roles,capabilities:[...caps]};
   }
   function issueSession(userId,userAgent=''){
     const raw=crypto.randomBytes(32).toString('base64url'),csrf=crypto.randomBytes(24).toString('base64url');
@@ -40,9 +40,9 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
   function readSession(req,res,{allowLegacy=true}={}){
     const raw=parseCookies(req)[cookieName];
     if(raw){
-      const row=db.prepare(`SELECT s.*,u.name,u.status,u.secured_at FROM sessions s JOIN users u ON u.id=s.user_id
+      const row=db.prepare(`SELECT s.*,u.name,u.status,u.secured_at,u.preferred_language FROM sessions s JOIN users u ON u.id=s.user_id
         WHERE s.id_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime('now') AND u.status='active'`).get(sha256(raw));
-      if(row){db.prepare("UPDATE sessions SET last_seen_at=datetime('now') WHERE id_hash=? AND last_seen_at<datetime('now','-1 hour')").run(row.id_hash);return {...userProjection({id:row.user_id,name:row.name,status:row.status,secured_at:row.secured_at}),sessionHash:row.id_hash,csrfHash:row.csrf_hash};}
+      if(row){db.prepare("UPDATE sessions SET last_seen_at=datetime('now') WHERE id_hash=? AND last_seen_at<datetime('now','-1 hour')").run(row.id_hash);return {...userProjection({id:row.user_id,name:row.name,status:row.status,secured_at:row.secured_at,preferred_language:row.preferred_language}),sessionHash:row.id_hash,csrfHash:row.csrf_hash};}
     }
     if(allowLegacy){
       const match=/^Bearer ([a-f0-9]{64})$/i.exec(req.headers.authorization||'');
@@ -111,6 +111,11 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
   }
   function logout(auth,res){if(auth)db.prepare("UPDATE sessions SET revoked_at=datetime('now') WHERE id_hash=?").run(auth.sessionHash);clearCookie(res);}
   function rename(auth,name){name=text(name,{name:'Pseudonym',min:2,max:24});const normalized=normalize(name);if(db.prepare('SELECT id FROM users WHERE normalized_name=? AND id<>?').get(normalized,auth.id))fail('NAME_TAKEN','Pseudonymet er allerede i bruk.',409);db.prepare('UPDATE users SET name=?,normalized_name=? WHERE id=?').run(name,normalized,auth.id);return {...auth,name};}
-  return {readSession,requireUser,requireCsrf,requireCapability,createProfile,recover,confirmRecovery,stepUp,markFresh,requireFresh,requireActive,issueSession,rotateRecovery,revokeAll,logout,rename,setCookie,userProjection,sha256,parseCookies};
+  function language(auth,preferredLanguage){
+    if(preferredLanguage!=='nb'&&preferredLanguage!=='en')fail('INVALID_LANGUAGE','Språket må være nb eller en.',400);
+    db.prepare('UPDATE users SET preferred_language=? WHERE id=?').run(preferredLanguage,auth.id);
+    return {preferred_language:preferredLanguage};
+  }
+  return {readSession,requireUser,requireCsrf,requireCapability,createProfile,recover,confirmRecovery,stepUp,markFresh,requireFresh,requireActive,issueSession,rotateRecovery,revokeAll,logout,rename,language,setCookie,userProjection,sha256,parseCookies};
 }
 module.exports={createIdentityService};

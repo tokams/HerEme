@@ -27,17 +27,20 @@ function createPushDeliveryService(db,config,{sender=webPush,now=()=>new Date()}
     return true;
   }
   function payload(row){
-    const content={request:['Meldingsforespørsel','Du har en meldingsforespørsel'],invite:['Gruppeinvitasjon','Du har en gruppeinvitasjon'],accepted:['Forespørsel oppdatert','En forespørsel ble godtatt'],declined:['Forespørsel oppdatert','En forespørsel ble avslått'],post_reply:['Nytt svar','Noen svarte på innlegget ditt'],comment_reply:['Nytt svar','Noen svarte på kommentaren din']};
-    content.message=['Ny chatmelding','Du har en ny melding'];
-    const [title,body]=content[row.kind]||['Ny varsling','Du har en ny varsling'];return {notification_id:row.event_key,kind:row.kind,title,body,route:row.route,tag:row.chat_id?'chat:'+row.chat_id:row.event_key};
+    const content={
+      nb:{request:['Meldingsforespørsel','Du har en meldingsforespørsel'],invite:['Gruppeinvitasjon','Du har en gruppeinvitasjon'],accepted:['Forespørsel oppdatert','En forespørsel ble godtatt'],declined:['Forespørsel oppdatert','En forespørsel ble avslått'],post_reply:['Nytt svar','Noen svarte på innlegget ditt'],comment_reply:['Nytt svar','Noen svarte på kommentaren din'],message:['Ny chatmelding','Du har en ny melding'],fallback:['Ny varsling','Du har en ny varsling']},
+      en:{request:['Message request','You have a message request'],invite:['Group invitation','You have a group invitation'],accepted:['Request updated','A request was accepted'],declined:['Request updated','A request was declined'],post_reply:['New reply','Someone replied to your post'],comment_reply:['New reply','Someone replied to your comment'],message:['New chat message','You have a new message'],fallback:['New notification','You have a new notification']}
+    };
+    const locale=row.preferred_language==='en'?'en':'nb',[title,body]=content[locale][row.kind]||content[locale].fallback;
+    return {notification_id:row.event_key,kind:row.kind,locale,title,body,route:row.route,tag:row.chat_id?'chat:'+row.chat_id:row.event_key};
   }
   function claim(){
     const timestamp=now(),current=iso(timestamp),lease=iso(new Date(timestamp.getTime()+60000));
     db.prepare("UPDATE push_deliveries SET state='retry',lease_until=NULL,next_attempt_at=?,updated_at=? WHERE state='leased' AND lease_until<=?").run(current,current,current);
     const row=db.prepare(`SELECT d.id FROM push_deliveries d WHERE d.state IN ('pending','retry') AND d.next_attempt_at<=? ORDER BY d.id LIMIT 1`).get(current);if(!row)return null;
     const changed=db.prepare("UPDATE push_deliveries SET state='leased',lease_until=?,attempts=attempts+1,updated_at=? WHERE id=? AND state IN ('pending','retry')").run(lease,current,row.id);if(!changed.changes)return null;
-    return db.prepare(`SELECT d.*,o.event_key,o.recipient_id,o.category,o.kind,o.actor_id,o.chat_id,o.post_id,o.comment_id,o.route,s.user_id subscription_user_id,s.endpoint,s.p256dh,s.auth,s.disabled_at
-      FROM push_deliveries d JOIN push_outbox o ON o.id=d.outbox_id JOIN push_subscriptions s ON s.id=d.subscription_id WHERE d.id=?`).get(row.id);
+    return db.prepare(`SELECT d.*,o.event_key,o.recipient_id,o.category,o.kind,o.actor_id,o.chat_id,o.post_id,o.comment_id,o.route,s.user_id subscription_user_id,s.endpoint,s.p256dh,s.auth,s.disabled_at,u.preferred_language
+      FROM push_deliveries d JOIN push_outbox o ON o.id=d.outbox_id JOIN push_subscriptions s ON s.id=d.subscription_id JOIN users u ON u.id=o.recipient_id WHERE d.id=?`).get(row.id);
   }
   function permanent(row,code){db.prepare("UPDATE push_deliveries SET state='permanent',lease_until=NULL,last_error_code=?,updated_at=datetime('now') WHERE id=?").run(String(code).slice(0,80),row.id);}
   async function deliver(row){

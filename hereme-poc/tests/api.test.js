@@ -21,6 +21,25 @@ test('liveness, readiness, public pages and protected staff surfaces',async()=>{
   assert.match((await request('/privacy.html')).body,/Personvern/);assert.match((await request('/rules.html')).body,/Fellesskapsregler/);
   assert.equal((await request('/manifest.webmanifest')).body.id,'/');assert.match((await request('/service-worker.js')).body,/notificationclick/);
 });
+test('account language preference is nullable, authenticated, CSRF protected and restricted',async()=>{
+  const member=fixtureProfile('LanguageMember');
+  assert.equal(member.user.preferred_language,null);
+  assert.deepEqual((await request('/api/me/language',{session:member})).body,{preferred_language:null});
+  assert.equal((await request('/api/me/language',{method:'PUT',body:{preferred_language:'en'}})).status,401);
+  assert.equal((await request('/api/me/language',{method:'PUT',body:{preferred_language:'en'},headers:{cookie:member.cookie}})).status,403);
+  assert.deepEqual((await request('/api/me/language',{method:'PUT',session:member,body:{preferred_language:'en'}})).body,{preferred_language:'en'});
+  assert.equal((await request('/api/me')).status,401);
+  assert.equal((await request('/api/me',{session:member})).body.user.preferred_language,'en');
+  const invalid=await request('/api/me/language',{method:'PUT',session:member,body:{preferred_language:'nn'}});
+  assert.equal(invalid.body.error.code,'INVALID_LANGUAGE');assert.equal(invalid.body.error.message,'Language must be nb or en.');
+  assert.equal(S.db.prepare('SELECT preferred_language FROM users WHERE id=?').get(member.user.id).preferred_language,'en');
+  const signedOut=await request('/api/admin/queue',{headers:{'accept-language':'en-GB,en;q=0.8'}});
+  assert.equal(signedOut.body.error.code,'AUTH_REQUIRED');assert.equal(signedOut.body.error.message,'Sign in to continue.');
+  const norwegian=await request('/api/admin/queue',{headers:{'accept-language':'fr-FR'}});
+  assert.match(norwegian.body.error.message,/pseudonym|logg inn/i);
+  const malformed=await fetch(url+'/api/session',{method:'POST',headers:{'content-type':'application/json','accept-language':'en'},body:'{'});
+  assert.equal(malformed.status,400);assert.deepEqual(await malformed.json(),{error:'Invalid JSON.'});
+});
 test('chat consent, membership, groups, blocked delivery, resumable files and expiry',async()=>{
   const alice=await profile('ChatAlice'),bob=await profile('ChatBob'),third=await profile('ChatThird');
   assert.equal((await request('/api/chat/users?q=ChatB',{session:alice})).body.users[0].name,'ChatBob');

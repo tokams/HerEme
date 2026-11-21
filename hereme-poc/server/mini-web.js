@@ -5,7 +5,8 @@ const http=require('node:http');
 const fs=require('node:fs');
 const path=require('node:path');
 const {URL}=require('node:url');
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8','.mp4':'video/mp4'};
+const {requestedLocale}=require('./error-localization');
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.ico':'image/x-icon','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8','.mp4':'video/mp4'};
 function createApp(){
   const stack=[];
   const app=(req,res)=>{
@@ -36,8 +37,8 @@ function createApp(){
         }catch(e){next(e);}
         return;
       }
-      if(err){console.error(err);res.status(500).json({error:'Intern feil på serveren.'});}
-      else res.status(404).json({error:'Fant ikke siden.'});
+      if(err){console.error(err);res.status(500).json({error:requestedLocale(req)==='en'?'Internal server error.':'Intern feil på serveren.'});}
+      else res.status(404).json({error:requestedLocale(req)==='en'?'Page not found.':'Fant ikke siden.'});
       function skip(){return next(err);}
     };
     next();
@@ -61,8 +62,8 @@ createApp.json=({limit='128kb'}={})=> (req,res,next)=>{
   if(!['POST','PUT','PATCH','DELETE'].includes(req.method)||!req.headers['content-type']?.startsWith('application/json'))return next();
   const max=parseLimit(limit);readBody(req,max).then(buffer=>{
     try{req.body=JSON.parse(buffer.toString('utf8')||'{}');next();}
-    catch{res.status(400).json({error:'Ugyldig JSON.'});}
-  }).catch(err=>res.status(err.code===413?413:400).json({error:err.message}));
+    catch{res.status(400).json({error:requestedLocale(req)==='en'?'Invalid JSON.':'Ugyldig JSON.'});}
+  }).catch(err=>res.status(err.code===413?413:400).json({error:requestedLocale(req)==='en'?'The request is too large.':err.message}));
 };
 function parseLimit(input){return Number.parseInt(input,10)*(String(input).includes('mb')?1024*1024:String(input).includes('kb')?1024:1);}
 function readBody(req,max){return new Promise((resolve,reject)=>{

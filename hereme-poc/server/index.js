@@ -7,6 +7,7 @@ const crypto=require('node:crypto');
 const fs=require('node:fs');
 const path=require('node:path');
 const {DomainError}=require('./domain/errors');
+const {localizeError}=require('./error-localization');
 const {themes}=require('../public/themes');
 const S=require('./services');
 const {listenAvailable}=require('./listen');
@@ -15,7 +16,7 @@ const app=web();
 const httpListen=app.listen;app.listen=(...args)=>{const server=httpListen(...args);attachChatSocket(server,{db:S.db,identity:S.identity,config:S.config});return server;};
 const runtimeMetrics={errors:0,rate_limited:0,started_at:new Date().toISOString()};
 const imageUpload=upload({storage:upload.memoryStorage(),limits:{fileSize:12*1024*1024,files:1}});
-const errors=(res,status,code,message,details)=>res.status(status).json({error:{code,message,details:details||undefined}});
+const errors=(res,status,code,message,details)=>res.status(status).json({error:{code,message:localizeError(res.request,code,message),details:details||undefined}});
 const loopback=value=>['127.0.0.1','::1','::ffff:127.0.0.1'].includes(value);
 const ip=req=>S.config.trustProxy&&loopback(req.socket.remoteAddress)?String(req.headers['x-forwarded-for']||req.socket.remoteAddress).split(',')[0].trim():req.socket.remoteAddress;
 const ipKey=req=>crypto.createHash('sha256').update(String(ip(req))).digest('hex').slice(0,20);
@@ -41,6 +42,7 @@ function activity(items){
 
 app.disable('x-powered-by');
 app.use((req,res,next)=>{
+  res.request=req;
   req.id=crypto.randomUUID();res.set('X-Request-Id',req.id);res.set('X-Content-Type-Options','nosniff');res.set('X-Frame-Options','DENY');res.set('Referrer-Policy','same-origin');
   res.set('Permissions-Policy','camera=(self), microphone=(self), geolocation=()');
   res.set('Content-Security-Policy',`default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'${S.config.production?'; upgrade-insecure-requests':''}`);
@@ -64,9 +66,9 @@ app.get('/api/health',(req,res)=>{const worker=S.db.prepare('SELECT last_run FRO
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=18').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=19').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===18;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===19;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();});
@@ -107,6 +109,8 @@ app.post('/api/session/logout',write(null,20),(req,res)=>{S.push.disableDevice(r
 app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.push.disableAll(req.auth);S.identity.revokeAll(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>{S.identity.requireFresh(req.auth);res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true});});
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
+app.get('/api/me/language',read(null),(req,res)=>res.json({preferred_language:req.auth.preferred_language}));
+app.put('/api/me/language',write(null,20),(req,res)=>res.json(S.identity.language(req.auth,req.body?.preferred_language)));
 app.get('/api/passkeys/config',(req,res)=>res.json(S.passkeys.configView()));
 app.post('/api/passkeys/step-up',write(null,10),(req,res)=>{const result=S.identity.stepUp(req.auth,req.body?.recovery_key);recordSecurity(req,'passkey.step_up','allowed',req.auth.id);res.json(result);});
 app.post('/api/passkeys/registration/options',write(null,10),async(req,res,next)=>{try{res.json(await S.passkeys.registrationOptions(req.auth,req.body?.label));}catch(error){next(error);}});

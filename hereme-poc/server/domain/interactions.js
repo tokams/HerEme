@@ -33,7 +33,8 @@ function createInteractionService(db,{audit,notifications}={}){
   }
   function report(postId,user,reason){
     postId=V.integer(postId,{name:'Innleggs-ID'});published(postId);
-    reason=V.enumValue(reason,['Personopplysninger','Trakassering','Ulovlig innhold','Spam / svindel','Annet'],'Rapportgrunn');
+    const legacyReasons={'Personopplysninger':'personal','Trakassering':'harassment','Ulovlig innhold':'illegal','Spam / svindel':'spam','Annet':'other'};
+    reason=V.enumValue(legacyReasons[reason]||reason,['personal','harassment','illegal','spam','other'],'Rapportgrunn');
     db.exec('BEGIN IMMEDIATE');
     try{
       const result=db.prepare('INSERT INTO reports(id,post_id,user_id,reason) VALUES(?,?,?,?) ON CONFLICT(post_id,user_id) DO NOTHING').run(nextId(db,'reports'),postId,user.id,reason);

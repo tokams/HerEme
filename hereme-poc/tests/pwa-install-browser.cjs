@@ -16,7 +16,7 @@ const services=require('../server/services');
   try{
     const base=`http://127.0.0.1:${server.address().port}`;
     browser=await chromium.launch({headless:true});
-    const context=await browser.newContext({viewport:{width:390,height:844}});
+    const context=await browser.newContext({viewport:{width:390,height:844},locale:'nb-NO'});
     const page=await context.newPage();
     await page.goto(base);
     assert.equal(await page.locator('#installBanner').isVisible(),false);
@@ -32,7 +32,7 @@ const services=require('../server/services');
     assert.equal(await page.locator('#installBanner').isVisible(),false);
     await context.close();
 
-    const iosContext=await browser.newContext({viewport:{width:390,height:844},userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1'});
+    const iosContext=await browser.newContext({viewport:{width:390,height:844},locale:'nb-NO',userAgent:'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1'});
     const iosPage=await iosContext.newPage();
     await iosPage.goto(base);
     await iosPage.locator('#installBanner').waitFor({state:'visible'});

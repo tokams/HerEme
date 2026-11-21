@@ -29,7 +29,8 @@ function createNotificationService(db){
       FROM chat_notifications WHERE recipient_id=?`).all(user.id);
     const forum=db.prepare(`SELECT id,'forum' source,kind,actor_id,NULL chat_id,post_id,comment_id,created_at,read_at
       FROM forum_notifications WHERE recipient_id=?`).all(user.id);
-    return [...chat,...forum].map(item=>{const messageId=item.source==='chat'&&item.kind==='message'?Number(String(item.dedupe_key).split(':')[1]):null;return {...item,notification_id:item.source+':'+item.id,sort_id:Number(item.id),route:item.source==='forum'?'/?post='+item.post_id:'/chat/'+item.chat_id+(Number.isSafeInteger(messageId)?'?message='+messageId:'')};})
+    const locale=db.prepare('SELECT preferred_language FROM users WHERE id=?').get(user.id)?.preferred_language||'nb';
+    return [...chat,...forum].map(item=>{const messageId=item.source==='chat'&&item.kind==='message'?Number(String(item.dedupe_key).split(':')[1]):null;return {...item,locale,notification_id:item.source+':'+item.id,sort_id:Number(item.id),route:item.source==='forum'?'/?post='+item.post_id:'/chat/'+item.chat_id+(Number.isSafeInteger(messageId)?'?message='+messageId:'')};})
       .sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))||b.sort_id-a.sort_id).filter(item=>item.sort_id<cursor).slice(0,50);
   }
   function read(user,notificationId){

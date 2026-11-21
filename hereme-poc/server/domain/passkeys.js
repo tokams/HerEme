@@ -56,7 +56,7 @@ function createPasskeyService(db,config,{identity,audit}){
   async function verifyLogin(body,userAgent='',binding=''){
     requireEnabled();const stored=consume(body?.challenge_id,'authenticate',{bindingHash:identity.sha256(binding)});const response=body?.response;
     if(typeof response?.id!=='string'||response.id.length>2048)fail('PASSKEY_LOGIN_FAILED','Passnøkkelen kunne ikke brukes.',401);
-    const row=db.prepare(`SELECT p.*,h.user_handle,u.status,u.name,u.secured_at FROM passkey_credentials p JOIN webauthn_user_handles h ON h.user_id=p.user_id JOIN users u ON u.id=p.user_id WHERE p.credential_id=? AND p.revoked_at IS NULL`).get(response?.id);
+    const row=db.prepare(`SELECT p.*,h.user_handle,u.status,u.name,u.secured_at,u.preferred_language FROM passkey_credentials p JOIN webauthn_user_handles h ON h.user_id=p.user_id JOIN users u ON u.id=p.user_id WHERE p.credential_id=? AND p.revoked_at IS NULL`).get(response?.id);
     if(!row||row.status!=='active')fail('PASSKEY_LOGIN_FAILED','Passnøkkelen kunne ikke brukes.',401);
     if(!response.response?.userHandle||response.response.userHandle!==row.user_handle)fail('PASSKEY_LOGIN_FAILED','Passnøkkelen kunne ikke brukes.',401);
     let verified;try{verified=await verifyAuthenticationResponse({response,expectedChallenge:stored.challenge,expectedOrigin:stored.origin,expectedRPID:stored.rp_id,credential:{id:row.credential_id,publicKey:new Uint8Array(row.public_key),counter:row.counter,transports:JSON.parse(row.transports_json)},requireUserVerification:true,advancedFIDOConfig:{userVerification:'required'}});}catch{fail('PASSKEY_LOGIN_FAILED','Passnøkkelen kunne ikke brukes.',401);}
@@ -66,7 +66,7 @@ function createPasskeyService(db,config,{identity,audit}){
     if(!changed.changes)fail('PASSKEY_LOGIN_FAILED','Passnøkkelen ble endret under innlogging. Prøv igjen.',409);
     const session=identity.issueSession(row.user_id,userAgent);identity.markFresh(row.user_id,identity.sha256(session.raw),'passkey');
     audit.record({actorId:row.user_id,action:'passkey.authenticated',subjectType:'passkey',subjectId:row.credential_id});
-    return {user:identity.userProjection({id:row.user_id,name:row.name,status:row.status,secured_at:row.secured_at}),session};
+    return {user:identity.userProjection({id:row.user_id,name:row.name,status:row.status,secured_at:row.secured_at,preferred_language:row.preferred_language}),session};
   }
   const list=auth=>db.prepare('SELECT * FROM passkey_credentials WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at').all(auth.id).map(credentialView);
   function rename(auth,id,newLabel){requireEnabled();identity.requireFresh(auth);const before=db.prepare('SELECT * FROM passkey_credentials WHERE credential_id=? AND user_id=? AND revoked_at IS NULL').get(id,auth.id);if(!before)fail('NOT_FOUND','Passnøkkelen finnes ikke.',404);const value=label(newLabel);db.prepare('UPDATE passkey_credentials SET label=? WHERE credential_id=?').run(value,id);audit.record({actorId:auth.id,action:'passkey.renamed',subjectType:'passkey',subjectId:id,previous:{label:before.label},next:{label:value}});return {passkey:{...credentialView(before),label:value}};}

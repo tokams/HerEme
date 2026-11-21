@@ -1,27 +1,42 @@
 'use strict';
 (()=>{
   const $=selector=>document.querySelector(selector);
+  const i18n=()=>window.HeremeI18n;
+  const t=(key,params)=>i18n().t(`chat.${key}`,params);
   const icon=kind=>`/assets/icons/chat-${kind==='group'?'group':'single'}.svg`;
   const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-  const segmenter=new Intl.Segmenter('no',{granularity:'grapheme'});
+  const segmenter=()=>new Intl.Segmenter(i18n().getLanguage()==='en'?'en-GB':'nb-NO',{granularity:'grapheme'});
   const state={me:null,csrf:'',chats:[],notifications:[],selection:null,mode:'inbox',selected:new Map(),suggestions:[],activeSuggestion:-1,searchTimer:null,searchController:null,searchSequence:0,historyLimit:50,pauseUpload:false,detailsOpen:false,visible:false,drafts:new Map(),sending:false,socket:null,reconnect:0};
+  function translateStatic(){
+    const text={'.skip-link':'skip','#chatShell aside':'inbox_label','.wall-link':'wall','#createGroup':'create_group','#groupBuilder':'create_group','#groupBuilder h2':'new_group','#cancelGroup':'action.cancel','#groupBuilder label[for=groupName]':'group_name','#groupBuilder p':'group_help','#groupBuilder h3':'selected_people','#confirmGroup':'create_group','#conversationList':'conversations_label','#inboxEmpty':'inbox_empty','#conversation':'conversation_label','#conversationEmpty':'conversation_empty','#backToInbox':'back','#toggleDetails':'details','#declineInvite':'action.decline','.presence-control':'presence','#conversationDetails h3':'people','#inviteForm label':'invite_username','#inviteForm button':'action.invite','#leaveChat':'action.leave','#olderMessages':'older','#messageForm label[for=messageInput]':'message_label','#sendMessage':'action.send','.attachment-line span':'attachment.retention','#pauseUpload':'action.pause','#connectionStatus':'connection.connecting','#attachmentViewer':'attachment.label','#closeViewer':'action.close'};
+    for(const [selector,key] of Object.entries(text)){const element=$(selector);if(!element)continue;if(['ASIDE','SECTION','NAV','DIALOG'].includes(element.tagName))element.setAttribute('aria-label',t(key));else if(element.matches('.presence-control'))element.lastChild.textContent=' '+t(key);else element.textContent=t(key);}
+    const fields={usernameSearch:['search_users','placeholder'],groupName:['group_name_placeholder','placeholder'],messageInput:['write_message','placeholder']};
+    for(const [id,[key,attribute]] of Object.entries(fields))$('#'+id).setAttribute(attribute,t(key));
+    for(const [id,key] of Object.entries({createGroup:'create_group',pickImage:'attachment.pick_image',pickVideo:'attachment.pick_video',pickFile:'attachment.pick_file'})){const element=$('#'+id);element.setAttribute('aria-label',t(key));element.title=t(key);}
+    document.title=t('title');
+  }
+  async function languageChanged(){
+    saveDraft();translateStatic();renderInbox();renderSelected();renderStage();
+    if(state.selection?.type==='draft')renderDraft(state.selection.target,state.selection.declined);
+    else if(state.selection?.type==='chat'){const row=selectedRow();if(row)await updateConversation(row);}
+  }
   async function api(url,{method='GET',body,signal}={}){
     const headers={};if(method!=='GET')headers['x-csrf-token']=state.csrf;if(body!==undefined)headers['content-type']='application/json';
     const response=await fetch(url,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
-    const value=await response.json();if(!response.ok){const error=Error(value.error?.message||'Forespørselen feilet.');error.status=response.status;throw error;}return value;
+    const value=await response.json();if(!response.ok){const error=Error(value.error?.message||t('error.request_failed'));error.status=response.status;throw error;}return value;
   }
   function fail(error){$('#chatError').textContent=error.message||String(error);$('#chatError').hidden=false;}
   function run(action){return async event=>{try{$('#chatError').hidden=true;await action(event);}catch(error){fail(error);}};}
   function preview(row){
-    if(row.state==='incoming')return 'Meldingsforespørsel';
-    if(row.state==='invited')return 'Gruppeinvitasjon';
-    if(row.state==='pending')return 'Venter på svar';
-    if(row.state==='declined')return 'Forespørsel avslått';
-    if(row.last_kind==='file'||row.last_attachment&&!row.last_body)return '(attachment)';
-    if(row.last_kind==='system')return 'Aktivitet i gruppen';
-    if(!row.last_kind)return row.kind==='group'?'Venter på inviterte':'Ingen meldinger ennå';
+    if(row.state==='incoming')return t('preview.request');
+    if(row.state==='invited')return t('preview.invitation');
+    if(row.state==='pending')return t('preview.pending');
+    if(row.state==='declined')return t('preview.declined');
+    if(row.last_kind==='file'||row.last_attachment&&!row.last_body)return t('preview.attachment');
+    if(row.last_kind==='system')return t('preview.group_activity');
+    if(!row.last_kind)return row.kind==='group'?t('preview.waiting_invitees'):t('preview.no_messages');
     const clean=String(row.last_body||'').replace(/\s+/gu,' ').trim();
-    const units=[...segmenter.segment(clean)].map(part=>part.segment);
+    const units=[...segmenter().segment(clean)].map(part=>part.segment);
     return units.length>15?units.slice(0,15).join('')+'…':clean;
   }
   function renderInbox(){
@@ -34,7 +49,7 @@
   function draftKey(){return state.selection?.type==='draft'?`user:${state.selection.target.id}`:state.selection?.id||'';}
   function draft(){const key=draftKey();if(!state.drafts.has(key))state.drafts.set(key,{text:'',files:[]});return state.drafts.get(key);}
   function mediaKind(file){return file.type.startsWith('image/')?'image':file.type.startsWith('video/')?'video':'file';}
-  function renderStage(){const current=draft(),tray=$('#stagedFiles');tray.hidden=!current.files.length;tray.innerHTML=current.files.map((item,index)=>`<div class="staged-item">${item.kind==='image'?`<img src="${item.url}" alt="">`:`<img src="/assets/icons/chat-attach-${item.kind}.svg" alt="">`}<span>${escapeHtml(item.file.name)}</span><small>${escapeHtml(item.status||'Klar til å sendes')}</small><button type="button" data-remove-file="${index}" aria-label="Fjern ${escapeHtml(item.file.name)}">×</button></div>`).join('');
+  function renderStage(){const current=draft(),tray=$('#stagedFiles');tray.hidden=!current.files.length;tray.innerHTML=current.files.map((item,index)=>`<div class="staged-item">${item.kind==='image'?`<img src="${item.url}" alt="">`:`<img src="/assets/icons/chat-attach-${item.kind}.svg" alt="">`}<span>${escapeHtml(item.file.name)}</span><small>${escapeHtml(item.status||t('upload.ready'))}</small><button type="button" data-remove-file="${index}" aria-label="${escapeHtml(t('action.remove_file',{name:item.file.name}))}">×</button></div>`).join('');
     const locked=state.sending||['incoming','invited','declined'].includes(selectedRow()?.state)||state.selection?.declined;
     $('#sendMessage').disabled=locked||!($('#messageInput').value.trim()||current.files.length);
     for(const id of ['pickImage','pickVideo','pickFile'])$('#'+id).disabled=locked;
@@ -51,12 +66,12 @@
   function setDecision(row){
     const pending=row?.state==='incoming'||row?.state==='invited';$('#decisionActions').hidden=!pending;
     $('#messageInput').disabled=pending||row?.state==='declined';renderStage();
-    $('#acceptInvite').textContent=row?.state==='invited'?'Godta invitasjon':'Godta forespørsel';
+    $('#acceptInvite').textContent=row?.state==='invited'?t('action.accept_invitation'):t('action.accept_request');
   }
   function renderDraft(target,declined=false){
     state.selection={type:'draft',target,declined};$('#uploadStatus').textContent='';$('#uploadProgress').hidden=true;showConversation();
-    $('#conversationIcon').src=icon('direct');$('#conversationTitle').textContent=target.name;$('#conversationSubtitle').textContent='Ny samtale';
-    setNotice(declined?'Denne meldingsforespørselen ble avslått.': 'Denne brukeren må godta meldingsforespørselen. De blir varslet.');setDecision({state:declined?'declined':'new',kind:'direct'});
+    $('#conversationIcon').src=icon('direct');$('#conversationTitle').textContent=target.name;$('#conversationSubtitle').textContent=t('conversation.new');
+    setNotice(declined?t('notice.declined'):t('notice.pending'));setDecision({state:declined?'declined':'new',kind:'direct'});
     $('#messages').replaceChildren();$('#olderMessages').hidden=true;$('#toggleDetails').hidden=true;restoreDraft();$('#messageInput').focus();
   }
   async function loadMessages(chatId,targetMessage=null){
@@ -77,11 +92,11 @@
       const files=message.attachments||[],ready=file=>file.status==='ready'&&file.expires_at>new Date().toISOString();
       let attachment='';
       if(files.length===1){const file=files[0],fileId=encodeURIComponent(file.id),name=escapeHtml(file.name);
-        if(!ready(file))attachment=`<span class="expired-file">${name} — filen er utløpt og permanent slettet</span>`;
-        else if(file.media_kind==='image')attachment=`<button class="attachment-preview" type="button" data-view-message="${message.id}" aria-label="Vis ${name}"><img src="/api/chat/files/${fileId}/preview" alt="${name}" loading="lazy"></button>`;
-        else if(file.media_kind==='video')attachment=`<button class="attachment-card video-card" type="button" data-view-message="${message.id}" aria-label="Spill av ${name}"><video src="/api/chat/files/${fileId}/preview#t=0.1" preload="metadata" muted playsinline></video><span>▶ ${name}</span></button>`;
+        if(!ready(file))attachment=`<span class="expired-file">${name} — ${escapeHtml(t('attachment.expired'))}</span>`;
+        else if(file.media_kind==='image')attachment=`<button class="attachment-preview" type="button" data-view-message="${message.id}" aria-label="${escapeHtml(t('attachment.view',{name:file.name}))}"><img src="/api/chat/files/${fileId}/preview" alt="${name}" loading="lazy"></button>`;
+        else if(file.media_kind==='video')attachment=`<button class="attachment-card video-card" type="button" data-view-message="${message.id}" aria-label="${escapeHtml(t('attachment.play',{name:file.name}))}"><video src="/api/chat/files/${fileId}/preview#t=0.1" preload="metadata" muted playsinline></video><span>▶ ${name}</span></button>`;
         else attachment=`<button class="attachment-card" type="button" data-view-message="${message.id}"><img src="/assets/icons/chat-attach-file.svg" alt=""><span>${name}</span></button>`;
-      }else if(files.length>1)attachment=`<button class="attachment-card bundle-card" type="button" data-view-message="${message.id}"><span class="bundle-collage">${files.slice(0,3).map(file=>file.media_kind==='image'&&ready(file)?`<img src="/api/chat/files/${encodeURIComponent(file.id)}/preview" alt="">`:`<img src="/assets/icons/chat-attach-${file.media_kind}.svg" alt="">`).join('')}</span><span>${files.length} vedlegg · Se alle</span></button>`;
+      }else if(files.length>1)attachment=`<button class="attachment-card bundle-card" type="button" data-view-message="${message.id}"><span class="bundle-collage">${files.slice(0,3).map(file=>file.media_kind==='image'&&ready(file)?`<img src="/api/chat/files/${encodeURIComponent(file.id)}/preview" alt="">`:`<img src="/assets/icons/chat-attach-${file.media_kind}.svg" alt="">`).join('')}</span><span>${escapeHtml(t('attachment.bundle',{count:files.length}))}</span></button>`;
       html.push(`<div class="message${own?' own':''}${system?' system':''}" data-message-id="${message.id}" tabindex="-1"><small class="message-meta">${escapeHtml(message.sender)} · ${escapeHtml(message.created_at)}</small>${message.body?`<div>${escapeHtml(message.body)}</div>`:''}${attachment}</div>`);
     }
     $('#messages').innerHTML=html.join('');$('#messages').scrollTop=$('#messages').scrollHeight;state.renderedMessages=messages;
@@ -90,9 +105,9 @@
   async function renderDetails(row){
     if(!state.detailsOpen||!row||row.state==='incoming'||row.state==='invited'||row.id.startsWith('legacy:'))return;
     const people=(await api(`/api/chats/${encodeURIComponent(row.id)}/people`)).people;
-    $('#people').innerHTML=people.map(person=>`<div class="person-line"><span>${escapeHtml(person.name)}${person.online?' <span class="person-online">● online</span>':''}</span>${person.id===state.me?'':`<button type="button" data-block="${escapeHtml(person.id)}">Blokker</button>`}</div>`).join('');
+    $('#people').innerHTML=people.map(person=>`<div class="person-line"><span>${escapeHtml(person.name)}${person.online?` <span class="person-online">● ${escapeHtml(t('status.online'))}</span>`:''}</span>${person.id===state.me?'':`<button type="button" data-block="${escapeHtml(person.id)}">${escapeHtml(t('action.block'))}</button>`}</div>`).join('');
     $('#inviteForm').hidden=row.kind!=='group';$('#leaveChat').hidden=false;
-    $('#pendingInvites').innerHTML=row.creator_id===state.me?(await api(`/api/chats/${encodeURIComponent(row.id)}/invites`)).invites.map(invite=>`<div class="person-line"><span>${escapeHtml(invite.recipient)} · invitert</span><button type="button" data-cancel-invite="${escapeHtml(invite.id)}">Avlys</button></div>`).join(''):'';
+    $('#pendingInvites').innerHTML=row.creator_id===state.me?(await api(`/api/chats/${encodeURIComponent(row.id)}/invites`)).invites.map(invite=>`<div class="person-line"><span>${escapeHtml(invite.recipient)} · ${escapeHtml(t('status.invited'))}</span><button type="button" data-cancel-invite="${escapeHtml(invite.id)}">${escapeHtml(t('action.cancel'))}</button></div>`).join(''):'';
   }
   async function openChat(row,{route=true,targetMessage=null}={}){
     if(!row)return;saveDraft();state.selection={type:'chat',id:row.id};state.historyLimit=50;$('#uploadStatus').textContent='';$('#uploadProgress').hidden=true;showConversation();restoreDraft();
@@ -102,13 +117,13 @@
   async function updateConversation(row,targetMessage=null){
     if(state.selection?.id!==row.id)return;
     $('#conversationIcon').src=icon(row.kind);$('#conversationTitle').textContent=row.name;
-    $('#conversationSubtitle').textContent=row.kind==='group'?'Gruppesamtale':row.state==='incoming'?'Venter på ditt svar':row.state==='pending'?'Venter på svar':row.state==='declined'?'Avslått':'Direkte samtale';
+    $('#conversationSubtitle').textContent=row.kind==='group'?t('conversation.group'):row.state==='incoming'?t('conversation.awaiting_you'):row.state==='pending'?t('conversation.awaiting_reply'):row.state==='declined'?t('conversation.declined'):t('conversation.direct');
     $('#toggleDetails').hidden=row.state==='incoming'||row.state==='invited'||row.id.startsWith('legacy:');setDecision(row);
-    if(row.state==='pending')setNotice('Denne brukeren må godta meldingsforespørselen. De blir varslet.');
-    else if(row.state==='incoming')setNotice('Denne brukeren vil starte en samtale. Godta for å se meldingene.');
-    else if(row.state==='invited')setNotice('Du er invitert til gruppen. Godta for å delta.');
-    else if(row.state==='declined')setNotice('Meldingsforespørselen ble avslått.');
-    else if(row.kind==='group'&&row.creator_id===state.me&&(await api(`/api/chats/${encodeURIComponent(row.id)}/invites`)).invites.length)setNotice('Inviterte brukere må godta invitasjonen. De blir varslet.');
+    if(row.state==='pending')setNotice(t('notice.pending'));
+    else if(row.state==='incoming')setNotice(t('notice.incoming'));
+    else if(row.state==='invited')setNotice(t('notice.invited'));
+    else if(row.state==='declined')setNotice(t('notice.declined'));
+    else if(row.kind==='group'&&row.creator_id===state.me&&(await api(`/api/chats/${encodeURIComponent(row.id)}/invites`)).invites.length)setNotice(t('notice.group_pending'));
     else setNotice('');
     if(row.unread&&!row.id.startsWith('legacy:')){
       await api(`/api/chats/${encodeURIComponent(row.id)}/read`,{method:'POST'});
@@ -125,37 +140,37 @@
     }
   }
   function renderSelected(){
-    $('#selectedPeople').innerHTML=[...state.selected.values()].map(user=>`<span class="person-chip">${escapeHtml(user.name)}<button type="button" data-remove="${escapeHtml(user.id)}" aria-label="Fjern ${escapeHtml(user.name)}">×</button></span>`).join('');
+    $('#selectedPeople').innerHTML=[...state.selected.values()].map(user=>`<span class="person-chip">${escapeHtml(user.name)}<button type="button" data-remove="${escapeHtml(user.id)}" aria-label="${escapeHtml(t('action.remove_person',{name:user.name}))}">×</button></span>`).join('');
     $('#confirmGroup').disabled=state.selected.size===0;
   }
   function renderSuggestions(users){
     state.suggestions=users;state.activeSuggestion=-1;const results=$('#searchResults');
     results.innerHTML=users.map((user,index)=>`<button class="search-result" id="suggestion-${index}" type="button" role="option" aria-selected="false" data-user="${escapeHtml(user.id)}"><img src="/assets/icons/chat-single.svg" alt=""><span>${escapeHtml(user.name)}</span></button>`).join('');
     results.hidden=!users.length;$('#usernameSearch').setAttribute('aria-expanded',String(users.length>0));
-    $('#searchStatus').textContent=users.length?`${users.length} forslag`:'Ingen brukere funnet.';
+    $('#searchStatus').textContent=users.length?t('search.suggestions',{count:users.length}):t('search.none');
   }
   async function lookup(query,sequence){
     state.searchController?.abort();const controller=new AbortController();state.searchController=controller;
     try{const result=await api('/api/chat/users?q='+encodeURIComponent(query),{signal:controller.signal});if(sequence!==state.searchSequence)return;renderSuggestions(result.users.filter(user=>!state.selected.has(user.id)));}
-    catch(error){if(error.name==='AbortError'||sequence!==state.searchSequence)return;$('#searchResults').hidden=true;$('#searchStatus').textContent='Søket feilet. Prøv igjen.';}
+    catch(error){if(error.name==='AbortError'||sequence!==state.searchSequence)return;$('#searchResults').hidden=true;$('#searchStatus').textContent=t('search.failed');}
   }
   function searchChanged(){
     clearTimeout(state.searchTimer);state.searchController?.abort();const query=$('#usernameSearch').value.trim(),sequence=++state.searchSequence;
-    if([...query].length<2){state.suggestions=[];$('#searchResults').hidden=true;$('#usernameSearch').setAttribute('aria-expanded','false');$('#searchStatus').textContent=query?'Skriv minst to tegn.':'';return;}
-    $('#searchStatus').textContent='Søker…';state.searchTimer=setTimeout(()=>lookup(query,sequence),250);
+    if([...query].length<2){state.suggestions=[];$('#searchResults').hidden=true;$('#usernameSearch').setAttribute('aria-expanded','false');$('#searchStatus').textContent=query?t('search.minimum'):'';return;}
+    $('#searchStatus').textContent=t('search.searching');state.searchTimer=setTimeout(()=>lookup(query,sequence),250);
   }
   async function chooseUser(user){
     $('#searchResults').hidden=true;$('#usernameSearch').setAttribute('aria-expanded','false');
     if(state.mode==='group'){state.selected.set(user.id,user);renderSelected();$('#usernameSearch').value='';searchChanged();$('#usernameSearch').focus();return;}
     saveDraft();const result=await api(`/api/chat/direct/${encodeURIComponent(user.id)}`);
-    if(result.chat_id){await refresh();const row=state.chats.find(item=>item.id===result.chat_id);if(row)await openChat(row);else throw Error('Samtalen er ikke tilgjengelig.');}
-    else if(result.state==='incoming'){await refresh();const row=state.chats.find(item=>item.state==='incoming'&&item.name===user.name);if(row)await openChat(row);else throw Error('Åpne forespørselen i innboksen.');}
+    if(result.chat_id){await refresh();const row=state.chats.find(item=>item.id===result.chat_id);if(row)await openChat(row);else throw Error(t('error.unavailable'));}
+    else if(result.state==='incoming'){await refresh();const row=state.chats.find(item=>item.state==='incoming'&&item.name===user.name);if(row)await openChat(row);else throw Error(t('error.open_request'));}
     else renderDraft(user,result.state==='declined');
   }
   async function sendMessage(event){
     event.preventDefault();if(state.sending||!state.selection)return;const selected=state.selection,draftId=draftKey(),current=draft(),body=$('#messageInput').value.trim(),files=[...current.files];if(!body&&!files.length)return;
     const signature=JSON.stringify([draftId,body,files.map(item=>[item.file.name,item.file.size,item.file.lastModified])]);
-    const key=current.pendingSend?.signature===signature?current.pendingSend.key:crypto.randomUUID();current.pendingSend={signature,key};state.sending=true;$('#uploadStatus').textContent='Sender meldingen…';renderStage();
+    const key=current.pendingSend?.signature===signature?current.pendingSend.key:crypto.randomUUID();current.pendingSend={signature,key};state.sending=true;$('#uploadStatus').textContent=t('status.sending');renderStage();
     try{
       for(let index=0;index<files.length;index++)await uploadStaged(files[index],selected,index+1,files.length);
       const payload={body,client_key:key,attachment_ids:files.map(item=>item.id)};
@@ -166,20 +181,20 @@
         await api(`/api/chats/${encodeURIComponent(selected.id)}/messages`,{method:'POST',body:payload});
         state.drafts.delete(draftId);if(draftKey()===draftId)$('#messageInput').value='';releaseFiles(files);await refresh();
       }
-      $('#uploadStatus').textContent='Meldingen er sendt.';
+      $('#uploadStatus').textContent=t('status.sent');
     }finally{state.sending=false;renderStage();$('#pauseUpload').hidden=true;$('#uploadProgress').hidden=true;}
   }
   function releaseFiles(files){for(const item of files)URL.revokeObjectURL(item.url);}
   async function uploadStaged(item,selected,index,total){
     if(item.status==='staged')return;
-    if(!item.file.size)throw Error('Tomme filer kan ikke deles.');
+    if(!item.file.size)throw Error(t('error.empty_file'));
     if(!item.id){const input={name:item.file.name,bytes:item.file.size,media_kind:item.kind};if(selected.type==='draft')input.target_user_id=selected.target.id;else input.chat_id=selected.id;const started=await api('/api/chat-uploads/stage',{method:'POST',body:input});item.id=started.id;}
     const saved=await api('/api/chat-uploads/'+encodeURIComponent(item.id));let offset=saved.received;if(saved.status==='staged'){item.status='staged';renderStage();return;}
     $('#uploadProgress').hidden=false;$('#pauseUpload').hidden=false;state.pauseUpload=false;
-    while(offset<item.file.size){if(state.pauseUpload){item.status='Pauset';renderStage();throw Error('Opplastingen er pauset. Trykk Send for å fortsette.');}
+    while(offset<item.file.size){if(state.pauseUpload){item.status=t('upload.paused_short');renderStage();throw Error(t('upload.paused'));}
       const response=await fetch('/api/chat-uploads/'+encodeURIComponent(item.id),{method:'PATCH',headers:{'x-csrf-token':state.csrf,'x-upload-offset':String(offset)},body:item.file.slice(offset,offset+4*1024*1024)});
-      const result=await response.json();if(!response.ok)throw Error(result.error?.message||'Opplasting feilet.');offset=result.received;
-      $('#uploadProgress').value=Math.round(((index-1)+offset/item.file.size)/total*100);$('#uploadStatus').textContent=`Laster opp ${index} av ${total}: ${offset} / ${item.file.size} byte`;
+      const result=await response.json();if(!response.ok)throw Error(result.error?.message||t('error.upload_failed'));offset=result.received;
+      $('#uploadProgress').value=Math.round(((index-1)+offset/item.file.size)/total*100);$('#uploadStatus').textContent=t('upload.progress',{index,total,offset,size:item.file.size});
     }
     item.status='staged';renderStage();
   }
@@ -189,11 +204,11 @@
     const result=await api(url,{method:'POST',body:{accept}});resetConversation();await refresh();
     if(accept&&result.chat_id){const joined=state.chats.find(item=>item.id===result.chat_id);if(joined)await openChat(joined);}
   }
-  function openViewer(message){const files=message.attachments||[],dialog=$('#attachmentViewer'),body=$('#viewerBody');$('#viewerTitle').textContent=files.length===1?files[0].name:`${files.length} vedlegg`;body.replaceChildren();
+  function openViewer(message){const files=message.attachments||[],dialog=$('#attachmentViewer'),body=$('#viewerBody');$('#viewerTitle').textContent=files.length===1?files[0].name:t('attachment.count',{count:files.length});body.replaceChildren();
     for(const file of files){const active=file.status==='ready'&&file.expires_at>new Date().toISOString(),row=document.createElement('div');row.className='viewer-file';const title=document.createElement('strong');title.textContent=file.name;row.append(title);
       if(active&&file.media_kind==='image'){const image=document.createElement('img');image.src=`/api/chat/files/${encodeURIComponent(file.id)}/preview`;image.alt=file.name;row.append(image);}
       if(active&&file.media_kind==='video'){const video=document.createElement('video');video.src=`/api/chat/files/${encodeURIComponent(file.id)}/preview`;video.controls=true;video.preload='metadata';row.append(video);}
-      if(active){const link=document.createElement('a');link.href=`/api/chat/files/${encodeURIComponent(file.id)}/download`;link.textContent='Last ned';row.append(link);}else{const expired=document.createElement('span');expired.textContent='Filen er utløpt og permanent slettet.';row.append(expired);}body.append(row);
+      if(active){const link=document.createElement('a');link.href=`/api/chat/files/${encodeURIComponent(file.id)}/download`;link.textContent=t('action.download');row.append(link);}else{const expired=document.createElement('span');expired.textContent=t('attachment.expired_sentence');row.append(expired);}body.append(row);
     }dialog.showModal();
   }
   $('#usernameSearch').addEventListener('input',searchChanged);
@@ -205,7 +220,7 @@
   }));
   $('#searchResults').addEventListener('click',run(async event=>{const button=event.target.closest('[data-user]');if(!button)return;const user=state.suggestions.find(item=>item.id===button.dataset.user);if(user)await chooseUser(user);}));
   $('#conversationList').addEventListener('click',run(async event=>{const button=event.target.closest('[data-chat]');if(!button)return;await openChat(state.chats.find(item=>item.id===button.dataset.chat));}));
-  $('#createGroup').addEventListener('click',()=>{state.mode='group';state.selected.clear();renderSelected();$('#groupBuilder').hidden=false;$('#inboxEmpty').hidden=true;$('#usernameSearch').focus();$('#searchStatus').textContent='Finn personer til gruppen.';});
+  $('#createGroup').addEventListener('click',()=>{state.mode='group';state.selected.clear();renderSelected();$('#groupBuilder').hidden=false;$('#inboxEmpty').hidden=true;$('#usernameSearch').focus();$('#searchStatus').textContent=t('search.group_people');});
   $('#cancelGroup').addEventListener('click',()=>{state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;searchChanged();renderInbox();});
   $('#selectedPeople').addEventListener('click',event=>{const button=event.target.closest('[data-remove]');if(!button)return;state.selected.delete(button.dataset.remove);renderSelected();searchChanged();});
   $('#confirmGroup').addEventListener('click',run(async()=>{if(!state.selected.size)return;const result=await api('/api/chats',{method:'POST',body:{name:$('#groupName').value,recipients:[...state.selected.keys()]}});state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;$('#groupName').value='';await refresh();const row=state.chats.find(item=>item.id===result.id);if(row)await openChat(row);}));
@@ -216,24 +231,24 @@
   $('#acceptInvite').addEventListener('click',run(()=>decideSelected(true)));$('#declineInvite').addEventListener('click',run(()=>decideSelected(false)));
   $('#olderMessages').addEventListener('click',run(async()=>{state.historyLimit+=50;const row=selectedRow();if(row)await updateConversation(row);}));
   $('#toggleDetails').addEventListener('click',run(async()=>{state.detailsOpen=!state.detailsOpen;$('#conversationDetails').hidden=!state.detailsOpen;$('#toggleDetails').setAttribute('aria-expanded',String(state.detailsOpen));await renderDetails(selectedRow());}));
-  $('#conversationDetails').addEventListener('click',run(async event=>{const block=event.target.closest('[data-block]'),cancel=event.target.closest('[data-cancel-invite]'),row=selectedRow();if(block&&confirm('Blokker denne brukeren fra direkte meldinger?')){await api('/api/chat/blocks',{method:'POST',body:{user_id:block.dataset.block}});await refresh();}if(cancel&&row){await api(`/api/chats/${row.id}/invites/${cancel.dataset.cancelInvite}`,{method:'DELETE'});await updateConversation(row);}}));
-  $('#inviteForm').addEventListener('submit',run(async event=>{event.preventDefault();const row=selectedRow(),name=$('#inviteName').value.trim();const result=await api('/api/chat/users?q='+encodeURIComponent(name));const person=result.users.find(item=>item.name.toLocaleLowerCase('no')===name.toLocaleLowerCase('no'));if(!person)throw Error('Fant ikke brukeren.');await api(`/api/chats/${row.id}/invites`,{method:'POST',body:{recipient_id:person.id}});$('#inviteName').value='';await updateConversation(row);}));
+  $('#conversationDetails').addEventListener('click',run(async event=>{const block=event.target.closest('[data-block]'),cancel=event.target.closest('[data-cancel-invite]'),row=selectedRow();if(block&&confirm(t('confirm.block'))){await api('/api/chat/blocks',{method:'POST',body:{user_id:block.dataset.block}});await refresh();}if(cancel&&row){await api(`/api/chats/${row.id}/invites/${cancel.dataset.cancelInvite}`,{method:'DELETE'});await updateConversation(row);}}));
+  $('#inviteForm').addEventListener('submit',run(async event=>{event.preventDefault();const row=selectedRow(),name=$('#inviteName').value.trim();const result=await api('/api/chat/users?q='+encodeURIComponent(name));const person=result.users.find(item=>item.name.toLocaleLowerCase()===name.toLocaleLowerCase());if(!person)throw Error(t('error.user_not_found'));await api(`/api/chats/${row.id}/invites`,{method:'POST',body:{recipient_id:person.id}});$('#inviteName').value='';await updateConversation(row);}));
   $('#leaveChat').addEventListener('click',run(async()=>{const row=selectedRow();if(!row)return;await api(`/api/chats/${row.id}/membership`,{method:'DELETE'});resetConversation();await refresh();}));
   for(const [button,input] of [['pickImage','imageInput'],['pickVideo','videoInput'],['pickFile','fileInput']])$('#'+button).addEventListener('click',()=>$('#'+input).click());
-  for(const id of ['imageInput','videoInput','fileInput'])$('#'+id).addEventListener('change',event=>{const current=draft();for(const file of event.target.files){if(current.files.length>=12){fail(Error('Velg høyst 12 vedlegg.'));break;}current.files.push({file,kind:mediaKind(file),url:URL.createObjectURL(file),id:null,status:''});}event.target.value='';renderStage();$('#uploadStatus').textContent='Vedlegg valgt. Trykk Send for å dele.';});
+  for(const id of ['imageInput','videoInput','fileInput'])$('#'+id).addEventListener('change',event=>{const current=draft();for(const file of event.target.files){if(current.files.length>=12){fail(Error(t('error.max_attachments')));break;}current.files.push({file,kind:mediaKind(file),url:URL.createObjectURL(file),id:null,status:''});}event.target.value='';renderStage();$('#uploadStatus').textContent=t('upload.selected');});
   $('#stagedFiles').addEventListener('click',run(async event=>{const button=event.target.closest('[data-remove-file]');if(!button)return;const current=draft(),[item]=current.files.splice(Number(button.dataset.removeFile),1);if(item?.id)await api('/api/chat-uploads/'+encodeURIComponent(item.id),{method:'DELETE'});if(item)URL.revokeObjectURL(item.url);current.pendingSend=null;renderStage();}));
   $('#messages').addEventListener('click',event=>{const button=event.target.closest('[data-view-message]');if(!button)return;const message=state.renderedMessages?.find(item=>item.id===Number(button.dataset.viewMessage));if(message)openViewer(message);});
   $('#closeViewer').addEventListener('click',()=>$('#attachmentViewer').close());
   $('#attachmentViewer').addEventListener('close',()=>{for(const video of $('#viewerBody').querySelectorAll('video'))video.pause();});
   $('#pauseUpload').addEventListener('click',()=>{state.pauseUpload=true;});
   $('#visible').addEventListener('change',run(async()=>{state.visible=$('#visible').checked;await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await renderDetails(selectedRow());}));
-  function connectSocket(){const url=new URL('/api/chat-socket',location.href);url.protocol=location.protocol==='https:'?'wss:':'ws:';const socket=new WebSocket(url);state.socket=socket;const status=$('#connectionStatus');status.hidden=false;status.textContent='Kobler til chat…';
+  function connectSocket(){const url=new URL('/api/chat-socket',location.href);url.protocol=location.protocol==='https:'?'wss:':'ws:';const socket=new WebSocket(url);state.socket=socket;const status=$('#connectionStatus');status.hidden=false;status.textContent=t('connection.connecting');
     socket.onopen=()=>{state.reconnect=0;status.hidden=true;run(refresh)();};
     socket.onmessage=run(async event=>{const message=JSON.parse(event.data);if(message.type==='connected')return;await refresh();});
-    socket.onclose=()=>{if(state.socket!==socket)return;status.hidden=false;status.textContent='Chat er frakoblet. Kobler til igjen…';const delay=Math.min(30000,1000*2**Math.min(state.reconnect++,5));setTimeout(connectSocket,delay);};
+    socket.onclose=()=>{if(state.socket!==socket)return;status.hidden=false;status.textContent=t('connection.reconnecting');const delay=Math.min(30000,1000*2**Math.min(state.reconnect++,5));setTimeout(connectSocket,delay);};
     socket.onerror=()=>socket.close();
   }
-  async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();return;}const value=new URLSearchParams(location.search).get('message'),targetMessage=value&&/^\d+$/.test(value)?Number(value):null,row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false,targetMessage:Number.isSafeInteger(targetMessage)?targetMessage:null});else{resetConversation();setNotice('Samtalen finnes ikke eller du har ikke tilgang.');}}
-  async function init(){try{const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();await resolveRoute();connectSocket();window.addEventListener('popstate',()=>run(resolveRoute)());setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}catch(error){if(error.status===401||/aktiv sesjon/i.test(error.message)){window.HeremeAuth.open({message:'Logg inn eller opprett en konto for å bruke chat.',onSuccess:()=>location.reload(),onCancel:()=>location.assign('/')});return;}throw error;}}
-  run(init)();
+  async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();return;}const value=new URLSearchParams(location.search).get('message'),targetMessage=value&&/^\d+$/.test(value)?Number(value):null,row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false,targetMessage:Number.isSafeInteger(targetMessage)?targetMessage:null});else{resetConversation();setNotice(t('error.no_access'));}}
+  async function init(){try{translateStatic();window.addEventListener('hereme:language',()=>run(languageChanged)());const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();await resolveRoute();connectSocket();window.addEventListener('popstate',()=>run(resolveRoute)());setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}catch(error){if(error.status===401||/aktiv sesjon/i.test(error.message)){window.HeremeAuth.open({message:t('auth.required'),onSuccess:()=>location.reload(),onCancel:()=>location.assign('/')});return;}throw error;}}
+  i18n().ready.then(()=>run(init)());
 })();

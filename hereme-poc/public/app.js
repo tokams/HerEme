@@ -2,6 +2,7 @@
 (() => {
   const $=selector=>document.querySelector(selector);
   const E=HeremePoster.escape;
+  const t=(key,params)=>window.HeremeI18n.t(`wall.${key}`,params);
   const csrfCookie=()=>document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf='))?.slice(12)?decodeURIComponent(document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf=')).slice(12)):'';
   const state={
     legacyToken:localStorage.getItem('hereme_token')||'',csrf:'',user:null,posts:[],meta:null,nextCursor:null,
@@ -18,9 +19,9 @@
     if(body!==undefined)headers['content-type']='application/json';
     let response;
     try{response=await fetch(url,{method,headers,body:form||(body===undefined?undefined:JSON.stringify(body))});}
-    catch{throw new Error('Ingen kontakt med serveren. Sjekk at run.cmd kjører.');}
+    catch{throw new Error(t('error.offline'));}
     const data=await response.json();
-    if(!response.ok){const error=new Error(data.error?.message||data.error||'Feil '+response.status);error.status=response.status;error.code=data.error?.code;throw error;}
+    if(!response.ok){const error=new Error(data.error?.message||data.error||t('error.http',{status:response.status}));error.status=response.status;error.code=data.error?.code;throw error;}
     return data;
   }
   function toast(message) {
@@ -35,40 +36,51 @@
   function renderPreferences() {
     const {layout,theme}=document.documentElement.dataset;
     for(const button of document.querySelectorAll('[data-action=layout]'))button.setAttribute('aria-pressed',button.dataset.layout===layout);
-    $('#themeToggle').textContent=theme==='dark'?'Lys modus':'Mørk modus';
+    $('#themeToggle').textContent=theme==='dark'?t('preferences.light'):t('preferences.dark');
     $('#themeToggle').setAttribute('aria-label',$('#themeToggle').textContent);
     $('#themeToggle').setAttribute('aria-pressed',theme==='light');
     document.querySelector('meta[name=theme-color]').content=theme==='light'?'#f2f1eb':'#0f1113';
     HeremePoster.fitTitles(document);
   }
+  function localizeChrome(){
+    const text=(selector,key)=>{const node=$(selector);if(node)node.textContent=t(key);};
+    const attr=(selector,name,key)=>{const node=$(selector);if(node)node.setAttribute(name,t(key));};
+    text('.skip-link','chrome.skip');text('.sort-control span','chrome.sort');text('#sortSelect option[value=new]','chrome.newest');text('#sortSelect option[value=hot]','chrome.hot');text('#sortSelect option[value=top]','chrome.top');
+    text('.utility-line span:first-child','chrome.utility_topic');text('.utility-line span:last-child','chrome.utility_demo');attr('.display-preferences','aria-label','chrome.display_options');attr('.view-switch','aria-label','chrome.desktop_view');attr('#leftPanel','aria-label','chrome.nav_categories');attr('.desktop-navigation','aria-label','chrome.explore');attr('.category-filters','aria-label','chrome.categories');attr('#simpleCategories','aria-label','chrome.categories');attr('#rightPanel','aria-label','chrome.activity');
+    document.title=t('chrome.page_title');attr('meta[name=description]','content','chrome.description');text('.header-search .sr-only','chrome.search_label');attr('#searchInput','placeholder','chrome.search_placeholder');attr('.logo','aria-label','chrome.logo_label');attr('#notificationButton','aria-label','account.notifications');attr('#filterToggle','aria-label','chrome.show_filters');text('#areaButton','chrome.areas');text('.create-label','chrome.new_poster');attr('.create-button','aria-label','feed.create');attr('.profile-chip','aria-label','account.your_profile');attr('.menu-button','aria-label','chrome.open_menu');
+    text('.view-switch [data-layout=simple]','chrome.simple');text('.view-switch [data-layout=advanced]','chrome.advanced');text('.desktop-navigation .eyebrow','chrome.neighbourhood');
+    const nav=document.querySelectorAll('.desktop-navigation .nav-link');if(nav[0])nav[0].lastChild.textContent=' '+t('chrome.whole_wall');if(nav[1])nav[1].lastChild.textContent=' '+t('feed.create');
+    text('.category-filters legend','chrome.categories');text('.reset-filters','chrome.all_categories');text('.sidebar-note .eyebrow','chrome.room_for_all');text('.sidebar-note > p:not([class])','chrome.tagline');text('.sidebar-note .muted-note','chrome.demo_notice');text('.sidebar-note button','chrome.about');text('.wall-toolbar h1','chrome.wall');if($('.wall-toolbar > span')?.lastChild)$('.wall-toolbar > span').lastChild.textContent=' '+t('chrome.posts_count_label');attr('#feed','aria-label','chrome.wall_posts');if($('#feed .loading-card'))text('#feed .loading-card','chrome.loading_wall');
+  }
   function renderWall() {
     $('#forumShell').hidden=false;$('#profileRoot').hidden=true;
-    $('#profileLabel').textContent=state.user?.name||'Bli med';
+    $('#profileLabel').textContent=state.user?.name||t('profile.join');
     $('#profileMonogram').textContent=state.user?.name[0].toUpperCase()||'○';
     $('#feedCounter').textContent=state.loadError?'':state.posts.length;
     $('#feed').innerHTML=state.loadError?
-      `<div class="empty-state"><h2>Kunne ikke hente veggen</h2><p>${E(state.loadError)}</p><button class="btn btn-secondary" data-action="retry-feed">Prøv igjen</button></div>`:
-      state.posts.length?state.posts.map(HeremeFeed.card).join('')+(state.nextCursor?'<button class="load-more btn btn-secondary" data-action="load-more">Vis flere innlegg</button>':''):
-      `<div class="empty-state"><h2>${state.categories.length?'Det e stille her ennå.':'Ingen kategorier valgt'}</h2><p>${state.categories.length?'Del en tanke eller et øyeblikk.':'Kryss av en kategori for å vise innlegg.'}</p><button class="btn btn-secondary" data-action="${state.categories.length?'compose':'home'}">${state.categories.length?'＋ Legg ut':'Vis alle kategorier'}</button></div>`;
+      `<div class="empty-state"><h2>${E(t('feed.load_error_title'))}</h2><p>${E(state.loadError)}</p><button class="btn btn-secondary" data-action="retry-feed">${E(t('common.retry'))}</button></div>`:
+      state.posts.length?state.posts.map(HeremeFeed.card).join('')+(state.nextCursor?`<button class="load-more btn btn-secondary" data-action="load-more">${E(t('feed.load_more'))}</button>`:''):
+      `<div class="empty-state"><h2>${E(t(state.categories.length?'feed.empty':'feed.no_categories'))}</h2><p>${E(t(state.categories.length?'feed.empty_help':'feed.no_categories_help'))}</p><button class="btn btn-secondary" data-action="${state.categories.length?'compose':'home'}">${E(t(state.categories.length?'feed.create':'feed.show_all_categories'))}</button></div>`;
     HeremePoster.enhance($('#feed'));
     $('#activityPanel').innerHTML=HeremeShell.activity(state.activity,state.loadError);
   }
   function rememberWall(){history.replaceState({...history.state,wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',location.href);}
   function profileView(){
     const root=$('#profileRoot');$('#forumShell').hidden=true;root.hidden=false;
-    if(!state.profile){root.innerHTML='<p class="loading-card">Henter profilen …</p>';return;}
-    const {profile,metrics,posts,next_cursor}=state.profile,stat=(label,value)=>`<div class="profile-stat"><b>${value}</b><span>${label}</span></div>`;
-    root.innerHTML=`<section class="profile-header"><div><p class="eyebrow">MIN PROFIL</p><h1>@${E(profile.name)}</h1><p class="muted-note">Medlem siden ${E(String(profile.created_at).slice(0,10))}</p><div class="profile-stats">${stat('Innlegg',metrics.post_count)}${stat('Oppstemmer mottatt',metrics.upvotes_received)}${stat('Kommentarer mottatt',metrics.comments_received)}${stat('Direkte chatter',metrics.direct_chat_count)}${stat('Gruppechatter',metrics.group_chat_count)}</div></div><div class="profile-actions"><button class="btn btn-secondary" data-action="menu">Kontoinnstillinger</button><button class="btn btn-secondary" data-action="profile-wall">Til veggen</button></div></section><section class="profile-posts"><header><div><p class="eyebrow">MINE INNLEGG</p><b>${posts.length?`${posts.length} vist`: 'Ingen innlegg ennå'}</b></div><label>Sorter <select id="profileSort"><option value="new"${state.profileSort==='new'?' selected':''}>Nyeste</option><option value="top"${state.profileSort==='top'?' selected':''}>Høyest score</option></select></label></header>${posts.length?`<ol class="profile-post-list">${posts.map(post=>`<li><button class="profile-post-row" data-action="profile-post" data-id="${post.id}"><span class="profile-date">${E(String(post.created_at).slice(0,10))}</span><span class="profile-category">${E(post.category||'ukjent')}</span><strong>${E(post.title)}</strong><span>${E(post.status)} · ${post.score>=0?'+':''}${post.score}</span><span>${post.comment_count} svar</span></button></li>`).join('')}</ol>${next_cursor?'<button class="btn btn-secondary" data-action="profile-more">Vis flere</button>':''}`:'<p class="profile-empty">Du har ikke publisert noe ennå.</p>'}</section>`;
+    if(!state.profile){root.innerHTML=`<p class="loading-card">${E(t('profile.loading'))}</p>`;return;}
+    const {profile,metrics,posts,next_cursor}=state.profile,stat=(key,value)=>`<div class="profile-stat"><b>${value}</b><span>${E(t(`profile.${key}`))}</span></div>`;
+    root.innerHTML=`<section class="profile-header"><div><p class="eyebrow">${E(t('profile.heading'))}</p><h1>@${E(profile.name)}</h1><p class="muted-note">${E(t('profile.member_since',{date:String(profile.created_at).slice(0,10)}))}</p><div class="profile-stats">${stat('posts',metrics.post_count)}${stat('upvotes',metrics.upvotes_received)}${stat('comments',metrics.comments_received)}${stat('direct_chats',metrics.direct_chat_count)}${stat('group_chats',metrics.group_chat_count)}</div></div><div class="profile-actions"><button class="btn btn-secondary" data-action="menu">${E(t('profile.account_settings'))}</button><button class="btn btn-secondary" data-action="profile-wall">${E(t('route.to_wall'))}</button></div></section><section class="profile-posts"><header><div><p class="eyebrow">${E(t('profile.my_posts'))}</p><b>${E(posts.length?t('profile.shown',{count:posts.length}):t('profile.no_posts'))}</b></div><label>${E(t('profile.sort'))} <select id="profileSort"><option value="new"${state.profileSort==='new'?' selected':''}>${E(t('profile.newest'))}</option><option value="top"${state.profileSort==='top'?' selected':''}>${E(t('profile.top_score'))}</option></select></label></header>${posts.length?`<ol class="profile-post-list">${posts.map(post=>`<li><button class="profile-post-row" data-action="profile-post" data-id="${post.id}"><span class="profile-date">${E(String(post.created_at).slice(0,10))}</span><span class="profile-category">${E(post.category||t('profile.unknown'))}</span><strong>${E(post.title)}</strong><span>${E(post.status)} · ${post.score>=0?'+':''}${post.score}</span><span>${E(t('profile.reply_count',{count:post.comment_count}))}</span></button></li>`).join('')}</ol>${next_cursor?`<button class="btn btn-secondary" data-action="profile-more">${E(t('profile.show_more'))}</button>`:''}`:`<p class="profile-empty">${E(t('profile.empty'))}</p>`}</section>`;
+    [...root.querySelectorAll('.profile-post-row')].forEach((row,index)=>{const post=posts[index],cell=row.querySelectorAll('span')[2];if(post&&cell)cell.textContent=`${statusLabel(post.status)} · ${post.score>=0?'+':''}${post.score}`;});
   }
   async function loadProfile({append=false}={}){const params=new URLSearchParams({sort:state.profileSort,limit:'20'});if(append&&state.profileCursor)params.set('cursor',state.profileCursor);const result=await api('/api/me/summary?'+params);if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];state.profile=result;state.profileCursor=result.next_cursor;profileView();}
   async function applyRoute({fromPop=false}={}){
     const route=location.pathname,params=new URLSearchParams(location.search);
     window.HeremePwa?.updateInstallUi();
     if(route==='/me'){
-      if(!state.user){openAuth('Logg inn eller opprett en konto for å se profilen din.',async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
+      if(!state.user){openAuth(t('account.login_for_profile'),async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
       await loadProfile();return;
     }
-    if(route!=='/'){document.title='HerEme · Fant ikke siden';$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML='<section class="empty-state"><h1>Fant ikke siden</h1><button class="btn btn-primary" data-action="profile-wall">Til veggen</button></section>';return;}
+    if(route!=='/'){document.title=t('route.not_found_title');$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('route.not_found'))}</h1><button class="btn btn-primary" data-action="profile-wall">${E(t('route.to_wall'))}</button></section>`;return;}
     if(history.state?.wall){const wall=history.state.wall;state.categories=wall.categories||state.categories;state.sort=wall.sort||state.sort;state.query=wall.query||'';$('#searchInput').value=state.query;$('#sortSelect').value=state.sort;renderFilters();}
     renderWall();const id=Number(params.get('post'));if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
   }
@@ -89,10 +101,10 @@
     document.body.classList.toggle('modal-open',locked);
     for(const element of [$('.masthead'),$('.display-preferences'),$('#forumShell')])element.inert=locked;
   }
-  addEventListener('hereme:passkey-invite',()=>toast('Du kan lagre en passnøkkel fra profilmenyen → Sikkerhet · Passnøkler.'));
+  addEventListener('hereme:passkey-invite',()=>toast(t('account.passkey_invite')));
   function wrapper(title,body,footer='',kind='') {
     return `<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel ${kind}" role="dialog" aria-modal="true" aria-label="${E(title)}">
-      <header class="modal-header"><h2>${E(title)}</h2><button class="modal-close" data-action="close-modal" aria-label="Lukk">× <span>Lukk</span></button></header>
+      <header class="modal-header"><h2>${E(title)}</h2><button class="modal-close" data-action="close-modal" aria-label="${E(t('common.close'))}">× <span>${E(t('common.close'))}</span></button></header>
       <div class="modal-content">${body}</div>${footer?`<footer class="modal-footer">${footer}</footer>`:''}</section></div>`;
   }
   function resetPhoto() {
@@ -117,34 +129,44 @@
     if(location.search.includes('post=')&&!fromRoute){history.back();return;}
   }
   function profileModal() {
-    if(state.user)return wrapper('Din profil',`<h3>Javel, ${E(state.user.name)}!</h3><p>Dette er en pseudonym konto. Lagre gjenopprettingsnøkkelen for å bruke kontoen på en annen enhet.</p><button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-secondary" data-action="logout">Logg ut</button><p><a href="/privacy.html">Personvern</a> · <a href="/rules.html">Fellesskapsregler</a></p>`);
-    return wrapper('Bli med i drøsen',`<p>Velg et unikt pseudonym. Du får en gjenopprettingsnøkkel som vises én gang.</p><form id="profileForm" class="form-stack" autocomplete="on"><label class="field" for="nicknameInput"><span>Pseudonym</span><input id="nicknameInput" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><button class="btn btn-primary" type="submit">Opprett pseudonym →</button></form><details><summary>Har du allerede en nøkkel?</summary><form id="recoverForm" class="form-stack" autocomplete="on"><label class="field" for="recoverName"><span>Pseudonym</span><input id="recoverName" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><label class="field" for="recoverKey"><span>Gjenopprettingsnøkkel</span><input id="recoverKey" name="password" type="password" autocomplete="current-password" required></label><button class="btn btn-secondary">Logg inn</button></form></details>`);
+    if(state.user)return wrapper(t('account.your_profile'),`<h3>${E(t('account.greeting',{name:state.user.name}))}</h3><p>${E(t('account.pseudonym_help'))}</p><button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-secondary" data-action="logout">${E(t('account.logout'))}</button><p><a href="/privacy.html">${E(t('account.privacy'))}</a> · <a href="/rules.html">${E(t('account.rules'))}</a></p>`);
+    return wrapper(t('account.join'),`<p>${E(t('account.join_help'))}</p><form id="profileForm" class="form-stack" autocomplete="on"><label class="field" for="nicknameInput"><span>${E(t('account.pseudonym'))}</span><input id="nicknameInput" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><button class="btn btn-primary" type="submit">${E(t('account.create_pseudonym'))} →</button></form><details><summary>${E(t('account.have_key'))}</summary>${loginForm()}</details>`);
   }
-  function loginForm(){return `<form id="recoverForm" class="form-stack account-login" autocomplete="on"><label class="field" for="recoverName"><span>Pseudonym</span><input id="recoverName" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><label class="field" for="recoverKey"><span>Gjenopprettingsnøkkel</span><input id="recoverKey" name="password" type="password" autocomplete="current-password" required></label><button class="btn btn-primary" type="submit">Logg inn →</button></form>`;}
+  function loginForm(){return `<form id="recoverForm" class="form-stack account-login" autocomplete="on"><label class="field" for="recoverName"><span>${E(t('account.pseudonym'))}</span><input id="recoverName" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><label class="field" for="recoverKey"><span>${E(t('account.recovery_key'))}</span><input id="recoverKey" name="password" type="password" autocomplete="current-password" required></label><button class="btn btn-primary" type="submit">${E(t('account.login'))} →</button></form>`;}
   function accountMenu(){
-    const links=`<p class="account-links"><a href="/rules.html">Fellesskapsregler</a> · <a href="/privacy.html">Personvern</a></p>`;
-    const connection=state.meta?.addresses?`<details class="connection-details"><summary>Åpne på mobilen lokalt</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="QR-kode til denne instansen"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">Kopier adressen</button></details>`:'';
-    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?'<button class="btn btn-primary" data-action="staff-panel">Administrasjon og moderering</button>':'';return wrapper('Din profil',`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">Logget inn som</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} → Min profil</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="notifications">Varslinger</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-danger" data-action="logout">Logg ut</button></div>${connection}${links}`);}
-    return wrapper('Konto',`<p>Logg inn eller opprett en pseudonym konto.</p><button class="btn btn-primary" data-action="auth-login">Logg inn</button><button class="btn btn-secondary" data-action="auth-register">Opprett konto</button>${connection}${links}`);
+    const links=`<p class="account-links"><a href="/rules.html">${E(t('account.rules'))}</a> · <a href="/privacy.html">${E(t('account.privacy'))}</a></p>`;
+    const connection=state.meta?.addresses?`<details class="connection-details"><summary>${t('connection.open_mobile')}</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="${t('connection.qr_alt')}"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">${t('connection.copy')}</button></details>`:'';
+    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?`<button class="btn btn-primary" data-action="staff-panel">${E(t('account.staff'))}</button>`:'';return wrapper(t('account.your_profile'),`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">${E(t('account.logged_in_as'))}</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} → ${E(t('account.my_profile'))}</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="notifications">${E(t('account.notifications'))}</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-danger" data-action="logout">${E(t('account.logout'))}</button></div>${connection}${links}`);}
+    return wrapper(t('account.account'),`<p>${E(t('account.login_or_create'))}</p><button class="btn btn-primary" data-action="auth-login">${E(t('account.login'))}</button><button class="btn btn-secondary" data-action="auth-register">${E(t('account.create'))}</button>${connection}${links}`);
   }
-  const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error('Skriv en begrunnelse på minst tre tegn.');state.staffReason=value;return value;};
+  const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error(t('staff.reason_required'));state.staffReason=value;return value;};
+  const reportReasonLabel=value=>{const key={personal:'personal',Personopplysninger:'personal',harassment:'harassment',Trakassering:'harassment',illegal:'illegal','Ulovlig innhold':'illegal',spam:'spam','Spam / svindel':'spam',other:'other',Annet:'other'}[value];return key?t(`report.${key}`):value;};
+  const statusLabel=value=>['published','review','hidden','rejected','active','deactivated','deleted'].includes(value)?t(`status.${value}`):value;
+  const roleLabel=value=>['member','moderator','admin','operator'].includes(value)?t(`role.${value}`):value;
+  const rolesLabel=values=>values.map(roleLabel).join(', ');
+  function localizeStaffIdentifiers(){
+    document.querySelectorAll('[data-staff-field=status] option').forEach(option=>{option.textContent=statusLabel(option.value);});
+    if(state.staffTab==='posts')document.querySelectorAll('.staff-table tbody tr').forEach((row,index)=>{if(!row.querySelector('[data-staff-field=status]')&&state.staff.posts[index])row.cells[3].textContent=statusLabel(state.staff.posts[index].status);});
+    if(state.staffTab!=='users')return;
+    [...document.querySelectorAll('.staff-table tbody tr')].forEach((row,index)=>{const user=state.staff.users[index],cells=row.cells;if(!user||!cells)return;cells[0].querySelector('small').textContent=statusLabel(user.status);cells[1].textContent=rolesLabel(user.roles);});
+  }
   function staffPanel(){
-    if(!state.staff)return wrapper('Administrasjon og moderering','<p class="loading-card">Henter serverinnhold …</p>','','staff-modal');
+    if(!state.staff)return wrapper(t('staff.title'),`<p class="loading-card">${E(t('staff.loading'))}</p>`,'','staff-modal');
     const admin=state.user.capabilities.includes('content:manage'),tabs=admin?['posts','users','comments','reports']:['posts'];
-    const labels={posts:'Innlegg',users:'Brukere',comments:'Kommentarer',reports:'Rapporter'};
+    const labels={posts:t('staff.posts'),users:t('staff.users'),comments:t('staff.comments'),reports:t('staff.reports')};
     const nav=`<nav class="staff-tabs">${tabs.map(tab=>`<button class="btn btn-secondary" data-action="staff-tab" data-tab="${tab}" aria-pressed="${state.staffTab===tab}">${labels[tab]}</button>`).join('')}</nav>`;
     let rows='';
-    if(state.staffTab==='posts')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>Innhold</th><th>Forfatter</th><th>Status</th><th>Poeng</th><th>Handling</th></tr></thead><tbody>${state.staff.posts.map(post=>`<tr><td>${post.id}</td><td>${admin?`<input data-staff-field="title" data-id="${post.id}" value="${E(post.title)}" maxlength="160"><textarea data-staff-field="body" data-id="${post.id}" maxlength="3000">${E(post.body)}</textarea><select data-staff-field="category" data-id="${post.id}">${HeremeThemes.ids.map(id=>`<option value="${id}"${id===post.category?' selected':''}>${E(HeremeThemes.get(id).label)}</option>`).join('')}</select>`:`<b>${E(post.title)}</b>`}</td><td>${E(post.author)}</td><td>${admin?`<select data-staff-field="status" data-id="${post.id}">${['published','review','hidden','rejected'].map(value=>`<option${value===post.status?' selected':''}>${value}</option>`).join('')}</select>`:E(post.status)}</td><td>${admin?`<input type="number" data-staff-field="score" data-id="${post.id}" value="${post.score}" min="-1000000" max="1000000">`:post.score}</td><td class="staff-actions">${admin?`<button class="btn btn-primary" data-action="staff-save-post" data-id="${post.id}">Lagre</button><button class="btn btn-danger" data-action="staff-delete-post" data-id="${post.id}">Slett</button>`:''}<button class="btn btn-secondary" data-action="staff-moderate" data-mode="${post.status==='hidden'?'publish':'hide'}" data-id="${post.id}">${post.status==='hidden'?'Gjenopprett':'Sensurer'}</button></td></tr>`).join('')}</tbody></table>`;
-    if(state.staffTab==='users')rows=`<table class="staff-table"><thead><tr><th>Pseudonym</th><th>Roller</th><th>Innhold</th><th>Slett</th></tr></thead><tbody>${state.staff.users.map(user=>`<tr><td>${E(user.name)}<br><small>${E(user.status)}</small></td><td>${E(user.roles.join(', '))}</td><td>${user.post_count} innlegg · ${user.comment_count} kommentarer · ${user.vote_count} stemmer</td><td><label><input type="checkbox" data-delete-posts="${E(user.id)}"> Slett også innlegg</label><button class="btn btn-danger" data-action="staff-delete-user" data-user-id="${E(user.id)}"${user.id===state.user.id?' disabled':''}>Slett bruker</button></td></tr>`).join('')}</tbody></table>`;
-    if(state.staffTab==='comments')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>Innlegg</th><th>Forfatter</th><th>Kommentar</th><th>Handling</th></tr></thead><tbody>${state.staff.comments.map(comment=>`<tr><td>${comment.id}</td><td>${E(comment.post_title)}</td><td>${E(comment.author)}</td><td><textarea data-comment-body="${comment.id}" maxlength="1200">${E(comment.body)}</textarea></td><td class="staff-actions"><button class="btn btn-primary" data-action="staff-save-comment" data-id="${comment.id}">Lagre</button><button class="btn btn-danger" data-action="staff-delete-comment" data-id="${comment.id}">Slett tråd</button></td></tr>`).join('')}</tbody></table>`;
-    if(state.staffTab==='reports')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>Innlegg</th><th>Rapportør</th><th>Grunn</th><th>Status</th></tr></thead><tbody>${state.staff.reports.map(report=>`<tr><td>${report.id}</td><td>${E(report.post_title)}</td><td>${E(report.reporter||'slettet')}</td><td>${E(report.reason)}</td><td>${report.resolved?'løst':'åpen'}</td></tr>`).join('')}</tbody></table>`;
-    const summary=admin?`${state.staff.stats.posts} innlegg · ${state.staff.stats.users} brukere · ${state.staff.stats.comments} kommentarer · ${state.staff.stats.reports} rapporter`:`${state.staff.stats.posts} innlegg`;
-    return wrapper('Administrasjon og moderering',`<p class="notice">${summary}. Alle endringer loggføres.</p><label class="field"><span>Begrunnelse for neste handling</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="Hvorfor gjøres endringen?"></label>${nav}<div class="staff-table-wrap">${rows}</div>`,'','staff-modal');
+    if(state.staffTab==='posts')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>${t('staff.content')}</th><th>${t('staff.author')}</th><th>${t('staff.status')}</th><th>${t('staff.score')}</th><th>${t('staff.action')}</th></tr></thead><tbody>${state.staff.posts.map(post=>`<tr><td>${post.id}</td><td>${admin?`<input data-staff-field="title" data-id="${post.id}" value="${E(post.title)}" maxlength="160"><textarea data-staff-field="body" data-id="${post.id}" maxlength="3000">${E(post.body)}</textarea><select data-staff-field="category" data-id="${post.id}">${HeremeThemes.ids.map(id=>`<option value="${id}"${id===post.category?' selected':''}>${E(HeremeThemes.get(id).label)}</option>`).join('')}</select>`:`<b>${E(post.title)}</b>`}</td><td>${E(post.author)}</td><td>${admin?`<select data-staff-field="status" data-id="${post.id}">${['published','review','hidden','rejected'].map(value=>`<option${value===post.status?' selected':''}>${value}</option>`).join('')}</select>`:E(post.status)}</td><td>${admin?`<input type="number" data-staff-field="score" data-id="${post.id}" value="${post.score}" min="-1000000" max="1000000">`:post.score}</td><td class="staff-actions">${admin?`<button class="btn btn-primary" data-action="staff-save-post" data-id="${post.id}">${t('staff.save')}</button><button class="btn btn-danger" data-action="staff-delete-post" data-id="${post.id}">${t('staff.delete')}</button>`:''}<button class="btn btn-secondary" data-action="staff-moderate" data-mode="${post.status==='hidden'?'publish':'hide'}" data-id="${post.id}">${t(post.status==='hidden'?'staff.restore':'staff.hide')}</button></td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='users')rows=`<table class="staff-table"><thead><tr><th>${t('staff.pseudonym')}</th><th>${t('staff.roles')}</th><th>${t('staff.content')}</th><th>${t('staff.delete')}</th></tr></thead><tbody>${state.staff.users.map(user=>`<tr><td>${E(user.name)}<br><small>${E(user.status)}</small></td><td>${E(user.roles.join(', '))}</td><td>${t('staff.user_content',{posts:user.post_count,comments:user.comment_count,votes:user.vote_count})}</td><td><label><input type="checkbox" data-delete-posts="${E(user.id)}"> ${t('staff.delete_posts')}</label><button class="btn btn-danger" data-action="staff-delete-user" data-user-id="${E(user.id)}"${user.id===state.user.id?' disabled':''}>${t('staff.delete_user')}</button></td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='comments')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>${t('staff.post')}</th><th>${t('staff.author')}</th><th>${t('staff.comment')}</th><th>${t('staff.action')}</th></tr></thead><tbody>${state.staff.comments.map(comment=>`<tr><td>${comment.id}</td><td>${E(comment.post_title)}</td><td>${E(comment.author)}</td><td><textarea data-comment-body="${comment.id}" maxlength="1200">${E(comment.body)}</textarea></td><td class="staff-actions"><button class="btn btn-primary" data-action="staff-save-comment" data-id="${comment.id}">${t('staff.save')}</button><button class="btn btn-danger" data-action="staff-delete-comment" data-id="${comment.id}">${t('staff.delete_thread')}</button></td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='reports')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>${t('staff.post')}</th><th>${t('staff.reporter')}</th><th>${t('staff.reason')}</th><th>${t('staff.status')}</th></tr></thead><tbody>${state.staff.reports.map(report=>`<tr><td>${report.id}</td><td>${E(report.post_title)}</td><td>${E(report.reporter||t('staff.deleted'))}</td><td>${E(reportReasonLabel(report.reason))}</td><td>${t(report.resolved?'staff.resolved':'staff.open')}</td></tr>`).join('')}</tbody></table>`;
+    const summary=admin?t('staff.summary',state.staff.stats):`${state.staff.stats.posts} ${t('staff.posts').toLowerCase()}`;
+    return wrapper(t('staff.title'),`<p class="notice">${summary}. ${t('staff.audit_notice')}</p><label class="field"><span>${t('staff.next_reason')}</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="${t('staff.reason_placeholder')}"></label>${nav}<div class="staff-table-wrap">${rows}</div>`,'','staff-modal');
   }
   async function loadStaff(){state.staff=await api('/api/admin/overview');if(!state.user.capabilities.includes('content:manage'))state.staffTab='posts';}
   async function openStaffPanel(){state.staff=null;openModal('staff');await loadStaff();renderModal();}
   async function refreshStaff(message){await loadStaff();renderModal({preserve:true});await loadPosts();if(message)toast(message);}
-  async function refreshIdentity(){const current=await api('/api/me');state.user=current.user;state.csrf=current.csrf_token||csrfCookie();state.legacyToken='';localStorage.removeItem('hereme_token');}
+  async function refreshIdentity(){const current=await api('/api/me');state.user=current.user;await window.HeremeI18n.applyAccountLanguage?.(current.user);state.csrf=current.csrf_token||csrfCookie();state.legacyToken='';localStorage.removeItem('hereme_token');}
   async function loadNotificationBadge(){if(!state.user)return;const result=await api('/api/notifications');$('#notificationButton').hidden=false;$('#notificationBadge').textContent=String(result.unread);$('#notificationBadge').hidden=!result.unread;}
   async function refreshNotificationsLive(){await loadNotificationBadge();if(state.modal==='notifications'){await loadNotifications();renderModal({preserve:true});}}
   function scheduleNotificationRefresh(){clearTimeout(state.notificationRefresh);state.notificationRefresh=setTimeout(()=>refreshNotificationsLive().catch(()=>{}),100);}
@@ -153,25 +175,25 @@
     socket.onclose=()=>{if(state.notificationSocket!==socket)return;state.notificationSocket=null;if(!state.user)return;const delay=Math.min(30000,1000*2**Math.min(state.notificationReconnect++,5));setTimeout(connectNotificationSocket,delay);};socket.onerror=()=>socket.close();}
   async function loadNotifications(){const [config,devices,settings,inbox]=await Promise.all([api('/api/push/config'),api('/api/push/subscriptions'),api('/api/notification-settings'),api('/api/notifications')]);state.notificationData={config,devices:devices.subscriptions,settings:settings.settings,inbox:inbox.notifications,unread:inbox.unread};}
   function notificationPanel(){
-    if(!state.notificationData)return wrapper('Varslinger','<p class="loading-card">Henter varslinger …</p>');
+    if(!state.notificationData)return wrapper(t('notifications.title'),`<p class="loading-card">${t('notifications.loading')}</p>`);
     const {config,devices,settings,inbox}=state.notificationData,deviceId=localStorage.getItem('hereme_push_subscription_id'),device=devices.find(item=>item.id===deviceId),supported='Notification' in window&&'PushManager' in window&&'serviceWorker' in navigator;
-    let status='Enhetsvarslinger er ikke aktivert. Trykk «Aktiver på denne enheten» for å åpne nettleserens eller operativsystemets tillatelsesdialog.',action='<button class="btn btn-primary" data-action="push-enable">Aktiver på denne enheten</button>';
-    if(!config.enabled){status='Varslingsinnboksen er aktiv, men operativsystemvarslinger er slått av på serveren. En administrator må aktivere Web Push før enheten kan be om tillatelse.';action='';}
-    else if(!supported){status='Denne nettleseren støtter ikke push-varslinger.';action='';}
-    else if(window.HeremePwa?.ios()&&!window.HeremePwa.standalone()){status='På iPhone og iPad må du først legge HerEme til på Hjem-skjermen og åpne appen derfra.';action='<button class="btn btn-secondary" data-action="pwa-install-help">Vis installasjonshjelp</button>';}
-    else if(Notification.permission==='denied'){status='Operativsystemvarslinger er blokkert. Tillat varslinger for HerEme i nettleser- eller enhetsinnstillingene, og åpne dette panelet igjen.';action='';}
-    else if(device){status='Operativsystemvarslinger er aktivert på denne enheten.';action='<button class="btn btn-danger" data-action="push-disable">Slå av på denne enheten</button>';}
-    else if(window.HeremePwa?.canInstall)action='<button class="btn btn-secondary" data-action="pwa-install">Installer HerEme</button>'+action;
-    const labels={request:'Meldingsforespørsel',invite:'Gruppeinvitasjon',accepted:'Forespørsel godtatt',declined:'Forespørsel avslått',message:'Ny chatmelding',post_reply:'Svar på innlegget ditt',comment_reply:'Svar på kommentaren din'};
-    const choices=[['chat_messages','Chatmeldinger'],['chat_requests_and_invitations','Forespørsler og invitasjoner'],['forum_replies','Svar på innlegg og kommentarer']].map(([name,label])=>`<label class="notification-choice"><input type="checkbox" data-notification-setting="${name}"${settings[name]?' checked':''}> ${label}</label>`).join('');
-    const rows=inbox.length?inbox.map(item=>`<button class="notification-row${item.read_at?'':' unread'}" data-action="notification-open" data-id="${E(item.notification_id)}" data-route="${E(item.route)}"><img src="/assets/icons/notification.svg" alt=""><span><b>${E(labels[item.kind]||'Varsling')}</b><small>${E(String(item.created_at).replace('T',' ').slice(0,16))}</small></span></button>`).join(''):'<p class="profile-empty">Ingen varslinger ennå.</p>';
-    return wrapper('Varslinger',`<section class="notification-settings"><p>${E(status)}</p><div class="notification-actions">${action}</div><fieldset><legend>Hva vil du varsles om?</legend><p class="muted-note">Disse valgene filtrerer hendelser. De gir ikke enheten tillatelse til å vise operativsystemvarslinger.</p>${choices}</fieldset></section><section class="notification-inbox"><h3>Innboks</h3>${rows}</section>`);
+    let status=t('notifications.device_off'),action=`<button class="btn btn-primary" data-action="push-enable">${t('notifications.enable')}</button>`;
+    if(!config.enabled){status=t('notifications.server_off');action='';}
+    else if(!supported){status=t('notifications.unsupported');action='';}
+    else if(window.HeremePwa?.ios()&&!window.HeremePwa.standalone()){status=t('notifications.ios_help');action=`<button class="btn btn-secondary" data-action="pwa-install-help">${t('notifications.install_help')}</button>`;}
+    else if(Notification.permission==='denied'){status=t('notifications.blocked');action='';}
+    else if(device){status=t('notifications.device_on');action=`<button class="btn btn-danger" data-action="push-disable">${t('notifications.disable')}</button>`;}
+    else if(window.HeremePwa?.canInstall)action=`<button class="btn btn-secondary" data-action="pwa-install">${t('notifications.install')}</button>`+action;
+    const labels={request:'request',invite:'invite',accepted:'accepted',declined:'declined',message:'message',post_reply:'post_reply',comment_reply:'comment_reply'};
+    const choices=['chat_messages','chat_requests_and_invitations','forum_replies'].map(name=>`<label class="notification-choice"><input type="checkbox" data-notification-setting="${name}"${settings[name]?' checked':''}> ${t(`notifications.${name}`)}</label>`).join('');
+    const rows=inbox.length?inbox.map(item=>`<button class="notification-row${item.read_at?'':' unread'}" data-action="notification-open" data-id="${E(item.notification_id)}" data-route="${E(item.route)}"><img src="/assets/icons/notification.svg" alt=""><span><b>${E(t(`notifications.${labels[item.kind]||'generic'}`))}</b><small>${E(String(item.created_at).replace('T',' ').slice(0,16))}</small></span></button>`).join(''):`<p class="profile-empty">${t('notifications.empty')}</p>`;
+    return wrapper(t('notifications.title'),`<section class="notification-settings"><p>${E(status)}</p><div class="notification-actions">${action}</div><fieldset><legend>${t('notifications.which')}</legend><p class="muted-note">${t('notifications.filter_help')}</p>${choices}</fieldset></section><section class="notification-inbox"><h3>${t('notifications.inbox')}</h3>${rows}</section>`);
   }
   async function openNotifications(){state.notificationData=null;openModal('notifications');await loadNotifications();renderModal();}
   const pushKey=value=>{const padding='='.repeat((4-value.length%4)%4),raw=atob((value+padding).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,char=>char.charCodeAt(0));};
-  async function enablePush(){const config=state.notificationData.config;if(!config.enabled)throw new Error('Web Push er ikke aktivert på serveren.');const permission=await Notification.requestPermission();if(permission!=='granted'){await loadNotifications();renderModal();if(permission==='default')toast('Tillatelsen ble ikke gitt. Prøv igjen når du er klar.');return;}const registration=await window.HeremePwa.ready;if(!registration)throw new Error('Service Worker kunne ikke startes.');let subscription=await registration.pushManager.getSubscription();if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushKey(config.public_key)});try{const result=await api('/api/push/subscriptions',{method:'POST',body:{subscription:subscription.toJSON(),device_label:navigator.userAgent.slice(0,80)}});localStorage.setItem('hereme_push_subscription_id',result.subscription.id);}catch(error){await subscription.unsubscribe();throw error;}await loadNotifications();renderModal();toast('Operativsystemvarslinger er aktivert på denne enheten.');}
+  async function enablePush(){const config=state.notificationData.config;if(!config.enabled)throw new Error(t('notifications.web_push_off'));const permission=await Notification.requestPermission();if(permission!=='granted'){await loadNotifications();renderModal();if(permission==='default')toast(t('notifications.permission_not_granted'));return;}const registration=await window.HeremePwa.ready;if(!registration)throw new Error(t('notifications.worker_failed'));let subscription=await registration.pushManager.getSubscription();if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushKey(config.public_key)});try{const result=await api('/api/push/subscriptions',{method:'POST',body:{subscription:subscription.toJSON(),device_label:navigator.userAgent.slice(0,80)}});localStorage.setItem('hereme_push_subscription_id',result.subscription.id);}catch(error){await subscription.unsubscribe();throw error;}await loadNotifications();renderModal();toast(t('notifications.device_on'));}
   async function disablePush(){const id=localStorage.getItem('hereme_push_subscription_id');if(id)await api('/api/push/subscriptions/'+encodeURIComponent(id),{method:'DELETE'});const registration=await window.HeremePwa.ready,subscription=await registration?.pushManager.getSubscription();await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');await loadNotifications();renderModal();}
-  function openAuth(message,onSuccess,mode='login'){window.HeremeAuth.open({mode,message,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast('Lagre gjenopprettingsnøkkelen din på et trygt sted.');}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
+  function openAuth(message,onSuccess,mode='login'){window.HeremeAuth.open({mode,message,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast(t('recovery.store_safely'));}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
   function requireUser(action) {
     if(state.user)return true;
     openAuth('',async()=>action?.());return false;
@@ -182,25 +204,30 @@
     const comment=preserve?$('#commentText')?.value:undefined;
     let html='';
     if(state.modal==='profile')html=profileModal();
-    if(state.modal==='recovery-key')html=wrapper('Lagre innloggingen nå',`<p>Enheten kan lagre pseudonymet og nøkkelen som en vanlig innlogging. Nøkkelen vises bare nå og kan brukes på en annen enhet.</p><form id="recoverySaveForm" class="form-stack recovery-save-form" action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${E(state.csrf)}"><label class="field" for="recoveryUsername"><span>Pseudonym</span><input id="recoveryUsername" name="username" value="${E(state.user?.name||'')}" autocomplete="username" required></label><label class="field" for="recoveryPassword"><span>Gjenopprettingsnøkkel</span><span class="credential-row"><input id="recoveryPassword" class="recovery-key" name="password" type="password" value="${E(state.recoveryKey)}" autocomplete="new-password" required><button class="btn btn-secondary" type="button" data-action="toggle-recovery">Vis</button></span></label><div class="recovery-actions"><button class="btn btn-secondary" type="button" data-action="copy-recovery">Kopier nøkkel</button><button class="btn btn-primary" type="submit">Lagre med enheten →</button></div></form><p class="notice">Nettleseren bestemmer om den viser et lagringsspørsmål. Mister du både sesjonen og nøkkelen, kan kontoen ikke gjenopprettes sikkert.</p>`, '<button class="text-button" data-action="recovery-continue">Fortsett uten automatisk lagring</button>');
-    if(state.modal==='areas')html=wrapper('Områder',HeremeLocations.body(state.areas,state.areaGeometry,state.draftAreas),'<button class="btn btn-primary" data-action="save-areas">Lagre områder</button>','area-modal');
+    if(state.modal==='recovery-key')html=wrapper(t('recovery.title'),`<p>${t('recovery.intro')}</p><form id="recoverySaveForm" class="form-stack recovery-save-form" action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${E(state.csrf)}"><label class="field" for="recoveryUsername"><span>${t('account.pseudonym')}</span><input id="recoveryUsername" name="username" value="${E(state.user?.name||'')}" autocomplete="username" required></label><label class="field" for="recoveryPassword"><span>${t('account.recovery_key')}</span><span class="credential-row"><input id="recoveryPassword" class="recovery-key" name="password" type="password" value="${E(state.recoveryKey)}" autocomplete="new-password" required><button class="btn btn-secondary" type="button" data-action="toggle-recovery">${t('recovery.show')}</button></span></label><div class="recovery-actions"><button class="btn btn-secondary" type="button" data-action="copy-recovery">${t('recovery.copy')}</button><button class="btn btn-primary" type="submit">${t('recovery.save_device')} →</button></div></form><p class="notice">${t('recovery.notice')}</p>`, `<button class="text-button" data-action="recovery-continue">${t('recovery.continue_without')}</button>`);
+    if(state.modal==='areas')html=wrapper(t('areas.title'),HeremeLocations.body(state.areas,state.areaGeometry,state.draftAreas),`<button class="btn btn-primary" data-action="save-areas">${t('areas.save')}</button>`,'area-modal');
     if(state.modal==='compose'){
-      const footer=state.composeStep==='select'?'':`<span class="muted-note">${state.composeStep==='edit'?'Ett steg til.':'Klar når du er.'}</span><button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${state.composeStep==='edit'?'Neste →':`Publiser ${state.postMode==='video'?'video':state.postMode==='image'?'bilde':'innlegg'} ↗`}</button>`;
-      html=wrapper('Legg noe på veggen',HeremeCompose.body(state),footer,'compose-modal');
+      const footer=state.composeStep==='select'?'':`<span class="muted-note">${t(state.composeStep==='edit'?'compose.one_more_step':'compose.ready_when')}</span><button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${state.composeStep==='edit'?t('compose.next')+' →':t(`compose.publish_${state.postMode}`)+' ↗'}</button>`;
+      html=wrapper(t('compose.add_to_wall'),HeremeCompose.body(state),footer,'compose-modal');
     }
     if(state.modal==='detail') {
       const p=state.detailPost;
-      html=`<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel detail-modal" role="dialog" aria-modal="true" aria-label="Innlegg">
-        <header class="detail-toolbar"><button class="modal-close" data-action="close-modal">× Lukk</button>${p?`<button class="report-button" data-action="report" data-id="${p.id}">Rapporter</button><button class="btn btn-secondary" data-action="share" data-id="${p.id}">↗ Del</button>`:''}</header>
-        <div class="modal-content">${p?HeremeDetail.body(p,state.comments,state.replyTo):'<p class="loading-card">Henter innlegget …</p>'}</div></section></div>`;
+      html=`<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel detail-modal" role="dialog" aria-modal="true" aria-label="${t('detail.post')}">
+        <header class="detail-toolbar"><button class="modal-close" data-action="close-modal">× ${t('common.close')}</button>${p?`<button class="report-button" data-action="report" data-id="${p.id}">${t('detail.report')}</button><button class="btn btn-secondary" data-action="share" data-id="${p.id}">↗ ${t('detail.share')}</button>`:''}</header>
+        <div class="modal-content">${p?HeremeDetail.body(p,state.comments,state.replyTo):`<p class="loading-card">${t('detail.loading')}</p>`}</div></section></div>`;
     }
-    if(state.modal==='report')html=wrapper('Rapporter innlegg',`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>Hva er problemet?</span><select id="reportReason"><option>Personopplysninger</option><option>Trakassering</option><option>Ulovlig innhold</option><option>Spam / svindel</option><option>Annet</option></select></label><p class="notice">Tre forskjellige demokontoers rapporter setter innlegget på vent for vurdering.</p><button class="btn btn-primary" type="submit">Send rapport</button></form>`);
+    if(state.modal==='report')html=wrapper(t('report.title'),`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>${t('report.problem')}</span><select id="reportReason">${['personal','harassment','illegal','spam','other'].map(reason=>`<option value="${reason}">${t(`report.${reason}`)}</option>`).join('')}</select></label><p class="notice">${t('report.notice')}</p><button class="btn btn-primary" type="submit">${t('report.send')}</button></form>`);
     if(state.modal==='menu')html=accountMenu();
     if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
+    if(state.modal==='staff')localizeStaffIdentifiers();
+    if(state.modal==='menu'&&state.user){const roles=$('.account-summary .muted-note');if(roles)roles.textContent=rolesLabel(state.user.roles);}
     if(state.modal==='menu')window.HeremePwa?.mountMenu($('.modal-content'));
-    if(state.modal==='menu'&&state.user){const button=document.createElement('button');button.className='btn btn-secondary';button.textContent='Sikkerhet · Passnøkler';button.onclick=()=>window.HeremePasskeys.security();$('.account-actions')?.prepend(button);}
+    if(state.modal==='menu')window.HeremeLanguage?.mount($('.modal-content'),{menu:true});
+    if(state.modal==='compose')window.HeremeLanguage?.mount($('.compose-modal .modal-header'));
+    if(state.modal==='detail')window.HeremeLanguage?.mount($('.detail-toolbar'));
+    if(state.modal==='menu'&&state.user){const button=document.createElement('button');button.className='btn btn-secondary';button.textContent=t('account.security_passkeys');button.onclick=()=>window.HeremePasskeys.security();$('.account-actions')?.prepend(button);}
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
     if(state.modal==='compose'&&state.photoLoading&&$('#publishButton'))$('#publishButton').disabled=true;
@@ -249,22 +276,22 @@
   async function share(id) {
     const url=new URL('/',location.origin);url.searchParams.set('post',id);
     if(navigator.share) {
-      try {await navigator.share({title:'HerEme · på veggen',url:url.href});return;}
+      try {await navigator.share({title:t('share.title'),url:url.href});return;}
       catch(error){if(error.name==='AbortError')return;}
     }
     if(navigator.clipboard?.writeText) {
       try {await navigator.clipboard.writeText(url.href);toast('Lenken er kopiert!');return;}
       catch { /* Plain HTTP LAN browsers may deny clipboard; offer a copyable URL. */ }
     }
-    window.prompt('Kopier denne lenken:',url.href);
+    window.prompt(t('share.copy_link'),url.href);
   }
   async function loadPhoto(file,synthetic=false) {
     if(!file)return;
-    if(!file.type.startsWith('image/'))throw new Error('Velg en bildefil.');
-    if(file.size>25*1024*1024)throw new Error('Velg et bilde under 25 MB.');
+    if(!file.type.startsWith('image/'))throw new Error(t('validation.image_file'));
+    if(file.size>25*1024*1024)throw new Error(t('validation.image_size'));
     saveDraft();resetPhoto();state.postMode='image';state.composeStep='edit';const request=state.imageRequest;
     state.photoLoading=true;if($('#publishButton'))$('#publishButton').disabled=true;
-    if($('#photoFilename'))$('#photoFilename').textContent='Åpner bildet …';
+    if($('#photoFilename'))$('#photoFilename').textContent=t('validation.opening_image');
     const url=URL.createObjectURL(file),image=new Image();
     try {
       image.src=url;await image.decode();
@@ -273,28 +300,28 @@
       state.photoLoading=false;renderModal({preserve:true});
     } catch(error) {
       URL.revokeObjectURL(url);
-      if(request===state.imageRequest){state.photoLoading=false;renderModal({preserve:true});throw new Error('Bildet kunne ikke åpnes. Velg et annet bilde.');}
+      if(request===state.imageRequest){state.photoLoading=false;renderModal({preserve:true});throw new Error(t('validation.image_open_failed'));}
     }
   }
   async function loadVideo(file) {
-    if(!file)return;if(!file.type.startsWith('video/'))throw new Error('Velg en videofil.');
+    if(!file)return;if(!file.type.startsWith('video/'))throw new Error(t('validation.video_file'));
     saveDraft();resetPhoto();state.postMode='video';state.composeStep='edit';const url=URL.createObjectURL(file),video=document.createElement('video');video.preload='metadata';video.muted=true;video.src=url;
-    await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=()=>reject(new Error('Videoen kunne ikke åpnes.'));});
-    if(!Number.isFinite(video.duration)||video.duration<=0||video.duration>180){URL.revokeObjectURL(url);throw new Error('Videoen må være maks 180 sekunder.');}
+    await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=()=>reject(new Error(t('validation.video_open_failed')));});
+    if(!Number.isFinite(video.duration)||video.duration<=0||video.duration>180){URL.revokeObjectURL(url);throw new Error(t('validation.video_duration'));}
     video.currentTime=Math.min(.2,video.duration/2);await new Promise(resolve=>{video.onseeked=resolve;setTimeout(resolve,500);});
     const canvas=document.createElement('canvas');canvas.width=640;canvas.height=Math.max(1,Math.round(640*(video.videoHeight||360)/(video.videoWidth||640)));canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
     state.tempUrl=url;state.editorFile=file;state.editorVideo=true;state.videoDuration=video.duration;state.videoThumbnail=canvas.toDataURL('image/jpeg',.8);renderModal({preserve:true});
   }
   async function uploadVideo(file,input) {
     let started=state.videoUpload,offset=0;
-    if(started){const existing=await api(started.upload_url);if(existing.status!=='uploading')return started;offset=existing.uploaded_bytes;if(existing.bytes!==file.size)throw new Error('Den lagrede opplastingen tilhører en annen fil. Avbryt og prøv igjen.');}
+    if(started){const existing=await api(started.upload_url);if(existing.status!=='uploading')return started;offset=existing.uploaded_bytes;if(existing.bytes!==file.size)throw new Error(t('validation.upload_wrong_file'));}
     else started=await api('/api/video-uploads',{method:'POST',body:{...input,bytes:file.size,mime_type:String(file.type||'').split(';')[0].trim().toLowerCase()}});
     state.videoUpload=started;state.videoUploading=true;state.videoCancelled=false;state.videoPaused=false;state.videoProgress=1;renderModal({preserve:true});
     const chunkSize=4*1024*1024;
     try{
       for(;offset<file.size;){
         while(state.videoPaused&&!state.videoCancelled)await new Promise(resolve=>state.videoResume=resolve);
-        if(state.videoCancelled)throw new Error('Videoopplastingen ble avbrutt.');
+        if(state.videoCancelled)throw new Error(t('validation.video_cancelled'));
         const end=Math.min(offset+chunkSize,file.size),blob=file.slice(offset,end);let result,lastError;
         for(let attempt=1;attempt<=3&&!result;attempt++)try{result=await sendVideoChunk(started.upload_url,blob,offset,end,file.size);}catch(error){lastError=error;if(state.videoCancelled)throw error;if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*500));}
         if(!result)throw lastError;offset=end;state.videoProgress=Math.round(offset/file.size*100);const progress=$('.media-workspace progress');if(progress)progress.value=state.videoProgress;const label=$('.upload-progress span');if(label)label.textContent=state.videoProgress+'%';
@@ -302,7 +329,7 @@
       state.videoUpload=null;return started;
     } finally {state.videoUploading=false;state.videoXhr=null;}
   }
-  function sendVideoChunk(url,blob,start,end,total){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();state.videoXhr=xhr;xhr.open('PATCH',url);xhr.setRequestHeader('x-csrf-token',state.csrf);xhr.setRequestHeader('Content-Range',`bytes ${start}-${end-1}/${total}`);xhr.onload=()=>{let result={};try{result=JSON.parse(xhr.responseText||'{}');}catch{}if(xhr.status>=200&&xhr.status<300)resolve(result);else reject(new Error(result.error?.message||'Videoopplasting feilet.'));};xhr.onerror=()=>reject(new Error('Videoopplasting feilet. Prøv igjen.'));xhr.onabort=()=>reject(new Error('Videoopplastingen ble avbrutt.'));xhr.send(blob);});}
+  function sendVideoChunk(url,blob,start,end,total){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();state.videoXhr=xhr;xhr.open('PATCH',url);xhr.setRequestHeader('x-csrf-token',state.csrf);xhr.setRequestHeader('Content-Range',`bytes ${start}-${end-1}/${total}`);xhr.onload=()=>{let result={};try{result=JSON.parse(xhr.responseText||'{}');}catch{}if(xhr.status>=200&&xhr.status<300)resolve(result);else reject(new Error(result.error?.message||t('validation.video_upload_failed')));};xhr.onerror=()=>reject(new Error(t('validation.video_upload_retry')));xhr.onabort=()=>reject(new Error(t('validation.video_cancelled')));xhr.send(blob);});}
   async function imageToBlob(image) {
     const ratio=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight));
     const canvas=document.createElement('canvas');
@@ -316,14 +343,14 @@
     if(state.publishing||state.photoLoading)return;
     saveDraft();
     const title=state.draft.title.trim();
-    if(title.length<3||title.length>160)throw new Error('Skriv en overskrift med 3–160 tegn.');
-    if(state.postMode==='image'&&!state.editorImage)throw new Error('Velg et bilde til bildeinnlegget.');
-    if(state.postMode==='video'&&!state.editorVideo)throw new Error('Velg eller ta opp en video til videoinnlegget.');
+    if(title.length<3||title.length>160)throw new Error(t('validation.title_length'));
+    if(state.postMode==='image'&&!state.editorImage)throw new Error(t('validation.image_required'));
+    if(state.postMode==='video'&&!state.editorVideo)throw new Error(t('validation.video_required'));
     const button=$('#publishButton');button.disabled=true;button.textContent='Publiserer …';
     if(!state.editorVideo)$('#composeForm').inert=true;
     state.publishing=true;
     try {
-      if(state.postMode==='video'){await uploadVideo(state.editorFile,{title,body:state.draft.body.trim(),category:state.category,poster_style:state.category,text_position:state.textPosition,area_id:state.postArea||undefined});state.publishing=false;closeModal();toast('Videoen behandles og vises når den er klar.');return;}
+      if(state.postMode==='video'){await uploadVideo(state.editorFile,{title,body:state.draft.body.trim(),category:state.category,poster_style:state.category,text_position:state.textPosition,area_id:state.postArea||undefined});state.publishing=false;closeModal();toast(t('compose.video_processing'));return;}
       const form=new FormData();
       form.set('title',title);form.set('body',state.draft.body.trim());form.set('category',state.category);
       form.set('poster_style',state.category);form.set('text_position',state.textPosition);
@@ -341,14 +368,14 @@
       state.query='';$('#searchInput').value='';state.sort='new';$('#sortSelect').value='new';
       closeModal();renderFilters();await loadPosts();
       document.querySelector(`[data-post-id="${result.id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'});
-      toast('Innlegget er på veggen!');
-    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.textContent=`Publiser ${state.postMode==='video'?'video':state.postMode==='image'?'bilde':'innlegg'} ↗`;throw error;}
+      toast(t('compose.published'));
+    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.textContent=t(`compose.publish_${state.postMode}`)+' ↗';throw error;}
   }
   async function submitComment() {
     const id=state.detailPost.id;
     if(!requireUser(()=>openDetail(id)))return;
     const body=$('#commentText').value.trim();
-    if(!body)throw new Error('Skriv et svar først.');
+    if(!body)throw new Error(t('validation.reply_required'));
     const button=$('#commentForm button');button.disabled=true;
     try {
       await api(`/api/posts/${id}/comments`,{method:'POST',body:{body,parent_id:state.replyTo}});
@@ -381,7 +408,7 @@
     }
     if(action==='staff-delete-post'){if(!confirm('Slette innlegget permanent, inkludert kommentarer, stemmer og media?'))return;await api(`/api/admin/posts/${id}`,{method:'DELETE',body:{reason:staffReason()}});await refreshStaff('Innlegget er slettet permanent.');return;}
     if(action==='staff-save-comment'){const body=document.querySelector(`[data-comment-body="${id}"]`).value;await api(`/api/admin/comments/${id}`,{method:'PATCH',body:{body,reason:staffReason()}});await refreshStaff('Kommentaren er oppdatert.');return;}
-    if(action==='staff-delete-comment'){if(!confirm('Slette kommentaren og alle svar under den permanent?'))return;await api(`/api/admin/comments/${id}`,{method:'DELETE',body:{reason:staffReason()}});await refreshStaff('Kommentartråden er slettet.');return;}
+    if(action==='staff-delete-comment'){if(!confirm(t('staff.delete_thread_confirm')))return;await api(`/api/admin/comments/${id}`,{method:'DELETE',body:{reason:staffReason()}});await refreshStaff(t('staff.thread_deleted'));return;}
     if(action==='staff-delete-user'){
       const userId=target.dataset.userId,deletePosts=document.querySelector(`[data-delete-posts="${CSS.escape(userId)}"]`).checked;
       if(!confirm(`Slette brukeren permanent${deletePosts?' og alle brukerens innlegg':' mens innleggene anonymiseres'}?`))return;
@@ -392,7 +419,7 @@
     if(action==='push-enable'){await enablePush();return;}
     if(action==='push-disable'){await disablePush();return;}
     if(action==='pwa-install'){await window.HeremePwa.install();await loadNotifications();renderModal();return;}
-    if(action==='pwa-install-help'){toast('Åpne Del-menyen i Safari, velg «Legg til på Hjem-skjermen», og åpne HerEme derfra.');return;}
+    if(action==='pwa-install-help'){toast(t('notifications.safari_install_help'));return;}
     if(action==='notification-open'){await api('/api/notifications/'+encodeURIComponent(target.dataset.id)+'/read',{method:'POST'});location.assign(target.dataset.route);return;}
     if(action==='areas'){state.draftAreas=[...state.selectedAreas];openModal('areas');return;}
     if(action==='area-toggle'){const area=target.dataset.areaId;state.draftAreas=state.draftAreas.includes(area)?state.draftAreas.filter(id=>id!==area):[...state.draftAreas,area];for(const item of document.querySelectorAll(`[data-area-id="${CSS.escape(area)}"]`))item.setAttribute('aria-pressed',state.draftAreas.includes(area));return;}
@@ -406,13 +433,13 @@
     if(action==='profile-more'){await loadProfile({append:true});return;}
     if(action==='logout'){const pushId=localStorage.getItem('hereme_push_subscription_id'),registration=await window.HeremePwa?.ready,subscription=await registration?.pushManager.getSubscription();await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');state.notificationSocket?.close();state.notificationSocket=null;$('#notificationButton').hidden=true;closeModal();await loadPosts();return;}
     if(action==='rotate-recovery'){const result=await api('/api/recovery/rotate',{method:'POST'});state.recoveryKey=result.recovery_key;openModal('recovery-key');return;}
-    if(action==='toggle-recovery'){const input=$('#recoveryPassword'),show=input.type==='password';input.type=show?'text':'password';target.textContent=show?'Skjul':'Vis';input.focus();return;}
-    if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast('Nøkkelen er kopiert.');return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast('Nøkkelen er kopiert.');return;}}window.prompt('Kopier gjenopprettingsnøkkelen:',state.recoveryKey);return;}
+    if(action==='toggle-recovery'){const input=$('#recoveryPassword'),show=input.type==='password';input.type=show?'text':'password';target.textContent=t(show?'recovery.hide':'recovery.show');input.focus();return;}
+    if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast(t('recovery.copied'));return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast(t('recovery.copied'));return;}}window.prompt(t('recovery.copy_prompt'),state.recoveryKey);return;}
     if(action==='recovery-continue'){const pending=state.pending;state.pending=null;state.recoveryKey='';closeModal();await loadPosts();if(pending)await pending();return;}
     if(action==='compose'){if(requireUser(()=>openModal('compose')))openModal('compose');return;}
     if(action==='compose-back'){saveDraft();if(state.composeStep==='finish')state.composeStep='edit';else{resetPhoto();state.postMode=null;state.composeStep='select';}renderModal();return;}
     if(action==='remove-photo'){saveDraft();resetPhoto();renderModal({preserve:true});return;}
-    if(action==='pause-upload'){state.videoPaused=true;target.dataset.action='resume-upload';target.textContent='Fortsett';return;}
+    if(action==='pause-upload'){state.videoPaused=true;target.dataset.action='resume-upload';target.textContent=t('compose.resume');return;}
     if(action==='resume-upload'){state.videoPaused=false;state.videoResume?.();state.videoResume=null;target.dataset.action='pause-upload';target.textContent='Pause';return;}
     if(action==='cancel-upload'){state.videoCancelled=true;state.videoPaused=false;state.videoResume?.();state.videoXhr?.abort();if(state.videoUpload)await api(state.videoUpload.upload_url,{method:'DELETE'}).catch(()=>{});return;}
     if(action==='detail'){await openDetail(id);return;}
@@ -436,7 +463,7 @@
         try {await navigator.clipboard.writeText(state.meta.connect_url);toast('Mobiladressen er kopiert.');return;}
         catch { /* Same explicit HTTP clipboard fallback as sharing. */ }
       }
-      window.prompt('Kopier adressen:',state.meta.connect_url);return;
+      window.prompt(t('connection.copy_prompt'),state.meta.connect_url);return;
     }
   }
   async function handleSubmit(event) {
@@ -445,15 +472,15 @@
     event.preventDefault();
     if(id==='profileForm') {
       const result=await api('/api/session',{method:'POST',body:{name:$('#nicknameInput').value.trim()}});
-      state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');state.recoveryKey=result.recovery_key;state.modal='recovery-key';renderModal();
+      state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');if(localStorage.getItem('hereme_language'))await window.HeremeI18n.setLanguage(window.HeremeI18n.getLanguage());state.recoveryKey=result.recovery_key;state.modal='recovery-key';renderModal();
     }
-    if(id==='recoverForm') {const result=await api('/api/session/recover',{method:'POST',body:{name:$('#recoverName').value.trim(),recovery_key:$('#recoverKey').value}});state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');const pending=state.pending;state.pending=null;closeModal();await loadPosts();if(pending)await pending();}
+    if(id==='recoverForm') {const result=await api('/api/session/recover',{method:'POST',body:{name:$('#recoverName').value.trim(),recovery_key:$('#recoverKey').value}});state.user=result.user;await window.HeremeI18n.applyAccountLanguage?.(result.user);state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');const pending=state.pending;state.pending=null;closeModal();await loadPosts();if(pending)await pending();}
     if(id==='composeForm'){
       if(state.composeStep==='edit'){
         saveDraft();
-        if(state.postMode==='text'&&!state.draft.body.trim())throw new Error('Skriv noe du vil dele først.');
-        if(state.postMode==='image'&&!state.editorImage)throw new Error('Ta eller velg et bilde først.');
-        if(state.postMode==='video'&&!state.editorVideo)throw new Error('Ta opp eller velg en video først.');
+        if(state.postMode==='text'&&!state.draft.body.trim())throw new Error(t('validation.body_required'));
+        if(state.postMode==='image'&&!state.editorImage)throw new Error(t('validation.take_image_first'));
+        if(state.postMode==='video'&&!state.editorVideo)throw new Error(t('validation.take_video_first'));
         state.composeStep='finish';renderModal();$('#postTitle')?.focus();return;
       }
       await submitCompose();
@@ -461,7 +488,7 @@
     if(id==='commentForm')await submitComment();
     if(id==='reportForm') {
       const result=await api(`/api/posts/${state.reportId}/report`,{method:'POST',body:{reason:$('#reportReason').value}});
-      closeModal();await loadPosts();toast(result.automatically_held?'Innlegget er satt på vent.':'Rapporten er registrert.');
+      closeModal();await loadPosts();toast(t(result.automatically_held?'report.held':'report.registered'));
     }
   }
   async function handleChange(event) {
@@ -482,6 +509,14 @@
     renderFilters();
     for(const el of document.querySelectorAll('[data-icon]'))el.innerHTML=HeremeIcons.icon(el.dataset.icon);
     window.addEventListener('resize',()=>HeremePoster.fitTitles(document));
+    window.addEventListener('hereme:language',()=>{
+      if(state.modal==='compose')saveDraft();
+      const y=scrollY;
+      localizeChrome();renderPreferences();renderFilters();
+      if(location.pathname==='/me')profileView();else renderWall();
+      if(state.modal)renderModal({preserve:true});
+      requestAnimationFrame(()=>scrollTo(0,y));
+    });
     document.fonts.addEventListener('loadingdone',()=>HeremePoster.fitTitles(document));
     document.addEventListener('click',event=>handleClick(event).catch(error=>toast(error.message)));
     document.addEventListener('submit',event=>handleSubmit(event).catch(error=>toast(error.message)));
@@ -506,14 +541,14 @@
     try {
       state.meta=await api('/api/meta');
       state.csrf=csrfCookie();
-      if(state.legacyToken||state.csrf)try{const current=await api('/api/me');state.user=current.user;state.csrf=current.csrf_token||csrfCookie();if(current.legacy_migrated){state.legacyToken='';localStorage.removeItem('hereme_token');if(current.recovery_key){state.recoveryKey=current.recovery_key;state.modal='recovery-key';}}}
+      if(state.legacyToken||state.csrf)try{const current=await api('/api/me');state.user=current.user;await window.HeremeI18n.applyAccountLanguage?.(current.user);state.csrf=current.csrf_token||csrfCookie();if(current.legacy_migrated){state.legacyToken='';localStorage.removeItem('hereme_token');if(current.recovery_key){state.recoveryKey=current.recovery_key;state.modal='recovery-key';}}}
       catch(error){if(error.status!==401)throw error;state.legacyToken='';state.csrf='';localStorage.removeItem('hereme_token');}
       if(state.meta.features?.locations){$('#areaButton').hidden=false;const [available,geometry,subscribed]=await Promise.all([api('/api/areas'),api('/api/areas/geometry'),state.user?api('/api/me/areas'):Promise.resolve({areas:[]})]);state.areas=available.areas;state.areaGeometry=geometry;state.selectedAreas=subscribed.areas.map(area=>area.id);}
       if(state.user){await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='notification.created')scheduleNotificationRefresh();});}
-      await loadPosts();
-      if(new URLSearchParams(location.search).get('recovery-saved')==='1'){history.replaceState({},'',location.pathname);toast('Innloggingen er bekreftet. Enheten kan nå tilby å lagre den.');}
+      localizeChrome();await loadPosts();
+      if(new URLSearchParams(location.search).get('recovery-saved')==='1'){history.replaceState({},'',location.pathname);toast(t('recovery.confirmed'));}
       state.routeReady=true;await applyRoute({fromPop:true});
     } catch(error) {state.loadError=error.message;renderWall();}
   }
-  init();
+  window.HeremeI18n.ready.then(init).catch(error=>{console.error(error);state.loadError=error.message;renderWall();});
 })();

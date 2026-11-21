@@ -49,7 +49,7 @@ async function publish(page,title) {
 (async()=>{
   const base=await start();browser=await chromium.launch({headless:true});
   const errors=[];
-  const context=await browser.newContext({viewport:{width:1440,height:1000},permissions:['clipboard-read','clipboard-write']});
+  const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'nb-NO',permissions:['clipboard-read','clipboard-write']});
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await page.goto(base);await ready(page);await fits(page);
@@ -215,7 +215,7 @@ async function publish(page,title) {
   await page.waitForTimeout(250);await page.screenshot({path:path.join(screenshots,'desktop-staff-panel.png')});await page.locator('.modal-close').click();
   const storage=await context.storageState();
   await context.close();
-  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,storageState:storage,permissions:['clipboard-read','clipboard-write']});
+  const mobile=await browser.newContext({viewport:{width:390,height:844},locale:'nb-NO',isMobile:true,hasTouch:true,storageState:storage,permissions:['clipboard-read','clipboard-write']});
   const phone=await mobile.newPage();phone.on('pageerror',error=>errors.push(error.message));
   phone.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await phone.goto(base);await ready(phone);await fits(phone);
@@ -246,7 +246,7 @@ async function publish(page,title) {
   await phone.waitForFunction(id=>location.search==='?post='+id,imageId);
   await phone.locator('.modal-close').focus();
   await phone.keyboard.press('Shift+Tab');
-  assert.equal(await phone.evaluate(()=>document.activeElement.closest('form')?.id),'commentForm');
+  assert.equal(await phone.evaluate(()=>document.activeElement.dataset.language),'en');
   await phone.keyboard.press('Tab');
   assert.equal(await phone.evaluate(()=>document.activeElement.dataset.action),'close-modal');
   assert.equal(await phone.locator('#forumShell').evaluate(el=>el.inert),true);

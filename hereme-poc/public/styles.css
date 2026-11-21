@@ -53,6 +53,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .sort-control > span { color:var(--muted); font-size:9px; text-transform:uppercase; }
 .sort-control select { min-width:100px; }
 .header-actions { display:flex; gap:12px; align-items:center; margin-left:auto; }
+.language-selector { display:flex; align-items:center; gap:3px; }
+.language-label { font-size:10px; color:var(--muted); margin-right:5px; }
+.language-selector button { width:44px; height:44px; display:grid; place-items:center; padding:0; opacity:.72; }
+.language-selector button[aria-pressed=true] { opacity:1; outline:2px solid var(--accent); outline-offset:-2px; }
+.language-selector button:focus-visible { outline:3px solid var(--accent); outline-offset:1px; }
+.language-selector img { width:24px; height:16px; object-fit:contain; }
+.language-menu { margin-bottom:12px; }
+.auth-dialog header .language-label { display:none; }
+.auth-dialog header .language-selector { margin-left:auto; }
+@media(max-width:1100px) { .header-actions>.language-selector { display:none; } }
 .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:10px 14px; border:1px solid #58625c; font-size:12px; font-weight:700; text-decoration:none; cursor:pointer; }
 .btn-primary { background:var(--accent); border-color:var(--accent); color:#101510; }
 .btn-primary:hover { background:#adc487; }

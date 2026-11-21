@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-22 — Norwegian and English interface
+
+- Added Norwegian Bokmål and English interface resources, accessible flag
+  selectors, and browser-local plus account language preferences.
+- Added nullable `preferred_language` migration for existing accounts and
+  recipient-language notification and push presentation.
+- Localized browser UI and API errors while preserving stable stored values,
+  existing accounts, posts, and private messages.
+
 ## 2026-11-22 — Install notification explanation
 
 - Explain beside the install controls and in the iPhone instructions that

@@ -6,7 +6,7 @@ process.env.HEREME_DATA_DIR=data;process.env.HEREME_ENV='test';process.env.WEBAU
 const app=require('../server/index'),S=require('../server/services');
 (async()=>{let browser,server;try{
   server=await new Promise(resolve=>{const value=app.listen(3399,'127.0.0.1',()=>resolve(value));});
-  browser=await chromium.launch({headless:true});const context=await browser.newContext(),page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+  browser=await chromium.launch({headless:true});const context=await browser.newContext({locale:'nb-NO'}),page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
   const cdp=await context.newCDPSession(page);await cdp.send('WebAuthn.enable');const firstAuthenticator=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
   await page.goto('http://localhost:3399/');await page.locator('.menu-button').click();await page.locator('[data-action=auth-register]').click();
   await page.locator('[data-auth-form=register] input[name=name]').fill('PasskeyBrowser');await page.locator('[data-auth-form=register] button').click();

@@ -1,5 +1,15 @@
 # Operator runbook
 
+## Language preferences
+
+The UI supports Norwegian Bokmål (`nb`) and English (`en`). A guest choice is
+stored in that browser. An authenticated choice is saved on the account through
+`PUT /api/me/language` with CSRF protection, then applied on other devices at
+the next load. Migration 19 adds nullable `users.preferred_language`; existing
+accounts keep an unset preference. Push copy uses the recipient's saved locale
+with Norwegian fallback. Existing notification events and content are retained.
+The public `/i18n/*.json` resources must be served with JSON content type.
+
 ## Install app controls
 
 The mobile wall displays INSTALL HEREME on eligible Chromium browsers after
