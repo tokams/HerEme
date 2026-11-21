@@ -1,0 +1,50 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');const os=require('node:os');const path=require('node:path');
+const {chromium}=require('playwright');
+const data=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-chat-browser-'));
+process.env.HEREME_DATA_DIR=data;process.env.HEREME_ENV='test';
+const app=require('../server/index'),S=require('../server/services');
+(async()=>{
+  const server=await new Promise(resolve=>{const running=app.listen(0,'127.0.0.1',()=>resolve(running));});
+  const base=`http://127.0.0.1:${server.address().port}`;let browser;
+  try{
+    browser=await chromium.launch({headless:true});
+    const desktop=await browser.newContext({viewport:{width:1280,height:850}});
+    const mobile=await browser.newContext({viewport:{width:390,height:844}});
+    assert.equal((await desktop.request.post(base+'/api/session',{data:{name:'BrowserAlice'}})).status(),201);
+    assert.equal((await mobile.request.post(base+'/api/session',{data:{name:'BrowserBob'}})).status(),201);
+    const alice=await desktop.newPage(),bob=await mobile.newPage(),errors=[];
+    for(const page of [alice,bob])page.on('pageerror',error=>errors.push(error.message));
+    await alice.goto(base+'/chat.html');await alice.locator('#inboxEmpty').waitFor({state:'visible'});
+    assert.equal(await alice.locator('.chat-shell').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' ').length),2);
+    await alice.locator('#usernameSearch').fill('BrowserBob');
+    await alice.getByRole('option',{name:'BrowserBob'}).click();
+    await alice.locator('#conversationNotice').getByText('Denne brukeren må godta meldingsforespørselen. De blir varslet.').waitFor();
+    assert.equal((await desktop.request.get(base+'/api/chats').then(response=>response.json())).chats.length,0);
+    await alice.locator('#messageInput').fill('Hei fra nettleseren');await alice.locator('#sendMessage').click();
+    await alice.locator('.conversation-row').getByText('Venter på svar').waitFor();
+    await bob.goto(base+'/chat.html');await bob.locator('.conversation-row').getByText('Meldingsforespørsel').click();
+    assert.equal(await bob.locator('#conversation').isVisible(),true);assert.equal(await bob.locator('#chatShell .chat-inbox').isVisible(),false);
+    assert.equal(await bob.locator('#messages').textContent(),'');
+    await bob.locator('#acceptInvite').click();await bob.locator('#messages').getByText('Hei fra nettleseren').waitFor();
+    if(process.env.HEREME_CHAT_SCREENSHOT)await bob.screenshot({path:process.env.HEREME_CHAT_SCREENSHOT+'-conversation.png'});
+    const family='👨‍👩‍👧‍👦',longMessage='a'.repeat(14)+family+'Z';
+    await bob.locator('#messageInput').fill(longMessage);await bob.locator('#sendMessage').click();
+    await bob.waitForFunction(expected=>[...document.querySelectorAll('.row-preview')].some(item=>item.textContent===expected),'a'.repeat(14)+family+'…');
+    await bob.locator('#fileInput').setInputFiles({name:'sample.bin',mimeType:'application/octet-stream',buffer:Buffer.from('hello')});
+    await bob.locator('#uploadStatus').getByText('Filen er delt og slettes etter 7 dager.').waitFor();
+    await bob.waitForFunction(()=>[...document.querySelectorAll('.row-preview')].some(item=>item.textContent==='(attachment)'));
+    await bob.locator('#backToInbox').click();assert.equal(await bob.locator('#chatShell .chat-inbox').isVisible(),true);
+    await alice.locator('#createGroup').click();await alice.locator('#usernameSearch').fill('BrowserBob');
+    await alice.getByRole('option',{name:'BrowserBob'}).click();assert.equal(await alice.locator('.person-chip').count(),1);
+    await alice.locator('.person-chip button').click();assert.equal(await alice.locator('.person-chip').count(),0);
+    await alice.locator('#usernameSearch').fill('BrowserBob');await alice.getByRole('option',{name:'BrowserBob'}).click();
+    assert.equal((await mobile.request.get(base+'/api/chat/inbox').then(response=>response.json())).invites.length,0);
+    await alice.locator('#confirmGroup').click();await alice.locator('#conversationNotice').getByText('Inviterte brukere må godta invitasjonen. De blir varslet.').waitFor();
+    await bob.reload();await bob.locator('.conversation-row').getByText('Gruppeinvitasjon').waitFor();
+    if(process.env.HEREME_CHAT_SCREENSHOT){await alice.screenshot({path:process.env.HEREME_CHAT_SCREENSHOT+'-desktop.png'});await bob.screenshot({path:process.env.HEREME_CHAT_SCREENSHOT+'-mobile.png'});}
+    assert.deepEqual(errors,[]);
+    console.log('Chat browser flow passed: desktop search/request, mobile acceptance, group selection and invitation.');
+  }finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));S.db.close();fs.rmSync(data,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});

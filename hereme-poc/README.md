@@ -51,6 +51,17 @@ På mobil fyller detaljvisningen skjermen, med **Lukk**, **Del** og **Rapporter*
 redusert bevegelse. Moderatorkø, roller og anonymisering finnes bare som private
 operatørkommandoer.
 
+## Chat
+
+Åpne **Chat** fra veggen for å se direkte samtaler og grupper i én innboks.
+Søk etter et brukernavn mens du skriver; å velge en person åpner samtalen uten
+å sende noe. Den første meldingen oppretter en forespørsel. Mottakeren må godta
+før innholdet blir synlig for dem. Gruppeinvitasjoner sendes først når du har
+bekreftet den redigerbare deltakerlisten; hver invitert person godtar selv.
+Nye forespørsler, invitasjoner og meldinger vises i innboksen også etter ny
+innlogging. Filer i chat slettes permanent etter syv dager. Online-status er
+valgfri og styres fra samtaledetaljene.
+
 ## Legg ut
 
 1. Trykk **Legg ut** og velg et unikt pseudonym hvis nødvendig. Ta vare på

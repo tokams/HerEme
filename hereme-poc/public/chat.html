@@ -1,1 +1,67 @@
-<!doctype html><html lang="no"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Chat · HerEme</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/chat.css"><script src="/chat.js" defer></script></head><body><main class="chat-app"><header><a href="/">← Plakatveggen</a><h1>Chat</h1><label><input id="visible" type="checkbox"> Vis meg som online</label></header><div id="error" role="alert"></div><div class="chat-grid"><aside><h2>Finn bruker</h2><form id="find"><input id="query" placeholder="Søk pseudonym" minlength="2" required><button>Søk</button></form><div id="results"></div><h2>Forespørsler</h2><div id="requests"></div><h2>Grupper</h2><form id="group"><input id="groupName" placeholder="Gruppenavn" required><input id="groupUsers" placeholder="Pseudonymer, separert med komma" required><input id="groupOpening" placeholder="Første melding (valgfritt)"><button>Opprett gruppe</button></form><h2>Samtaler</h2><div id="conversations"></div></aside><section><h2 id="chatTitle">Velg en samtale</h2><div id="people"></div><form id="invite" hidden><input id="inviteName" placeholder="Inviter pseudonym" required><button>Inviter</button></form><div id="pendingInvites"></div><button id="leave" hidden>Forlat samtalen</button><button id="older" hidden>Vis eldre meldinger</button><div id="messages" aria-live="polite"></div><form id="send"><input id="message" placeholder="Skriv en melding" maxlength="5000" required><button>Send</button></form><label class="file-button">Del fil (slettes etter 7 dager)<input id="file" type="file"></label><progress id="progress" value="0" max="100" hidden></progress><button id="pause" hidden>Pause opplasting</button><span id="uploadState"></span></section></div></main></body></html>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1113">
+  <title>Chat · HerEme</title>
+  <script src="/preferences.js"></script>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/chat.css">
+  <script src="/chat.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#conversationList">Hopp til samtaler</a>
+  <main class="chat-shell" id="chatShell">
+    <aside class="chat-inbox" aria-label="Chat-innboks">
+      <header class="inbox-header">
+        <a class="wall-link" href="/">← Plakatveggen</a>
+        <div class="inbox-heading"><h1>Chat</h1><span id="unreadCount" class="unread-count" hidden></span></div>
+        <div class="search-line">
+          <label class="sr-only" for="usernameSearch">Søk etter brukernavn</label>
+          <input id="usernameSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Søk etter brukernavn…" aria-controls="searchResults" aria-expanded="false">
+          <button id="createGroup" class="icon-button group-add" type="button" aria-label="Opprett gruppe" title="Opprett gruppe"><img src="/assets/icons/chat-group-add.svg" alt=""></button>
+        </div>
+        <div id="searchResults" class="search-results" role="listbox" aria-label="Brukerforslag" hidden></div>
+        <div id="searchStatus" class="search-status" role="status" aria-live="polite"></div>
+      </header>
+      <section id="groupBuilder" class="group-builder" aria-label="Opprett gruppe" hidden>
+        <div class="builder-heading"><h2>Ny gruppe</h2><button id="cancelGroup" type="button">Avbryt</button></div>
+        <label for="groupName">Gruppenavn (valgfritt)</label><input id="groupName" maxlength="80" placeholder="Navn på gruppen">
+        <p>Finn og velg personer én om gangen i søkefeltet over.</p>
+        <h3>Valgte deltakere</h3><div id="selectedPeople" class="selected-people" aria-live="polite"></div>
+        <button id="confirmGroup" type="button" class="primary-action" disabled>Opprett gruppe</button>
+      </section>
+      <nav id="conversationList" class="conversation-list" aria-label="Samtaler"></nav>
+      <p id="inboxEmpty" class="empty-state" hidden>Søk etter en bruker eller opprett en gruppe.</p>
+    </aside>
+    <section class="conversation" id="conversation" aria-label="Samtale">
+      <div id="conversationEmpty" class="conversation-empty">Velg en samtale eller søk etter en bruker.</div>
+      <div id="conversationContent" class="conversation-content" hidden>
+        <header class="conversation-header">
+          <button id="backToInbox" class="back-button" type="button" aria-label="Tilbake til samtaler">←</button>
+          <img id="conversationIcon" class="conversation-icon" src="/assets/icons/chat-single.svg" alt="">
+          <div class="conversation-heading"><h2 id="conversationTitle" tabindex="-1"></h2><span id="conversationSubtitle"></span></div>
+          <button id="toggleDetails" type="button" class="details-button" aria-controls="conversationDetails" aria-expanded="false">Detaljer</button>
+        </header>
+        <div id="conversationNotice" class="conversation-notice" role="status" hidden></div>
+        <div id="decisionActions" class="decision-actions" hidden><button id="acceptInvite" class="primary-action" type="button">Godta</button><button id="declineInvite" type="button">Avslå</button></div>
+        <div id="conversationDetails" class="conversation-details" hidden>
+          <label class="presence-control"><input id="visible" type="checkbox"> Vis meg som online</label>
+          <h3>Personer</h3><div id="people"></div>
+          <div id="pendingInvites"></div>
+          <form id="inviteForm" hidden><label for="inviteName">Inviter brukernavn</label><input id="inviteName" required minlength="2"><button type="submit">Inviter</button></form>
+          <button id="leaveChat" type="button">Forlat samtalen</button>
+        </div>
+        <button id="olderMessages" class="older-messages" type="button" hidden>Vis eldre meldinger</button>
+        <div id="messages" class="message-list" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div class="composer-wrap">
+          <form id="messageForm" class="message-form"><label class="sr-only" for="messageInput">Melding</label><textarea id="messageInput" rows="1" maxlength="5000" placeholder="Skriv en melding…" required></textarea><button id="sendMessage" class="primary-action" type="submit">Send</button></form>
+          <div class="attachment-line"><label class="attachment-label">Del fil (slettes etter 7 dager)<input id="fileInput" type="file"></label><progress id="uploadProgress" max="100" value="0" hidden></progress><button id="pauseUpload" type="button" hidden>Pause</button><span id="uploadStatus" role="status"></span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="chatError" class="chat-error" role="alert" hidden></div>
+</body>
+</html>

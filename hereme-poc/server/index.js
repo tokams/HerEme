@@ -58,9 +58,9 @@ app.get('/api/health',(req,res)=>res.json({ok:true,name:'HerEme',storage:'SQLite
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=12').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=13').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===12;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===13;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();});
@@ -100,15 +100,18 @@ app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.identity.revokeAl
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true}));
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
 app.delete('/api/me',write(null,3),(req,res)=>{S.accounts.deactivate(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
-app.get('/api/chat/users',read(null),(req,res)=>{S.rate.check(`chat-search:${req.auth.id}`,30);res.json({users:S.chat.search(req.auth,req.query.q)});});
+app.get('/api/chat/users',read(null),(req,res)=>{S.rate.check(`chat-search:${req.auth.id}`,180);res.json({users:S.chat.search(req.auth,req.query.q)});});
+app.get('/api/chat/direct/:user',read(null),(req,res)=>res.json(S.chat.direct(req.auth,req.params.user)));
+app.post('/api/chats/direct',write(null,30),(req,res)=>res.status(201).json(S.chat.startDirect(req.auth,req.body?.target_user_id,req.body?.body,req.body?.client_key)));
 app.get('/api/chat/inbox',read(null),(req,res)=>res.json(S.chat.inbox(req.auth)));
-app.post('/api/chat/requests',write(null,30),(req,res)=>res.status(201).json(S.chat.request(req.auth,req.body?.recipient_id,req.body?.opening)));
 app.post('/api/chat/requests/:id',write(null,30),(req,res)=>res.json(S.chat.decide(req.auth,req.params.id,req.body?.accept===true)));
 app.post('/api/chat/blocks',write(null,30),(req,res)=>res.json(S.chat.block(req.auth,req.body?.user_id)));
 app.get('/api/chats',read(null),(req,res)=>res.json({chats:S.chat.list(req.auth)}));
+app.get('/api/chat/notifications',read(null),(req,res)=>res.json({notifications:S.chat.notifications(req.auth,req.query.before)}));
+app.post('/api/chats/:id/read',write(null,120),(req,res)=>res.json(S.chat.markRead(req.auth,req.params.id)));
 app.post('/api/chats',write(null,10),(req,res)=>res.status(201).json(S.chat.group(req.auth,req.body?.name,req.body?.recipients,req.body?.opening)));
 app.get('/api/chats/:id/messages',read(null),(req,res)=>res.json({messages:S.chat.messages(req.auth,req.params.id,req.query.before)}));
-app.post('/api/chats/:id/messages',write(null,120),(req,res)=>res.status(201).json(S.chat.send(req.auth,req.params.id,req.body?.body)));
+app.post('/api/chats/:id/messages',write(null,120),(req,res)=>res.status(201).json(S.chat.send(req.auth,req.params.id,req.body?.body,req.body?.client_key)));
 app.get('/api/chats/:id/people',read(null),(req,res)=>res.json({people:S.chat.peers(req.auth,req.params.id)}));
 app.post('/api/chats/:id/invites',write(null,30),(req,res)=>res.json(S.chat.invite(req.auth,req.params.id,req.body?.recipient_id)));
 app.get('/api/chats/:id/invites',read(null),(req,res)=>res.json({invites:S.chat.pendingInvites(req.auth,req.params.id)}));

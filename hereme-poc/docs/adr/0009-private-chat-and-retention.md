@@ -4,8 +4,14 @@
 
 SQLite is the canonical store for direct-message requests, accepted membership,
 group invitations, messages, attachment metadata and presence heartbeats. The
-browser calls the same authenticated domain actions as the HTTP API. A direct
-conversation is created only on recipient acceptance. Group creators may invite
+browser calls the same authenticated domain actions as the HTTP API. Selecting
+a user opens a local draft without server writes. The first send creates a
+canonical direct conversation in `pending` state, stores the first message and
+one durable request notification. Only the requester can read pending messages.
+Acceptance adds the recipient as a member and reveals the pending history;
+decline is terminal for that user pair. A second contact attempt while pending
+reuses the same conversation, and reciprocal first sends accept the existing
+request. Client message keys make retries idempotent. Group creators may invite
 people, and invitees gain access only after accepting. Current group members
 may invite additional people. Blocking stops direct messaging and further
 requests; it does not erase history.
@@ -13,7 +19,11 @@ requests; it does not erase history.
 Presence is opt-in, shown only to accepted conversation members, and expires
 after 90 seconds without a heartbeat. The browser refreshes every 30 seconds;
 this bounded polling is the initial live-update transport. No last-seen time is
-shown. Message text remains durable; moderators have no private-chat read API.
+shown. A unified inbox orders direct and group conversations by activity.
+Indexed username candidates are ranked by exact, prefix, substring and bounded
+Levenshtein distance. Durable in-app notifications track requests, invitations,
+decisions and accepted-chat messages without storing message text. Message text
+remains durable; moderators have no private-chat read API.
 
 Files use opaque names under the private data directory. The browser sends
 4 MiB chunks and can resume from the server's durable offset after the user

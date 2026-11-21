@@ -21,12 +21,12 @@ test('liveness, readiness, public pages and protected staff surfaces',async()=>{
 });
 test('chat consent, membership, groups, blocked delivery, resumable files and expiry',async()=>{
   const alice=await profile('ChatAlice'),bob=await profile('ChatBob'),third=await profile('ChatThird');
-  assert.equal((await request('/api/chat/users?q=atBo',{session:alice})).body.users[0].name,'ChatBob');
-  const pending=await request('/api/chat/requests',{method:'POST',session:alice,body:{recipient_id:bob.user.id,opening:'Hello'}});
-  assert.equal(pending.status,201);assert.equal((await request('/api/chats',{session:alice})).body.chats.length,0);
-  assert.equal((await request('/api/chat/inbox',{session:bob})).body.requests[0].opening,'Hello');
-  assert.equal((await request('/api/chat/requests/'+pending.body.id,{method:'POST',session:third,body:{accept:true}})).status,404);
-  const accepted=await request('/api/chat/requests/'+pending.body.id,{method:'POST',session:bob,body:{accept:true}});const chat=accepted.body.chat_id;
+  assert.equal((await request('/api/chat/users?q=ChatB',{session:alice})).body.users[0].name,'ChatBob');
+  const pending=await request('/api/chats/direct',{method:'POST',session:alice,body:{target_user_id:bob.user.id,body:'Hello',client_key:'legacy-test-first-message'}});
+  assert.equal(pending.status,201);assert.equal((await request('/api/chats',{session:alice})).body.chats[0].state,'pending');
+  const requestId=(await request('/api/chat/inbox',{session:bob})).body.requests[0].id;
+  assert.equal((await request('/api/chat/requests/'+requestId,{method:'POST',session:third,body:{accept:true}})).status,404);
+  const accepted=await request('/api/chat/requests/'+requestId,{method:'POST',session:bob,body:{accept:true}});const chat=accepted.body.chat_id;
   assert.equal((await request('/api/chats',{session:alice})).body.chats[0].name,'ChatBob');
   assert.equal((await request(`/api/chats/${chat}/messages`,{session:third})).status,403);
   assert.equal((await request(`/api/chats/${chat}/messages`,{session:bob})).body.messages[0].body,'Hello');
@@ -41,12 +41,15 @@ test('chat consent, membership, groups, blocked delivery, resumable files and ex
   S.chat.cleanup();assert.equal(fs.existsSync(path.join(testData,'chat',started.body.id)),false);
   assert.equal((await request('/api/health')).body.chat_worker.overdue,0);
   const group=await request('/api/chats',{method:'POST',session:alice,body:{name:'Test group',recipients:[bob.user.id,third.user.id]}});assert.equal(group.status,201);
+  assert.equal((await request('/api/chat/notifications',{session:bob})).body.notifications.filter(item=>item.kind==='invite'&&item.chat_id===group.body.id).length,1);
+  assert.equal((await request('/api/chat/notifications',{session:third})).body.notifications.filter(item=>item.kind==='invite'&&item.chat_id===group.body.id).length,1);
   assert.equal((await request(`/api/chats/${group.body.id}/messages`,{session:bob})).status,403);
   const pendingInvites=(await request(`/api/chats/${group.body.id}/invites`,{session:alice})).body.invites;
   assert.equal(pendingInvites.length,2);assert.equal((await request(`/api/chats/${group.body.id}/invites`,{session:bob})).status,403);
   const thirdInvite=pendingInvites.find(i=>i.recipient==='ChatThird');
   assert.equal((await request(`/api/chats/${group.body.id}/invites/${thirdInvite.id}`,{method:'DELETE',session:alice})).status,200);
   assert.equal((await request('/api/chat/inbox',{session:third})).body.invites.length,0);
+  assert.ok((await request('/api/chat/notifications',{session:third})).body.notifications.find(item=>item.chat_id===group.body.id).read_at);
   const invite=(await request('/api/chat/inbox',{session:bob})).body.invites[0];assert.equal((await request('/api/chat/invites/'+invite.id,{method:'POST',session:bob,body:{accept:true}})).status,200);
   assert.equal((await request(`/api/chats/${group.body.id}/messages`,{session:bob})).status,200);
   assert.match((await request(`/api/chats/${group.body.id}/messages`,{session:bob})).body.messages[0].body,/ble med/);
@@ -59,6 +62,55 @@ test('chat consent, membership, groups, blocked delivery, resumable files and ex
   const admin=await profile('ChatDeleteAdmin');S.db.prepare("insert into user_roles(user_id,role) values(?,'admin')").run(admin.user.id);
   assert.equal((await request(`/api/admin/users/${alice.user.id}`,{method:'DELETE',session:admin,body:{delete_posts:false,reason:'chat account deletion test'}})).status,200);
   const afterDeletion=await request(`/api/chats/${group.body.id}/messages`,{session:bob});assert.equal(afterDeletion.status,200);assert.match(afterDeletion.body.messages.at(-1).body,/slettet bruker/);
+});
+test('unified chat creates one pending request on first send and delivers durable notifications',async()=>{
+  const sender=await profile('FlowSender'),recipient=await profile('FlowRecipient'),other=await profile('FlowOther');
+  const suggestions=await request('/api/chat/users?q=FlowRecipien',{session:sender});assert.equal(suggestions.body.users[0].name,'FlowRecipient');
+  assert.equal((await request('/api/chat/users?q=FlowRecipieht',{session:sender})).body.users[0].name,'FlowRecipient');
+  assert.equal((await request('/api/chat/users?q=XlowRecipient',{session:sender})).body.users[0].name,'FlowRecipient');
+  assert.deepEqual((await request('/api/chat/direct/'+recipient.user.id,{session:sender})).body,{chat_id:null,state:'new'});
+  assert.equal((await request('/api/chats',{session:sender})).body.chats.some(chat=>chat.name==='FlowRecipient'),false);
+  const first=await request('/api/chats/direct',{method:'POST',session:sender,body:{target_user_id:recipient.user.id,body:'First private message',client_key:'first-message-key'}});
+  assert.equal(first.status,201,JSON.stringify(first.body));assert.equal(first.body.state,'pending');const chatId=first.body.chat_id;
+  const repeat=await request('/api/chats/direct',{method:'POST',session:sender,body:{target_user_id:recipient.user.id,body:'First private message',client_key:'first-message-key'}});
+  assert.equal(repeat.body.chat_id,chatId);assert.equal(repeat.body.message_id,first.body.message_id);
+  const pending=(await request('/api/chats',{session:recipient})).body.chats.find(chat=>chat.id===chatId);
+  assert.equal(pending.state,'incoming');assert.equal(pending.last_body,null);assert.equal(pending.unread,1);assert.ok(pending.request_id);
+  assert.equal((await request(`/api/chats/${chatId}/messages`,{session:recipient})).status,403);
+  assert.equal((await request(`/api/chats/${chatId}/messages`,{session:other})).status,403);
+  assert.equal((await request('/api/chat/notifications',{session:recipient})).body.notifications.filter(item=>item.kind==='request').length,1);
+  const followup=await request(`/api/chats/${chatId}/messages`,{method:'POST',session:sender,body:{body:'Second private message',client_key:'second-message-key'}});assert.equal(followup.status,201);
+  assert.equal((await request('/api/chat/notifications',{session:recipient})).body.notifications.filter(item=>item.kind==='request').length,1);
+  const accepted=await request('/api/chat/requests/'+pending.request_id,{method:'POST',session:recipient,body:{accept:true}});assert.equal(accepted.body.chat_id,chatId);
+  assert.deepEqual((await request(`/api/chats/${chatId}/messages`,{session:recipient})).body.messages.map(item=>item.body),['First private message','Second private message']);
+  assert.equal((await request('/api/chats',{session:recipient})).body.chats.find(chat=>chat.id===chatId).last_body,'Second private message');
+  const delivered=await request(`/api/chats/${chatId}/messages`,{method:'POST',session:sender,body:{body:'After acceptance',client_key:'accepted-message-key'}});assert.equal(delivered.status,201);
+  assert.equal((await request('/api/chat/notifications',{session:recipient})).body.notifications.filter(item=>item.kind==='message').length,1);
+  assert.equal((await request(`/api/chats/${chatId}/read`,{method:'POST',session:recipient})).status,200);
+  assert.equal((await request('/api/chats',{session:recipient})).body.chats.find(chat=>chat.id===chatId).unread,0);
+});
+test('reciprocal contact accepts one direct thread and decline is terminal',async()=>{
+  const first=await profile('ReciprocalOne'),second=await profile('ReciprocalTwo');
+  const sent=await request('/api/chats/direct',{method:'POST',session:first,body:{target_user_id:second.user.id,body:'one',client_key:'reciprocal-first'}});assert.equal(sent.status,201);
+  const answer=await request('/api/chats/direct',{method:'POST',session:second,body:{target_user_id:first.user.id,body:'two',client_key:'reciprocal-second'}});
+  assert.equal(answer.status,201);assert.equal(answer.body.chat_id,sent.body.chat_id);assert.equal(answer.body.state,'accepted');
+  assert.equal(S.db.prepare('SELECT count(*) n FROM chats WHERE pair_key=?').get([first.user.id,second.user.id].sort().join(':')).n,1);
+  assert.deepEqual((await request(`/api/chats/${sent.body.chat_id}/messages`,{session:second})).body.messages.map(message=>message.body),['one','two']);
+  const declinedSender=await profile('DeclinedSender'),declinedRecipient=await profile('DeclinedRecipient');
+  const pending=await request('/api/chats/direct',{method:'POST',session:declinedSender,body:{target_user_id:declinedRecipient.user.id,body:'please',client_key:'decline-first'}});
+  const requestId=(await request('/api/chats',{session:declinedRecipient})).body.chats.find(chat=>chat.id===pending.body.chat_id).request_id;
+  assert.equal((await request('/api/chat/requests/'+requestId,{method:'POST',session:declinedRecipient,body:{accept:false}})).status,200);
+  assert.equal((await request('/api/chat/direct/'+declinedRecipient.user.id,{session:declinedSender})).body.state,'declined');
+  assert.equal((await request('/api/chats/direct',{method:'POST',session:declinedSender,body:{target_user_id:declinedRecipient.user.id,body:'retry',client_key:'decline-retry'}})).status,409);
+});
+test('pending direct messages have a bounded retry-safe allowance',async()=>{
+  const sender=await profile('PendingLimitSender'),recipient=await profile('PendingLimitRecipient');
+  const first=await request('/api/chats/direct',{method:'POST',session:sender,body:{target_user_id:recipient.user.id,body:'one',client_key:'pending-limit-first'}});
+  const chat=first.body.chat_id;let last;
+  for(let number=2;number<=5;number++){last=await request(`/api/chats/${chat}/messages`,{method:'POST',session:sender,body:{body:String(number),client_key:'pending-limit-'+number}});assert.equal(last.status,201);}
+  const replay=await request(`/api/chats/${chat}/messages`,{method:'POST',session:sender,body:{body:'5',client_key:'pending-limit-5'}});assert.equal(replay.body.id,last.body.id);
+  assert.equal((await request(`/api/chats/${chat}/messages`,{method:'POST',session:sender,body:{body:'six',client_key:'pending-limit-six'}})).status,429);
+  assert.equal((await request('/api/chat/notifications',{session:recipient})).body.notifications.filter(item=>item.kind==='request').length,1);
 });
 test('moderator censorship and audited administrator content and user controls',async()=>{
   const author=await profile('ManagedAuthor');

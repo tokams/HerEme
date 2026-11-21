@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 12) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 13) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -265,6 +265,20 @@ function applyMigrations(db) {
       CREATE TABLE chat_presence(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,seen_at TEXT NOT NULL DEFAULT (datetime('now')),visible INTEGER NOT NULL DEFAULT 1 CHECK(visible IN (0,1)));
       CREATE TABLE chat_worker_state(id INTEGER PRIMARY KEY CHECK(id=1),last_run TEXT NOT NULL,overdue INTEGER NOT NULL);
       INSERT INTO schema_migrations(version) VALUES(12); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<13){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`ALTER TABLE chats ADD COLUMN direct_state TEXT NOT NULL DEFAULT 'accepted' CHECK(direct_state IN ('pending','accepted','declined'));
+      ALTER TABLE chats ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+      UPDATE chats SET updated_at=created_at;
+      ALTER TABLE chat_requests ADD COLUMN chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE;
+      ALTER TABLE chat_messages ADD COLUMN client_key TEXT;
+      CREATE UNIQUE INDEX chat_message_client_key ON chat_messages(chat_id,sender_id,client_key) WHERE client_key IS NOT NULL;
+      CREATE TABLE chat_notifications(id INTEGER PRIMARY KEY AUTOINCREMENT,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN ('request','invite','accepted','declined','message')),dedupe_key TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL DEFAULT (datetime('now')),read_at TEXT);
+      CREATE INDEX chat_notifications_inbox ON chat_notifications(recipient_id,read_at,id DESC);
+      CREATE INDEX chat_requests_chat ON chat_requests(chat_id,state);
+      CREATE INDEX users_name_second_character ON users(substr(normalized_name,2,1));
+      INSERT INTO schema_migrations(version) VALUES(13); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

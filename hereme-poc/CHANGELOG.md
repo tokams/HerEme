@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-21 — Unified chat interface and pending-message flow
+
+- Rebuilt Chat around the supplied mobile inbox and desktop two-pane wireframes,
+  with shared SVG chat icons, 15-grapheme previews, live username suggestions,
+  editable group selection and full-screen mobile conversations.
+- Added schema 13 for pending direct conversations, idempotent sends and durable
+  request, invitation, decision and message notifications. Search uses indexed
+  candidates and Levenshtein ranking. The first message creates one request;
+  recipients see content only after acceptance.
+- Added focused API and browser coverage for consent, reciprocal contact,
+  notifications, group selection, responsive navigation and attachment preview.
+
 ## 2026-11-21 — Private chat and repeatable public deployment
 
 - Corrected the deployment backup verifier to mount snapshots writable while
