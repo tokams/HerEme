@@ -150,8 +150,10 @@ test('WebSocket live events require a session and remain recipient-scoped',async
   const recipient=await connect(bob),outsider=await connect(stranger);let outsiderEvent=false;outsider.on('message',raw=>{if(JSON.parse(raw).type!=='connected')outsiderEvent=true;});
   try{
     const event=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Live event did not arrive')),4000);recipient.on('message',raw=>{const item=JSON.parse(raw);if(item.type==='invitation.created'){clearTimeout(timer);resolve(item);}});});
+    const notificationEvent=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Live notification did not arrive')),4000);recipient.on('message',raw=>{const item=JSON.parse(raw);if(item.type==='notification.created'){clearTimeout(timer);resolve(item);}});});
     const sent=await request('/api/chats/direct',{method:'POST',session:alice,body:{target_user_id:bob.user.id,body:'Socket hello',client_key:'socket-first-message'}});assert.equal(sent.status,201);
     const notice=await event;assert.equal(notice.chat_id,sent.body.chat_id);assert.equal(outsiderEvent,false);
+    const liveNotification=await notificationEvent;assert.match(liveNotification.notification_id,/^chat:\d+$/);assert.equal(outsiderEvent,false);
     await request('/api/session/revoke-all',{method:'POST',session:bob});
     const closed=await new Promise(resolve=>{const timer=setTimeout(()=>resolve(false),4000);recipient.once('close',()=>{clearTimeout(timer);resolve(true);});});assert.equal(closed,true);
   }finally{recipient.terminate();outsider.terminate();}

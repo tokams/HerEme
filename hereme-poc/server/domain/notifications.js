@@ -12,13 +12,14 @@ function createNotificationService(db){
   }
   function chat(notificationId,{recipientId,actorId,chatId,kind}){
     enqueue({eventKey:'chat:'+notificationId,recipientId,actorId,chatId,kind,route:kind==='message'?'/chat/'+chatId:'/chat'});
+    db.prepare('INSERT INTO notification_events(recipient_id,notification_id) VALUES(?,?)').run(recipientId,'chat:'+notificationId);
   }
   function forum({recipientId,actorId,postId,commentId,kind}){
     if(!recipientId||recipientId===actorId)return;
     const key=`${kind}:${commentId}:${recipientId}`;
     const row=db.prepare(`INSERT OR IGNORE INTO forum_notifications(recipient_id,actor_id,post_id,comment_id,kind,dedupe_key)
       VALUES(?,?,?,?,?,?) RETURNING id`).get(recipientId,actorId,postId,commentId,kind,key);
-    if(row)enqueue({eventKey:'forum:'+row.id,recipientId,actorId,postId,commentId,kind,route:'/?post='+postId});
+    if(row){enqueue({eventKey:'forum:'+row.id,recipientId,actorId,postId,commentId,kind,route:'/?post='+postId});db.prepare('INSERT INTO notification_events(recipient_id,notification_id) VALUES(?,?)').run(recipientId,'forum:'+row.id);}
   }
   function list(user,before=''){
     let cursor=Number.MAX_SAFE_INTEGER;

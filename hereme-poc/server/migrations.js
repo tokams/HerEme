@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 15) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 16) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -334,6 +334,17 @@ function applyMigrations(db) {
       CREATE INDEX push_deliveries_due ON push_deliveries(state,next_attempt_at,id);
       CREATE TABLE push_worker_state(id INTEGER PRIMARY KEY CHECK(id=1),last_run TEXT NOT NULL,queued INTEGER NOT NULL DEFAULT 0,sent INTEGER NOT NULL DEFAULT 0,retried INTEGER NOT NULL DEFAULT 0,permanent_failures INTEGER NOT NULL DEFAULT 0);
       INSERT INTO schema_migrations(version) VALUES(15); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<16){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE notification_events(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        notification_id TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX notification_events_recipient ON notification_events(recipient_id,id);
+      INSERT INTO schema_migrations(version) VALUES(16); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

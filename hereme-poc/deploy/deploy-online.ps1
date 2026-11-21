@@ -50,6 +50,8 @@ docker run --rm --user 0 -v docker_hereme-data:/var/lib/hereme:ro -v "$backup_ro
 docker run --rm --user 0 -v "$backup_root":/backup "$rollback_image" node scripts/verify-backup.js "/backup/$stamp"
 docker run --rm --user 0 -v docker_hereme-data:/data:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'if [ -d /data/chat ]; then find /data/chat -maxdepth 1 -type f -printf "%f\n"; fi > /backup/'"$stamp"'/chat-files.txt'
 (cd "$staged" && docker compose -p docker -f "$compose" build app)
+docker run --rm --user "$(id -u):$(id -g)" -v "$staged/deploy/docker:/config" hereme-local-forum:latest node scripts/configure-push-env.js /config/.env "$domain"
+chmod 600 "$staged/deploy/docker/.env"
 deployed=0
 rollback() {
   trap - ERR

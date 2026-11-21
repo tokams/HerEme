@@ -36,6 +36,10 @@
 - Logout disables the current owned subscription by both server ID and the
   browser's actual endpoint before ending the session. Account transfer replaces
   the subscription ID and cascades queued work. Payloads remain generic.
+- Migration 16 adds recipient-scoped live notification events. The authenticated
+  WebSocket now updates the wall badge and open inbox without a page refresh.
+- The online deployment initializes persistent VAPID credentials in its protected
+  Compose environment and enables Web Push without printing the private key.
 
 ## Ownership and progress
 
@@ -54,7 +58,7 @@ Manual Android, iPhone and deployed HTTPS gates are NOT VERIFIED.
 ## Verification ledger
 
 - Baseline before implementation: `npm test` — 38/38 passed.
-- Current: `npm test` — 51/51 passed after the final security fixes. The
+- Current: `npm test` — 52/52 passed after the live-delivery follow-up. The
   targeted API, push and PWA suite also passed 27/27. `npm run test:browser`,
   `npm run test:chat-browser` and `npm run test:pwa-browser` passed.
 - `npm run check` checked 78 JavaScript files. `docker compose ... config

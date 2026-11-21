@@ -188,6 +188,7 @@ function createChatService(db,dataDir,config,{audit,notifications:notificationSe
   function cleanup(){
     const now=new Date().toISOString();
     db.prepare("DELETE FROM chat_events WHERE created_at<datetime('now','-30 days')").run();
+    db.prepare("DELETE FROM notification_events WHERE created_at<datetime('now','-30 days')").run();
     for(const row of db.prepare('SELECT id,created_at FROM chat_staged_files').all())if(Date.parse(row.created_at.replace(' ','T')+'Z')<Date.now()-86400000&&!uploads.has(row.id)){db.prepare('DELETE FROM chat_staged_files WHERE id=?').run(row.id);fs.rmSync(path.join(root,row.id),{force:true});}
     for(const row of db.prepare("SELECT id,stored_path,status,expires_at,created_at FROM chat_files WHERE status IN ('ready','uploading')").all()){
       if(uploads.has(row.id))continue;

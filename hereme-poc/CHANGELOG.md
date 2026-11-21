@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-21 — Live notification and device-enrollment follow-up
+
+- Added schema 16 recipient-scoped notification events and immediate bell/inbox
+  refresh over the authenticated WebSocket.
+- Clarified that category preferences do not grant operating-system permission;
+  device enrollment now has a distinct action and explicit permission feedback.
+- Existing browser subscriptions are reconciled on startup and login, and Service
+  Worker deliveries also tell open windows to refresh immediately.
+- Online deployment now creates and preserves protected VAPID credentials and
+  enables the push worker, fixing deployments that remained permanently disabled.
+
 ## 2026-11-21 — Optional PWA and Web Push notifications
 
 - Added an installable PWA shell, branded icons and a root Service Worker with

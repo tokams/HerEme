@@ -27,6 +27,7 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   const minFreeBytes=Number(env.HEREME_MIN_FREE_BYTES||256*1024*1024);
   const maxVideoBytes=Number(env.HEREME_MAX_VIDEO_BYTES||2*1024*1024*1024);
   const enableWebPush=env.WEB_PUSH_ENABLED==='1',vapidPublicKey=env.VAPID_PUBLIC_KEY||'',vapidPrivateKey=env.VAPID_PRIVATE_KEY||'',vapidSubject=env.VAPID_SUBJECT||'';
+  const pushPollMs=Number(env.HEREME_PUSH_POLL_MS||2000);
   if(!Number.isInteger(sessionDays)||sessionDays<1||sessionDays>365)throw new Error('HEREME_SESSION_DAYS must be 1-365.');
   if(!Number.isSafeInteger(minFreeBytes)||minFreeBytes<0)throw new Error('HEREME_MIN_FREE_BYTES must be a nonnegative integer.');
   if(!Number.isSafeInteger(maxVideoBytes)||maxVideoBytes<1024*1024)throw new Error('HEREME_MAX_VIDEO_BYTES must be a safe integer of at least 1 MiB.');
@@ -34,10 +35,11 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   if(vapidPrivateKey&&!/^[A-Za-z0-9_-]{20,200}$/.test(vapidPrivateKey))throw new Error('VAPID_PRIVATE_KEY is invalid.');
   if(enableWebPush&&env.HEREME_PUSH_WORKER==='1'&&!vapidPrivateKey)throw new Error('The push worker requires VAPID_PRIVATE_KEY.');
   if(enableWebPush&&!/^(mailto:|https:\/\/)/.test(vapidSubject))throw new Error('WEB_PUSH_ENABLED requires VAPID_SUBJECT as mailto: or HTTPS URL.');
+  if(!Number.isInteger(pushPollMs)||pushPollMs<500||pushPollMs>60000)throw new Error('HEREME_PUSH_POLL_MS must be an integer from 500 to 60000.');
   return {dataDir,port,preview,environment,production,host,publicOrigin,sessionDays,minFreeBytes,
     trustProxy:env.HEREME_TRUST_PROXY==='loopback',uploadsSuspended:env.HEREME_UPLOADS_SUSPENDED==='1',
     enableVideo:env.HEREME_ENABLE_VIDEO==='1',enableLocations:env.HEREME_ENABLE_LOCATIONS==='1',
-    enableVerification:env.HEREME_ENABLE_VERIFICATION==='1',enableStaffPanel:true,enableWebPush,vapidPublicKey,vapidPrivateKey,vapidSubject,pushWorker:env.HEREME_PUSH_WORKER==='1',
+    enableVerification:env.HEREME_ENABLE_VERIFICATION==='1',enableStaffPanel:true,enableWebPush,vapidPublicKey,vapidPrivateKey,vapidSubject,pushWorker:env.HEREME_PUSH_WORKER==='1',pushPollMs,
     maxVideoBytes,ffprobe:env.HEREME_FFPROBE||'ffprobe',ffmpeg:env.HEREME_FFMPEG||'ffmpeg'};
 }
 module.exports = { runtimeConfig };

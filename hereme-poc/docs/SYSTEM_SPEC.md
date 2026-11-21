@@ -114,7 +114,7 @@ The 13 bundled examples are marked synthetic. Existing user-authored content is 
 | `public/` | Plain browser JavaScript/CSS and static assets. UI renders API state and dispatches actions; it does not own durable policy. |
 | `server/index.js` | HTTP routes, authentication/CSRF middleware, limits and response mapping. |
 | `server/domain/` | Identity, posts, interactions, staff actions, chat, media, video, locations and verification rules. |
-| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, push subscriptions/outbox/deliveries, events and audit records. Migrations reach schema 15. WAL mode is used. |
+| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, push subscriptions/outbox/deliveries, live notification events and audit records. Migrations reach schema 16. WAL mode is used. |
 | Private data directory | SQLite plus public post media, temporary uploads and private chat bytes. Chat bytes are outside public static paths. |
 | Workers | Durable post-media processing, minute-based chat attachment cleanup and bounded Web Push delivery. |
 | WebSocket channel | Live signals only; persisted messages and notifications remain authoritative. |

@@ -23,6 +23,11 @@ Web Push is disabled by default. Generate one VAPID pair on an operator machine:
 npm run push:generate-vapid
 ```
 
+`deploy/deploy-online.ps1` initializes a missing pair inside the staged release,
+sets `WEB_PUSH_ENABLED=1`, preserves the same pair on later deployments and never
+prints either key. Manual Compose/systemd installations must perform the following
+configuration themselves.
+
 Put `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` and `WEB_PUSH_ENABLED=1` in the protected
 main deployment environment. For systemd, put only `VAPID_PRIVATE_KEY` in
 `/etc/hereme/hereme-push.env`; keep it `root:root` mode `0600`. Systemd reads it
