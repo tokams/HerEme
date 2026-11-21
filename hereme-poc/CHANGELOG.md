@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-21 — System specification and v2 baseline
+
+- Added `docs/SYSTEM_SPEC.md` as a single current-behavior and change-scoping
+  reference, distinguishing the code baseline, public observations and open
+  implementation or validation work.
+- Created `release/v2` at committed chat baseline `5d7b72d`; specification
+  edits remain on `feature/chat` and are not part of that frozen branch.
+
 ## 2026-11-21 — Staged chat attachments and live delivery
 
 - Added schema 14 with ordered attachment metadata, private staging and a

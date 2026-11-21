@@ -1,5 +1,9 @@
 # HerEme — én lokal plakatvegg
 
+Den samlede beskrivelsen av gjeldende funksjoner, teknisk oppbygning,
+produksjonsstatus og åpne beslutninger finnes i
+[systemspesifikasjonen](docs/SYSTEM_SPEC.md).
+
 En lokal møteplass for Stavanger, Sandnes og Rogaland. Mobil og desktop åpner
 direkte på den samme veggen: kategori, plakatflate og store stemmeknapper.
 Fem faste uttrykk gir plass til **Spørsmål, Mening, Historie, Varsel og Tips**.

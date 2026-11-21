@@ -1,0 +1,134 @@
+# HerEme system specification
+
+**Snapshot:** 2026-11-21, 11:25 CET  
+**Code baseline:** `feature/chat` at `5d7b72d` (clean before this document was added)  
+**Frozen baseline:** `release/v2` points to `5d7b72d`  
+**Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
+
+## How to read this document
+
+| Label | Meaning |
+| --- | --- |
+| **Implemented** | Present in the code baseline above and covered by the stated local checks. |
+| **Observed online** | Confirmed by a read-only public check at the snapshot time. |
+| **Unverified online** | Code or prior deployment records exist, but this snapshot did not prove the full production flow. |
+| **Proposed** | Requested or designed behavior that still needs implementation or validation. |
+
+The code baseline is the source for implementation details. The public site is a separate operational state. A passing readiness check does not identify a deployed Git commit or prove an authenticated user flow.
+
+## Product and users
+
+HerEme is a pseudonymous local forum for Stavanger, Sandnes and Rogaland. Everyone can read the shared poster wall. Posting, voting, commenting, reporting and private chat require an account. Accounts use a pseudonym, a recovery secret and secure sessions; ordinary use does not require a real name or BankID.
+
+| Actor | Current capabilities |
+| --- | --- |
+| Visitor | Read the wall, open posts and view public media. |
+| Member | Create posts; vote, comment and report; manage their account; use consent-based direct and group chat. |
+| Moderator | Member capabilities plus censor or restore whole posts through the staff panel. |
+| Administrator | Moderator capabilities plus the content overview, edits to stored content and vote scores, and permanent deletion of posts, comments or users. User deletion explicitly offers a preserve/delete-posts choice. |
+
+Staff use personal recovery sign-in. Mutations are capability and CSRF checked, require a reason where applicable, and are audited. Credentials belong in the ignored `secrets` directory, never in this specification.
+
+## Implemented public forum behavior
+
+| Area | Current contract |
+| --- | --- |
+| Wall | One published feed ordered newest first; historical rooms remain in data but are retired from navigation and creation. |
+| Categories | Exactly five poster styles: question, opinion, story, alert and tip. Filters allow multiple or no categories. |
+| Posts | Text, link, image and video paths; poster crop and title placement are stored with content. New posts begin with an author upvote. |
+| Voting | One current vote per user/post. Repeating a vote removes it; changing direction replaces it. Displayed score includes preserved historical base score. |
+| Discussion | Nested comments up to four levels including the root. Reports are submitted from post detail; three distinct unresolved reporters move published content to review. |
+| UI | Mobile full-screen post detail; desktop Simple and Advanced wall views; light/dark preference; locally served Cascadia Code; square controls and reduced-motion support. |
+| Media | Original images are kept and validated server-side; display and thumbnail derivatives are generated. Post video is at most 180 seconds and uses the media worker when enabled. |
+| Staff | Role-based moderator and administrator surfaces, with audited actions and server-side authorization. |
+
+The 13 bundled examples are marked synthetic. Existing user-authored content is not replaced by automatic seeding. A prior verified selective import brought 15 historical user posts into the public database, which then held 28 posts on 2026-11-20; those counts are historical evidence, not a current count.
+
+## Implemented private chat behavior
+
+### Conversations and consent
+
+- Mobile opens one inbox for direct messages and groups. Desktop uses the same conversation UI in two panes. Rows show an icon, title and a 15-grapheme message preview, or `(attachment)` for an attachment-only message.
+- Username lookup runs as the user types, using indexed candidates and fuzzy ranking. Selecting a result opens an existing conversation or a local draft; it does not send a request.
+- The first Send creates one pending direct conversation, stores the initial message and issues one durable request notification. Only the sender can read pending content. The recipient accepts or declines; decline is terminal for that pair. Retry keys avoid duplicate messages and requests.
+- A group builder adds and removes people before confirmation. Confirmation creates one group and one invitation per final invitee. Invitees cannot read group messages until acceptance. The creator can send immediately.
+- Members can opt in to online visibility. Presence is shared with accepted conversation members and expires without a heartbeat. Blocking prevents direct contact. Notifications for requests, invitations, decisions and accepted-chat messages persist in SQLite.
+
+| State path | Durable transition and access rule |
+| --- | --- |
+| Direct draft → pending | Draft exists only in the browser. First Send creates the unique user-pair conversation, pending message and one request notification. |
+| Pending → accepted / declined | Only the addressed recipient decides. Acceptance adds membership and exposes pending history; decline closes the pair. |
+| Group invitation → accepted / declined / cancelled | The invitee decides; a creator can cancel an outstanding invitation. Pending invitees see minimal group metadata, not messages or files. |
+| Local file → uploading → staged → ready → expired | No recipient sees a staged file. The message transaction claims ordered staged files; the expiry worker removes ready bytes after seven days and leaves tombstones. |
+
+### Attachments and live updates
+
+- The composer places text and Send above three square image, video and general-file pickers. Selection changes only a local draft. Up to 12 files may be staged, removed and sent with optional text as **one ordered message**.
+- Send uploads 4 MiB chunks into private staging, then claims the staged IDs with the message in a database transaction. Retry keys prevent duplicate final messages. Failed uploads keep the in-page draft for retry. Staged files not sent are deleted after one day.
+- One image has an inline thumbnail; one video has an inline preview control; one ordinary file has a file row. Multiple files appear as one bundle with a viewer and individual download actions. The server checks current membership for every private preview and download.
+- Sent attachment bytes expire seven days after message creation. A separate worker deletes bytes permanently and retains expired metadata so the message can show a tombstone. Normal application snapshots exclude private chat bytes; restoring a snapshot does not recover attachments.
+- Authenticated WebSockets announce recipient-scoped event IDs. The browser re-fetches canonical HTTP state on events and reconnect; HTTP provides history, pagination and uploads. The server checks session revocation and limits connections. A disconnected browser has a bounded reconnect delay.
+
+**Current chat media boundary:** The general file picker accepts arbitrary formats as downloads, within configured storage and request limits. Image preview validation recognizes PNG, JPEG and WebP. Video staging probes format and enforces the 180-second duration, but the chat path has no transcoding job or generated poster derivative. Local FFmpeg/FFprobe and Docker video validation were unavailable at the last implementation check. Treat the revised issue's full video-processing and real-device capture criteria as **Proposed** until implemented and verified.
+
+## Architecture and canonical state
+
+| Component | Responsibility |
+| --- | --- |
+| `public/` | Plain browser JavaScript/CSS and static assets. UI renders API state and dispatches actions; it does not own durable policy. |
+| `server/index.js` | HTTP routes, authentication/CSRF middleware, limits and response mapping. |
+| `server/domain/` | Identity, posts, interactions, staff actions, chat, media, video, locations and verification rules. |
+| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, events and audit records. Migrations reach schema 14 at this baseline. WAL mode is used. |
+| Private data directory | SQLite plus public post media, temporary uploads and private chat bytes. Chat bytes are outside public static paths. |
+| Workers | Durable post-media processing and minute-based chat attachment cleanup. |
+| WebSocket channel | Live signals only; persisted messages and notifications remain authoritative. |
+| Caddy | HTTPS/WSS reverse proxy in the Docker deployment. Production Node binds to loopback. |
+
+Key API groups are `/api/session*` and `/api/me` for identity; `/api/posts*` for forum content; `/api/admin/*` for staff; `/api/chats*`, `/api/chat-uploads/*`, `/api/chat/files/*`, `/api/chat/notifications` and `/api/chat-socket` for chat. Route names and DTOs in `server/index.js` are authoritative when implementing a client.
+
+## Security, retention and operating limits
+
+- Production requires one HTTPS public origin, loopback binding, secure HttpOnly session cookies, CSRF protection on writes, host/origin validation and rate limits. Authentication and membership are checked server-side for private data.
+- Production defaults configure a 30-day session, a 2 GiB upload ceiling and a 2 GiB free-disk reserve. These are operational limits; “any file size” is not a literal unlimited-resource guarantee.
+- Post media and database backups use checksums and WAL-safe snapshots. Private chat bytes are deliberately omitted from normal snapshots to avoid restoring expired files. Chat messages and expired-file metadata remain.
+- `GET /api/live`, `/api/health` and `/api/ready` expose liveness, operational metrics and readiness. Readiness checks database, foreign keys, media paths, disk, expected schema and chat-worker freshness.
+- Location geometry and optional BankID verification are disabled by the current production flags. Existing role-based staff sign-in is active. New provider-backed verification or administration flows require separate data, policy and rollout decisions.
+
+## Deployment and evidence at this snapshot
+
+The public PoC target is `https://hereme.46.251.249.110.nip.io/`. At **2026-11-21 11:25 CET**, read-only calls to `/api/ready` and `/api/health` returned `ok: true`; readiness reported database, foreign keys, media, disk, schema and chat worker healthy. The publicly served `chat.js` contained staged upload and WebSocket client paths. This check did **not** verify the deployed commit, authenticated WSS flow, chat video processing or current content counts.
+
+`deploy/deploy-online.ps1` packages only a clean committed `hereme-poc` tree. It uploads a release, creates and verifies a backup, builds the Docker image, cuts over, checks public readiness and attempts rollback on failed cutover. `release/v2` is a local frozen code reference at `5d7b72d`; branch creation alone does not deploy or publish it.
+
+Last local implementation checks recorded for this baseline: **37 automated Node tests passed**, the desktop/mobile chat browser flow passed, **66 JavaScript files** passed syntax checking, and `git diff --check` passed. These checks do not replace a production smoke test or a real-device video test.
+
+## Known gaps and decisions to scope next
+
+| Topic | Current state / decision needed |
+| --- | --- |
+| Chat video processing | Add a private, bounded media pipeline with valid preview/poster generation or explicitly narrow supported video formats. Verify the 180-second limit with FFmpeg/FFprobe and real phone capture. |
+| Production chat verification | Confirm the exact deployed revision and test authenticated WSS, reconnect, private attachments and seven-day cleanup against the live stack. |
+| Large-file policy | Confirm the advertised maximum size, per-message file count, storage quota and behavior at disk pressure. Current code limits a message to 12 attachments and each upload to the configured 2 GiB ceiling. |
+| Durable draft policy | In-page drafts survive a failed request but are not promised to survive page reload or device change. Decide whether persistence across reload is required. |
+| External capabilities | Location/map geometry, BankID, off-host backup destination and related policy need separate approvals and integration evidence. |
+
+## Template for the next change
+
+Add a dated section to this document or attach a replacement version containing:
+
+1. **Outcome and affected users:** what should become possible, and for whom.
+2. **Current behavior:** a reproducible example and the baseline commit/deployment being changed.
+3. **Target behavior:** user flow, wireframes, accessibility, failure and recovery behavior.
+4. **State and authorization:** entities, transitions, ownership, privacy, retention and limits.
+5. **Interfaces:** affected UI, API, worker, operator and deployment paths.
+6. **Migration and rollout:** existing data, backup/rollback, feature flags and production checks.
+7. **Acceptance evidence:** tests, observable metrics and explicit open decisions.
+
+Keep proposed behavior separate from verified behavior. After implementing a change, update this snapshot, the relevant ADR and the changelog.
+
+## Source documents
+
+- [Release behavior contract](release-contract.md), [release scope](release-scope.md) and [operator runbook](operator-runbook.md).
+- [Release architecture](adr/0006-release-architecture.md), [staff model](adr/0008-role-based-staff-panel.md) and [chat/retention design](adr/0009-private-chat-and-retention.md).
+- Latest local chat issue: **E08 / I29, “Unified private messaging: inbox, group invitations, staged attachments and real-time chat”**, including `attachment-composer-demo.html` and the supplied SVG icons. This issue is a requested contract; its unchecked acceptance items are not evidence of completion.
+- Current implementation and tests under `server/`, `public/` and `tests/`.
