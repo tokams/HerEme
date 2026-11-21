@@ -24,7 +24,7 @@ function lanIps(){
   found.sort((a,b)=>{const score=x=>/vpn|virtual|docker|vethernet|veth|tailscale|wsl|hyper-v/i.test(x.name)?2:/wi-?fi|wireless|wlan|ethernet|eth\d/i.test(x.name)?0:1;return score(a)-score(b);});return found;
 }
 function write(capability,limit=60){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);S.identity.requireCsrf(req,req.auth);if(capability)S.identity.requireCapability(req.auth,capability);S.rate.check(`${capability||'write'}:${req.auth.id}`,limit);next();};}
-function read(capability){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);S.identity.requireCapability(req.auth,capability);next();};}
+function read(capability){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);if(capability)S.identity.requireCapability(req.auth,capability);next();};}
 function activity(items){
   const selected=new Map(items.map(post=>[post.id,post]));if(!selected.size)return {stats:{posts:0,comments:0},discussions:[],recent_comments:[]};
   const placeholders=[...selected].map(()=>'?').join(',');
@@ -54,13 +54,15 @@ app.use('/media',(req,res,next)=>{const original=req.pathname;req.pathname=req.p
 app.use(web.static(path.resolve(__dirname,'..','public'),{extensions:['html']}));
 
 app.get('/api/live',(req,res)=>res.json({ok:true,name:'HerEme'}));
-app.get('/api/health',(req,res)=>res.json({ok:true,name:'HerEme',storage:'SQLite',runtime:runtimeMetrics}));
+app.get('/api/health',(req,res)=>res.json({ok:true,name:'HerEme',storage:'SQLite',runtime:runtimeMetrics,chat_worker:S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get()||null}));
 app.get('/api/ready',(req,res)=>{
-  const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false};let message='';
+  const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=11').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=12').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===11;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===12;
+    const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
+    checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();});
     const stat=fs.statfsSync(S.dataDir);checks.disk=stat.bavail*stat.bsize>=S.config.minFreeBytes;
   }catch(error){message=error.message;}
@@ -98,6 +100,26 @@ app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.identity.revokeAl
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true}));
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
 app.delete('/api/me',write(null,3),(req,res)=>{S.accounts.deactivate(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
+app.get('/api/chat/users',read(null),(req,res)=>{S.rate.check(`chat-search:${req.auth.id}`,30);res.json({users:S.chat.search(req.auth,req.query.q)});});
+app.get('/api/chat/inbox',read(null),(req,res)=>res.json(S.chat.inbox(req.auth)));
+app.post('/api/chat/requests',write(null,30),(req,res)=>res.status(201).json(S.chat.request(req.auth,req.body?.recipient_id,req.body?.opening)));
+app.post('/api/chat/requests/:id',write(null,30),(req,res)=>res.json(S.chat.decide(req.auth,req.params.id,req.body?.accept===true)));
+app.post('/api/chat/blocks',write(null,30),(req,res)=>res.json(S.chat.block(req.auth,req.body?.user_id)));
+app.get('/api/chats',read(null),(req,res)=>res.json({chats:S.chat.list(req.auth)}));
+app.post('/api/chats',write(null,10),(req,res)=>res.status(201).json(S.chat.group(req.auth,req.body?.name,req.body?.recipients,req.body?.opening)));
+app.get('/api/chats/:id/messages',read(null),(req,res)=>res.json({messages:S.chat.messages(req.auth,req.params.id,req.query.before)}));
+app.post('/api/chats/:id/messages',write(null,120),(req,res)=>res.status(201).json(S.chat.send(req.auth,req.params.id,req.body?.body)));
+app.get('/api/chats/:id/people',read(null),(req,res)=>res.json({people:S.chat.peers(req.auth,req.params.id)}));
+app.post('/api/chats/:id/invites',write(null,30),(req,res)=>res.json(S.chat.invite(req.auth,req.params.id,req.body?.recipient_id)));
+app.get('/api/chats/:id/invites',read(null),(req,res)=>res.json({invites:S.chat.pendingInvites(req.auth,req.params.id)}));
+app.delete('/api/chats/:id/invites/:invite',write(null,30),(req,res)=>res.json(S.chat.cancelInvite(req.auth,req.params.id,req.params.invite)));
+app.post('/api/chat/invites/:id',write(null,30),(req,res)=>res.json(S.chat.decideInvite(req.auth,req.params.id,req.body?.accept===true)));
+app.delete('/api/chats/:id/membership',write(null,10),(req,res)=>res.json(S.chat.leave(req.auth,req.params.id)));
+app.put('/api/chat/presence',write(null,120),(req,res)=>res.json(S.chat.presence(req.auth,req.body?.visible)));
+app.post('/api/chats/:id/files',write(null,20),(req,res)=>res.status(201).json(S.chat.beginFile(req.auth,req.params.id,req.body?.name,req.body?.bytes)));
+app.get('/api/chat/files/:id',read(null),(req,res)=>res.json((({id,bytes,received,status,expires_at,name})=>({id,bytes,received,status,expires_at,name}))(S.chat.file(req.auth,req.params.id))));
+app.patch('/api/chat/files/:id',write(null,300),async(req,res)=>res.json(await S.chat.chunk(req.auth,req.params.id,req.headers['x-upload-offset'],req)));
+app.get('/api/chat/files/:id/download',read(null),(req,res)=>S.chat.download(req.auth,req.params.id,res));
 
 app.get('/api/posts',(req,res)=>{const current=S.identity.readSession(req,res);res.json(S.posts.list({...req.query,userId:current?.id}));});
 app.get('/api/activity',(req,res)=>{const current=S.identity.readSession(req,res);const page=S.posts.list({...req.query,limit:Math.min(Number(req.query.limit)||50,50),userId:current?.id});res.json({...activity(page.posts),next_cursor:page.next_cursor});});
@@ -136,6 +158,7 @@ app.use((error,req,res,next)=>{
 });
 
 if(require.main===module){
+  if(!S.config.production)setInterval(()=>{try{const overdue=S.chat.cleanup();if(overdue)throw Error(`${overdue} expired chat files remain`);}catch(error){console.error('Chat expiry cleanup failed:',error);process.exit(1);}},60000);
   const options={port:S.config.port,host:S.config.host,attempts:S.config.production?1:20,onBusy:port=>console.log(`  Port ${port} er opptatt. Prøver neste port...`)};
   listenAvailable(app,options).then(server=>{const port=server.address().port;console.log(`\n  HerEme kjører!\n  På PC:     http://localhost:${port}`);if(!S.config.production)for(const {name,ip:address} of lanIps())console.log(`  På mobilen: http://${address}:${port}  (${name})`);console.log(`  Data: ${S.dataDir}\n`);}).catch(error=>{console.error(error);S.db.close();process.exitCode=1;});
 }

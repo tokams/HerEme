@@ -47,6 +47,19 @@ services:
     volumes:
       - hereme-data:/var/lib/hereme
 
+  chat-worker:
+    image: hereme-local-forum:latest
+    restart: unless-stopped
+    command: ["node", "server/chat-worker.js"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      <<: *hereme-environment
+      HEREME_CHAT_WORKER: "1"
+    volumes:
+      - hereme-data:/var/lib/hereme
+
   proxy:
     image: caddy:2-alpine
     restart: unless-stopped

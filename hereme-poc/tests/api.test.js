@@ -19,6 +19,47 @@ test('liveness, readiness, public pages and protected staff surfaces',async()=>{
   assert.equal((await request('/api/rooms')).status,410);assert.equal((await request('/api/admin/queue')).status,401);
   assert.match((await request('/privacy.html')).body,/Personvern/);assert.match((await request('/rules.html')).body,/Fellesskapsregler/);
 });
+test('chat consent, membership, groups, blocked delivery, resumable files and expiry',async()=>{
+  const alice=await profile('ChatAlice'),bob=await profile('ChatBob'),third=await profile('ChatThird');
+  assert.equal((await request('/api/chat/users?q=atBo',{session:alice})).body.users[0].name,'ChatBob');
+  const pending=await request('/api/chat/requests',{method:'POST',session:alice,body:{recipient_id:bob.user.id,opening:'Hello'}});
+  assert.equal(pending.status,201);assert.equal((await request('/api/chats',{session:alice})).body.chats.length,0);
+  assert.equal((await request('/api/chat/inbox',{session:bob})).body.requests[0].opening,'Hello');
+  assert.equal((await request('/api/chat/requests/'+pending.body.id,{method:'POST',session:third,body:{accept:true}})).status,404);
+  const accepted=await request('/api/chat/requests/'+pending.body.id,{method:'POST',session:bob,body:{accept:true}});const chat=accepted.body.chat_id;
+  assert.equal((await request('/api/chats',{session:alice})).body.chats[0].name,'ChatBob');
+  assert.equal((await request(`/api/chats/${chat}/messages`,{session:third})).status,403);
+  assert.equal((await request(`/api/chats/${chat}/messages`,{session:bob})).body.messages[0].body,'Hello');
+  const started=await request(`/api/chats/${chat}/files`,{method:'POST',session:alice,body:{name:'sample.bin',bytes:5}});assert.equal(started.status,201);
+  for(const [offset,part] of [[0,'ab'],[2,'cde']]){const uploaded=await fetch(url+'/api/chat/files/'+started.body.id,{method:'PATCH',headers:{cookie:alice.cookie,'x-csrf-token':alice.csrf,'x-upload-offset':String(offset)},body:new Blob([part])});assert.equal(uploaded.status,200);}
+  assert.equal((await request('/api/chat/files/'+started.body.id,{session:alice})).body.status,'ready');
+  assert.equal(await (await fetch(url+'/api/chat/files/'+started.body.id+'/download',{headers:{cookie:bob.cookie}})).text(),'abcde');
+  const backupDir=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-chat-backup-'));try{await require('../scripts/snapshot-data').snapshotData(testData,path.join(backupDir,'snapshot'));assert.equal(fs.existsSync(path.join(backupDir,'snapshot','chat')),false);}finally{fs.rmSync(backupDir,{recursive:true,force:true});}
+  assert.equal((await request('/api/chat/files/'+started.body.id+'/download',{session:third})).status,403);
+  S.db.prepare("UPDATE chat_files SET expires_at=datetime('now','-1 second') WHERE id=?").run(started.body.id);
+  assert.equal((await request('/api/chat/files/'+started.body.id+'/download',{session:bob})).status,410);
+  S.chat.cleanup();assert.equal(fs.existsSync(path.join(testData,'chat',started.body.id)),false);
+  assert.equal((await request('/api/health')).body.chat_worker.overdue,0);
+  const group=await request('/api/chats',{method:'POST',session:alice,body:{name:'Test group',recipients:[bob.user.id,third.user.id]}});assert.equal(group.status,201);
+  assert.equal((await request(`/api/chats/${group.body.id}/messages`,{session:bob})).status,403);
+  const pendingInvites=(await request(`/api/chats/${group.body.id}/invites`,{session:alice})).body.invites;
+  assert.equal(pendingInvites.length,2);assert.equal((await request(`/api/chats/${group.body.id}/invites`,{session:bob})).status,403);
+  const thirdInvite=pendingInvites.find(i=>i.recipient==='ChatThird');
+  assert.equal((await request(`/api/chats/${group.body.id}/invites/${thirdInvite.id}`,{method:'DELETE',session:alice})).status,200);
+  assert.equal((await request('/api/chat/inbox',{session:third})).body.invites.length,0);
+  const invite=(await request('/api/chat/inbox',{session:bob})).body.invites[0];assert.equal((await request('/api/chat/invites/'+invite.id,{method:'POST',session:bob,body:{accept:true}})).status,200);
+  assert.equal((await request(`/api/chats/${group.body.id}/messages`,{session:bob})).status,200);
+  assert.match((await request(`/api/chats/${group.body.id}/messages`,{session:bob})).body.messages[0].body,/ble med/);
+  await request('/api/chat/presence',{method:'PUT',session:alice,body:{visible:true}});
+  assert.equal((await request(`/api/chats/${chat}/people`,{session:bob})).body.people.find(p=>p.id===alice.user.id).online,1);
+  assert.equal((await request('/api/chat/blocks',{method:'POST',session:bob,body:{user_id:alice.user.id}})).status,200);
+  assert.equal((await request(`/api/chats/${chat}/people`,{session:bob})).body.people.find(p=>p.id===alice.user.id).online,0);
+  assert.equal((await request(`/api/chats/${chat}/messages`,{method:'POST',session:alice,body:{body:'blocked'}})).status,403);
+  assert.equal((await request(`/api/chats/${group.body.id}/membership`,{method:'DELETE',session:alice})).status,200);
+  const admin=await profile('ChatDeleteAdmin');S.db.prepare("insert into user_roles(user_id,role) values(?,'admin')").run(admin.user.id);
+  assert.equal((await request(`/api/admin/users/${alice.user.id}`,{method:'DELETE',session:admin,body:{delete_posts:false,reason:'chat account deletion test'}})).status,200);
+  const afterDeletion=await request(`/api/chats/${group.body.id}/messages`,{session:bob});assert.equal(afterDeletion.status,200);assert.match(afterDeletion.body.messages.at(-1).body,/slettet bruker/);
+});
 test('moderator censorship and audited administrator content and user controls',async()=>{
   const author=await profile('ManagedAuthor');
   const created=await request('/api/posts',{method:'POST',session:author,body:{title:'Content to manage',body:'Original body',type:'text',category:'story'}});const postId=created.body.id;

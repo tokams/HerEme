@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-21 — Private chat and repeatable public deployment
+
+- Added username discovery, consent-based direct messages, invited groups,
+  opt-in online presence, private file sharing with resumable chunk uploads,
+  and server-enforced membership and blocking.
+- Added schema 12 and a minute-based cleanup worker. Files expire after seven
+  days; incomplete uploads expire after one day. Chat bytes are excluded from
+  application backups and missing files become tombstones after restore.
+- Added a Windows PowerShell deployment script for the existing Docker host
+  with a verified snapshot and failed-cutover rollback, plus ADR 0009 and
+  operator instructions.
+
 ## 2026-11-20 — Role-based staff control and historical user content
 
 - Added authenticated moderator and administrator panels over canonical domain

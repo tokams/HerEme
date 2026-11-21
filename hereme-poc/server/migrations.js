@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 11) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 12) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -246,6 +246,25 @@ function applyMigrations(db) {
       db.exec('COMMIT');
     }catch(error){db.exec('ROLLBACK');throw error;}
     finally{db.exec('PRAGMA foreign_keys='+foreignKeys);}
+  }
+  if(version<12){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE chat_requests(id TEXT PRIMARY KEY, sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, opening TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('pending','accepted','declined','cancelled')), created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE INDEX chat_requests_inbox ON chat_requests(recipient_id,state,created_at);
+      CREATE TABLE chat_blocks(blocker_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, blocked_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(blocker_id,blocked_id));
+      CREATE TABLE chats(id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('direct','group')), pair_key TEXT UNIQUE, creator_id TEXT REFERENCES users(id) ON DELETE SET NULL, name TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')), CHECK((kind='direct' AND pair_key IS NOT NULL) OR (kind='group' AND pair_key IS NULL)));
+      CREATE TABLE chat_members(chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,joined_at TEXT NOT NULL DEFAULT (datetime('now')),PRIMARY KEY(chat_id,user_id));
+      CREATE INDEX chat_members_user ON chat_members(user_id,chat_id);
+      CREATE TABLE chat_invites(id TEXT PRIMARY KEY,chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,inviter_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,state TEXT NOT NULL CHECK(state IN ('pending','accepted','declined','cancelled')),created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE INDEX chat_invites_inbox ON chat_invites(recipient_id,state);
+      CREATE UNIQUE INDEX chat_invites_pending ON chat_invites(chat_id,recipient_id) WHERE state='pending';
+      CREATE TABLE chat_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,sender_id TEXT REFERENCES users(id) ON DELETE SET NULL,kind TEXT NOT NULL DEFAULT 'text' CHECK(kind IN ('text','file','system')),body TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL DEFAULT (datetime('now')));
+      CREATE INDEX chat_messages_page ON chat_messages(chat_id,id DESC);
+      CREATE TABLE chat_files(id TEXT PRIMARY KEY,chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,sender_id TEXT REFERENCES users(id) ON DELETE SET NULL,message_id INTEGER REFERENCES chat_messages(id),name TEXT NOT NULL,bytes INTEGER NOT NULL CHECK(bytes>=0),received INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL CHECK(status IN ('uploading','ready','expired')),created_at TEXT NOT NULL DEFAULT (datetime('now')),expires_at TEXT,stored_path TEXT NOT NULL UNIQUE);
+      CREATE INDEX chat_files_expiry ON chat_files(status,expires_at);
+      CREATE TABLE chat_presence(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,seen_at TEXT NOT NULL DEFAULT (datetime('now')),visible INTEGER NOT NULL DEFAULT 1 CHECK(visible IN (0,1)));
+      CREATE TABLE chat_worker_state(id INTEGER PRIMARY KEY CHECK(id=1),last_run TEXT NOT NULL,overdue INTEGER NOT NULL);
+      INSERT INTO schema_migrations(version) VALUES(12); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

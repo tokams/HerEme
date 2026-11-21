@@ -15,6 +15,28 @@ permanent. Before bulk destructive work, take and verify the normal data backup.
 
 ## Provision and deploy
 
+### Chat retention and automated Docker deployment
+
+Chat attachments live only in the private `chat` directory of the data volume.
+The one-minute chat worker deletes completed files seven days after upload and
+abandoned uploads after one day. The normal snapshot omits attachment bytes;
+restored snapshots therefore preserve message text and file tombstones but do
+not recover shared files. Do not make separate long-lived copies of that
+directory. Check `/api/health` for `chat_worker.last_run` and `overdue`; stale
+cleanup eventually fails `/api/ready`.
+
+On Windows PowerShell, after reviewing and committing a clean release, run
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy/deploy-online.ps1`
+from `hereme-poc`. The script uses the pinned public host, dedicated SSH key,
+strict host-key verification and existing remote `.env`. It packages the
+committed `hereme-poc` tree, copies it to the Docker host, makes and verifies
+a data snapshot, builds the new image, restarts Compose and checks public
+readiness. On failed cutover it restores the previous image, code and snapshot.
+The script never removes the named data volume. Previous code and backups are
+retained on the host for operator review; prune them only under the retention
+policy. It requires `git`, `ssh` and `scp` locally, and Docker Compose and
+`curl` on the host.
+
 Use a supported Linux VM with Node 24+, Caddy, SQLite-compatible local storage
 and enough disk for retained originals plus derivatives. Create DNS only for a
 domain actually controlled by the operator. Run `deploy/install.sh` as root,
