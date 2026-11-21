@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 16) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 18) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -345,6 +345,42 @@ function applyMigrations(db) {
       );
       CREATE INDEX notification_events_recipient ON notification_events(recipient_id,id);
       INSERT INTO schema_migrations(version) VALUES(16); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<17){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE webauthn_user_handles(
+        user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        user_handle TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE passkey_credentials(
+        credential_id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        public_key BLOB NOT NULL, counter INTEGER NOT NULL DEFAULT 0 CHECK(counter>=0),
+        transports_json TEXT NOT NULL DEFAULT '[]', device_type TEXT NOT NULL,
+        backed_up INTEGER NOT NULL DEFAULT 0 CHECK(backed_up IN (0,1)), aaguid TEXT NOT NULL DEFAULT '',
+        label TEXT NOT NULL DEFAULT 'Passnøkkel', created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_used_at TEXT, revoked_at TEXT
+      );
+      CREATE INDEX passkey_credentials_user ON passkey_credentials(user_id,revoked_at,created_at);
+      CREATE TABLE passkey_challenges(
+        id TEXT PRIMARY KEY, challenge TEXT NOT NULL UNIQUE,
+        ceremony TEXT NOT NULL CHECK(ceremony IN ('register','authenticate')),
+        user_id TEXT REFERENCES users(id) ON DELETE CASCADE, session_hash TEXT,
+        rp_id TEXT NOT NULL, origin TEXT NOT NULL, expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')), consumed_at TEXT,
+        CHECK((ceremony='register' AND user_id IS NOT NULL AND session_hash IS NOT NULL) OR ceremony='authenticate')
+      );
+      CREATE INDEX passkey_challenges_expiry ON passkey_challenges(expires_at,consumed_at);
+      CREATE TABLE authentication_stepups(
+        session_hash TEXT PRIMARY KEY REFERENCES sessions(id_hash) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        verified_at TEXT NOT NULL DEFAULT (datetime('now')), expires_at TEXT NOT NULL
+      );
+      INSERT INTO schema_migrations(version) VALUES(17); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<18){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`ALTER TABLE authentication_stepups ADD COLUMN proof_type TEXT NOT NULL DEFAULT 'new_account' CHECK(proof_type IN ('new_account','recovery','passkey'));
+      INSERT INTO schema_migrations(version) VALUES(18); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

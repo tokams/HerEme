@@ -3,9 +3,21 @@ param(
     [string]$UserName = 'dongjel',
     [string]$IdentityFile = "$env:USERPROFILE\.ssh\dongjel_relay",
     [string]$RemoteDirectory = '/home/dongjel/services/hereme',
-    [string]$Domain = 'hereme.46.251.249.110.nip.io'
+    [string]$Domain = 'hereme.no',
+    [string]$ExpectedPreviousDomain = '',
+    [switch]$Plan
 )
 $ErrorActionPreference = 'Stop'
+if ($Domain -ne 'hereme.no') { throw 'The canonical deployment domain must be hereme.no.' }
+if ($ExpectedPreviousDomain -and $ExpectedPreviousDomain -ne 'hereme.46.251.249.110.nip.io') { throw 'Unexpected previous domain.' }
+foreach ($name in @($Domain, 'www.hereme.no')) {
+    $records = @(Resolve-DnsName $name -Server 1.1.1.1 -ErrorAction Stop)
+    $addresses = @($records | Where-Object { $_.Type -eq 'A' } | ForEach-Object { $_.IPAddress })
+    if (-not $addresses -or @($addresses | Where-Object { $_ -ne $HostName }).Count) { throw "DNS for $name does not point exclusively to the deployment server." }
+    $ipv6 = @(Resolve-DnsName $name -Type AAAA -Server 1.1.1.1 -ErrorAction SilentlyContinue | Where-Object { $_.Type -eq 'AAAA' })
+    if ($ipv6.Count) { throw "Unexpected IPv6 DNS for $name; review before cutover." }
+}
+if ($Plan) { Write-Output "Plan: deploy to https://$Domain; preserve docker project/volumes, VAPID and private environment; require expected previous domain for cutover; retain old release for data-preserving rollback."; return }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $identity = (Resolve-Path $IdentityFile).Path
 foreach ($command in @('git', 'ssh', 'scp')) {
@@ -29,6 +41,7 @@ revision=$2
 target=$3
 domain=$4
 upload=$5
+expected=$6
 backup_root="$(dirname "$target")/hereme-backups"
 backup="$backup_root/$stamp"
 previous="$(dirname "$target")/hereme-previous-$stamp"
@@ -43,27 +56,28 @@ test -f "$upload.tar.gz"
 mkdir -p "$backup_root" "$staged"
 tar -xzf "$upload.tar.gz" -C "$staged"
 cp -p "$target/deploy/docker/.env" "$staged/deploy/docker/.env"
-grep -Fx "HEREME_DOMAIN=$domain" "$staged/deploy/docker/.env" >/dev/null
 docker image tag hereme-local-forum:latest "$rollback_image"
 docker run --rm --user 0 -v docker_hereme-data:/var/lib/hereme:ro -v "$backup_root":/backup "$rollback_image" node scripts/snapshot-data.js /var/lib/hereme "/backup/$stamp"
 # SQLite may need to create a transient -shm file even with a read-only connection.
 docker run --rm --user 0 -v "$backup_root":/backup "$rollback_image" node scripts/verify-backup.js "/backup/$stamp"
 docker run --rm --user 0 -v docker_hereme-data:/data:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'if [ -d /data/chat ]; then find /data/chat -maxdepth 1 -type f -printf "%f\n"; fi > /backup/'"$stamp"'/chat-files.txt'
 (cd "$staged" && docker compose -p docker -f "$compose" build app)
-docker run --rm --user "$(id -u):$(id -g)" -v "$staged/deploy/docker:/config" hereme-local-forum:latest node scripts/configure-push-env.js /config/.env "$domain"
+cp -p "$target/deploy/docker/.env" "$backup/production.env"
+chmod 600 "$backup/production.env"
+docker run --rm --user "$(id -u):$(id -g)" -v "$staged/deploy/docker:/config" hereme-local-forum:latest node scripts/configure-domain.js /config/.env "$domain" "$expected"
 chmod 600 "$staged/deploy/docker/.env"
+(cd "$staged" && docker compose -p docker -f "$compose" run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile)
 deployed=0
 rollback() {
   trap - ERR
   if [ "$deployed" -eq 1 ]; then return; fi
-  echo 'Deployment failed; restoring previous release and verified data snapshot.' >&2
+  echo 'Deployment failed; restoring previous release and environment while preserving live data.' >&2
   (cd "$target" && docker compose -p docker -f "$compose" down) || true
   if [ -d "$previous" ]; then
     if [ -d "$target" ]; then mv "$target" "$staged.failed"; fi
     mv "$previous" "$target"
   fi
   docker image tag "$rollback_image" hereme-local-forum:latest
-  docker run --rm --user 0 -v docker_hereme-data:/data -v "$backup_root":/backup:ro "$rollback_image" sh -ec 'rm -f /data/hereme.sqlite /data/hereme.sqlite-wal /data/hereme.sqlite-shm; rm -rf /data/uploads /data/media /data/tmp; cp /backup/'"$stamp"'/hereme.sqlite /data/hereme.sqlite; cp -a /backup/'"$stamp"'/uploads /backup/'"$stamp"'/media /data/; mkdir /data/tmp; for file in /data/chat/*; do [ -f "$file" ] || continue; name=${file##*/}; if ! grep -Fxq "$name" /backup/'"$stamp"'/chat-files.txt; then rm "$file"; fi; done; chown -R node:node /data'
   (cd "$target" && docker compose -p docker -f "$compose" up -d --no-build --force-recreate --wait) || true
 }
 trap rollback ERR
@@ -86,7 +100,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Could not upload the release archive.' }
     & scp @sshOptions $remoteScript "${connection}:$upload.sh"
     if ($LASTEXITCODE -ne 0) { throw 'Could not upload the deploy procedure.' }
-    & ssh @sshOptions $connection "bash '$upload.sh' '$stamp' '$revision' '$RemoteDirectory' '$Domain' '$upload'"
+    & ssh @sshOptions $connection "bash '$upload.sh' '$stamp' '$revision' '$RemoteDirectory' '$Domain' '$upload' '$ExpectedPreviousDomain'"
     if ($LASTEXITCODE -ne 0) { throw 'Remote deployment failed. Review remote output and retained backup before retrying.' }
 } finally {
     Remove-Item -LiteralPath $scratch -Recurse -Force

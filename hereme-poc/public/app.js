@@ -88,6 +88,7 @@
     document.body.classList.toggle('modal-open',locked);
     for(const element of [$('.masthead'),$('.display-preferences'),$('#forumShell')])element.inert=locked;
   }
+  addEventListener('hereme:passkey-invite',()=>toast('Du kan lagre en passnøkkel fra profilmenyen → Sikkerhet · Passnøkler.'));
   function wrapper(title,body,footer='',kind='') {
     return `<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel ${kind}" role="dialog" aria-modal="true" aria-label="${E(title)}">
       <header class="modal-header"><h2>${E(title)}</h2><button class="modal-close" data-action="close-modal" aria-label="Lukk">× <span>Lukk</span></button></header>
@@ -197,6 +198,7 @@
     if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
+    if(state.modal==='menu'&&state.user){const button=document.createElement('button');button.className='btn btn-secondary';button.textContent='Sikkerhet · Passnøkler';button.onclick=()=>window.HeremePasskeys.security();$('.account-actions')?.prepend(button);}
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
     if(state.modal==='compose'&&state.photoLoading&&$('#publishButton'))$('#publishButton').disabled=true;

@@ -14,6 +14,9 @@ x-hereme-environment: &hereme-environment
   HEREME_FFMPEG: /usr/bin/ffmpeg
   HEREME_ENABLE_LOCATIONS: 0
   HEREME_ENABLE_VERIFICATION: 0
+  WEBAUTHN_ENABLED: ${WEBAUTHN_ENABLED:-false}
+  WEBAUTHN_RP_ID: hereme.no
+  WEBAUTHN_ALLOWED_ORIGINS: https://hereme.no
   WEB_PUSH_ENABLED: ${WEB_PUSH_ENABLED:-0}
   HEREME_PUSH_POLL_MS: ${HEREME_PUSH_POLL_MS:-2000}
   VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
@@ -87,6 +90,8 @@ services:
         condition: service_healthy
     environment:
       HEREME_DOMAIN: ${HEREME_DOMAIN}
+      HEREME_WWW_DOMAIN: ${HEREME_WWW_DOMAIN:-www.hereme.no}
+      HEREME_LEGACY_DOMAIN: ${HEREME_LEGACY_DOMAIN:-hereme.46.251.249.110.nip.io}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

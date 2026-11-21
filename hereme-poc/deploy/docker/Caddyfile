@@ -18,3 +18,7 @@
     max_size 2GB
   }
 }
+
+{$HEREME_WWW_DOMAIN:www.hereme.no}, {$HEREME_LEGACY_DOMAIN:hereme.46.251.249.110.nip.io} {
+  redir https://{$HEREME_DOMAIN}{uri} 307
+}

@@ -1,5 +1,30 @@
 # Operator runbook
 
+## Passkey rollout (not deployed)
+
+Keep `WEBAUTHN_ENABLED=false` until the canonical hereme.no cutover, trusted TLS,
+two external DNS resolver checks, canonical redirects and account recovery have
+passed. Configure `WEBAUTHN_RP_ID=hereme.no` and
+`WEBAUTHN_ALLOWED_ORIGINS=https://hereme.no`. Never enroll production credentials
+on nip.io. Local development uses localhost with a separately configured port.
+Apply the additive schema with the normal verified WAL snapshot and preserve the
+existing data volume and private chat bytes. Test an existing and new account.
+Enable through the operator environment only after reviewing the security tests;
+turn the flag off to roll back enrollment/login while recovery login continues.
+Retain all credential tables and live data. Older code may reject the new schema;
+use compatible current code with the flag off rather than a destructive restore.
+
+Physical iPhone Safari/Home Screen, Android credential manager, and desktop
+authenticators must be verified separately from Chromium virtual-authenticator
+tests. Record the actual deployed SHA and devices; local code is not live evidence.
+
+Existing members sign in with their recovery key, then use Profile → Sikkerhet ·
+Passnøkler. Keep a recovery backup. Passkeys do not verify real-world identity or
+change staff permissions. Synced credentials may appear on several devices.
+
+For the proposed `hereme.no` cutover, see [domain migration](domain-migration.md).
+This target is not yet verified live; DNSSEC activation is pending at Uniweb.
+
 ## Staff accounts and panel
 
 Run `npm run staff:provision` once against the intended `HEREME_DATA_DIR`. It

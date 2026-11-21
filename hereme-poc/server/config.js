@@ -28,6 +28,10 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   const maxVideoBytes=Number(env.HEREME_MAX_VIDEO_BYTES||2*1024*1024*1024);
   const enableWebPush=env.WEB_PUSH_ENABLED==='1',vapidPublicKey=env.VAPID_PUBLIC_KEY||'',vapidPrivateKey=env.VAPID_PRIVATE_KEY||'',vapidSubject=env.VAPID_SUBJECT||'';
   const pushPollMs=Number(env.HEREME_PUSH_POLL_MS||2000);
+  if(env.WEBAUTHN_ENABLED!==undefined&&!['true','false','1','0'].includes(env.WEBAUTHN_ENABLED))throw new Error('WEBAUTHN_ENABLED must be true, false, 1 or 0.');
+  const webauthnEnabled=env.WEBAUTHN_ENABLED==='true'||env.WEBAUTHN_ENABLED==='1';
+  const webauthnRpId=env.WEBAUTHN_RP_ID||(production?'':'localhost');
+  const webauthnOrigins=String(env.WEBAUTHN_ALLOWED_ORIGINS||(production?'':`http://localhost:${port}`)).split(',').map(value=>value.trim()).filter(Boolean);
   if(!Number.isInteger(sessionDays)||sessionDays<1||sessionDays>365)throw new Error('HEREME_SESSION_DAYS must be 1-365.');
   if(!Number.isSafeInteger(minFreeBytes)||minFreeBytes<0)throw new Error('HEREME_MIN_FREE_BYTES must be a nonnegative integer.');
   if(!Number.isSafeInteger(maxVideoBytes)||maxVideoBytes<1024*1024)throw new Error('HEREME_MAX_VIDEO_BYTES must be a safe integer of at least 1 MiB.');
@@ -36,10 +40,13 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   if(enableWebPush&&env.HEREME_PUSH_WORKER==='1'&&!vapidPrivateKey)throw new Error('The push worker requires VAPID_PRIVATE_KEY.');
   if(enableWebPush&&!/^(mailto:|https:\/\/)/.test(vapidSubject))throw new Error('WEB_PUSH_ENABLED requires VAPID_SUBJECT as mailto: or HTTPS URL.');
   if(!Number.isInteger(pushPollMs)||pushPollMs<500||pushPollMs>60000)throw new Error('HEREME_PUSH_POLL_MS must be an integer from 500 to 60000.');
+  if(webauthnEnabled&&(!/^(?:[a-z0-9-]+\.)*[a-z0-9-]+$/i.test(webauthnRpId)||webauthnOrigins.length!==1))throw new Error('Enabled WebAuthn requires one explicit WEBAUTHN_RP_ID and WEBAUTHN_ALLOWED_ORIGINS origin.');
+  if(webauthnEnabled&&!/^https:\/\//.test(webauthnOrigins[0])&&!(environment!=='production'&&/^http:\/\/localhost(?::\d+)?$/.test(webauthnOrigins[0])))throw new Error('WebAuthn origin must use HTTPS except explicit localhost development.');
+  if(production&&webauthnEnabled&&(webauthnRpId!=='hereme.no'||webauthnOrigins[0]!=='https://hereme.no'||publicOrigin!=='https://hereme.no'))throw new Error('Production WebAuthn is gated to the canonical https://hereme.no origin.');
   return {dataDir,port,preview,environment,production,host,publicOrigin,sessionDays,minFreeBytes,
     trustProxy:env.HEREME_TRUST_PROXY==='loopback',uploadsSuspended:env.HEREME_UPLOADS_SUSPENDED==='1',
     enableVideo:env.HEREME_ENABLE_VIDEO==='1',enableLocations:env.HEREME_ENABLE_LOCATIONS==='1',
     enableVerification:env.HEREME_ENABLE_VERIFICATION==='1',enableStaffPanel:true,enableWebPush,vapidPublicKey,vapidPrivateKey,vapidSubject,pushWorker:env.HEREME_PUSH_WORKER==='1',pushPollMs,
-    maxVideoBytes,ffprobe:env.HEREME_FFPROBE||'ffprobe',ffmpeg:env.HEREME_FFMPEG||'ffmpeg'};
+    webauthnEnabled,webauthnRpId,webauthnOrigins,maxVideoBytes,ffprobe:env.HEREME_FFPROBE||'ffprobe',ffmpeg:env.HEREME_FFMPEG||'ffmpeg'};
 }
 module.exports = { runtimeConfig };

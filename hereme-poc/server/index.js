@@ -64,9 +64,9 @@ app.get('/api/health',(req,res)=>{const worker=S.db.prepare('SELECT last_run FRO
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=16').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=18').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===16;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===18;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();});
@@ -85,11 +85,13 @@ app.get('/api/connect-qr.svg',async(req,res,next)=>{if(S.config.production)retur
 
 app.post('/api/session',(req,res)=>{
   S.rate.check('profile:'+ipKey(req),30);const result=S.identity.createProfile({name:req.body?.name,userAgent:req.headers['user-agent']});S.identity.setCookie(res,result.session);
+  S.identity.markFresh(result.user.id,S.identity.sha256(result.session.raw),'new_account');
   recordSecurity(req,'session.created','allowed',result.user.id);
   res.status(201).json({user:result.user,csrf_token:result.session.csrf,recovery_key:result.recoveryKey,recovery_key_shown_once:true});
 });
 app.post('/api/session/recover',(req,res)=>{
   S.rate.check('recover:'+ipKey(req),10);const result=S.identity.recover({name:req.body?.name,recoveryKey:req.body?.recovery_key,userAgent:req.headers['user-agent']});S.identity.setCookie(res,result.session);
+  S.identity.markFresh(result.user.id,S.identity.sha256(result.session.raw),'recovery');
   recordSecurity(req,'session.recovered','allowed',result.user.id);
   res.json({user:result.user,csrf_token:result.session.csrf});
 });
@@ -103,8 +105,17 @@ app.post('/api/recovery/confirm',async(req,res,next)=>{try{
 app.get('/api/me',(req,res)=>{const current=S.identity.readSession(req,res);if(!current)return errors(res,401,'AUTH_REQUIRED','Ingen aktiv sesjon.');res.json({user:current,csrf_token:current.csrf||null,legacy_migrated:Boolean(current.legacyMigrated),recovery_key:current.recoveryKey||null,recovery_key_shown_once:Boolean(current.recoveryKey)});});
 app.post('/api/session/logout',write(null,20),(req,res)=>{S.push.disableDevice(req.auth,{id:req.body?.push_subscription_id,endpoint:req.body?.push_endpoint});S.identity.logout(req.auth,res);res.json({ok:true});});
 app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.push.disableAll(req.auth);S.identity.revokeAll(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
-app.post('/api/recovery/rotate',write(null,5),(req,res)=>res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true}));
+app.post('/api/recovery/rotate',write(null,5),(req,res)=>{S.identity.requireFresh(req.auth);res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true});});
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
+app.get('/api/passkeys/config',(req,res)=>res.json(S.passkeys.configView()));
+app.post('/api/passkeys/step-up',write(null,10),(req,res)=>{const result=S.identity.stepUp(req.auth,req.body?.recovery_key);recordSecurity(req,'passkey.step_up','allowed',req.auth.id);res.json(result);});
+app.post('/api/passkeys/registration/options',write(null,10),async(req,res,next)=>{try{res.json(await S.passkeys.registrationOptions(req.auth,req.body?.label));}catch(error){next(error);}});
+app.post('/api/passkeys/registration/verify',write(null,10),async(req,res,next)=>{try{res.status(201).json(await S.passkeys.verifyRegistration(req.auth,req.body));}catch(error){recordSecurity(req,'passkey.registration','denied',req.auth.id);next(error);}});
+app.post('/api/passkeys/login/options',(req,res,next)=>{if(req.headers.origin!==S.config.webauthnOrigins[0])return errors(res,403,'ORIGIN_INVALID','Ugyldig forespørselsopprinnelse.');S.rate.check('passkey-options:'+ipKey(req),20);S.passkeys.loginOptions().then(result=>{res.set('Set-Cookie',`hereme_passkey_challenge=${encodeURIComponent(result.binding)}; Path=/api/passkeys/login; HttpOnly; SameSite=Strict; Max-Age=300${S.config.production?'; Secure':''}`);delete result.binding;res.json(result);},next);});
+app.post('/api/passkeys/login/verify',async(req,res,next)=>{try{if(req.headers.origin!==S.config.webauthnOrigins[0])return errors(res,403,'ORIGIN_INVALID','Ugyldig forespørselsopprinnelse.');S.rate.check('passkey-login:'+ipKey(req),10);const result=await S.passkeys.verifyLogin(req.body,req.headers['user-agent'],S.identity.parseCookies(req).hereme_passkey_challenge||'');S.identity.setCookie(res,result.session);recordSecurity(req,'passkey.login','allowed',result.user.id);res.json({user:result.user,csrf_token:result.session.csrf});}catch(error){recordSecurity(req,'passkey.login','denied');next(error);}});
+app.get('/api/me/passkeys',read(null),(req,res)=>res.json({passkeys:S.passkeys.list(req.auth)}));
+app.patch('/api/me/passkeys/:id',write(null,10),(req,res)=>res.json(S.passkeys.rename(req.auth,req.params.id,req.body?.label)));
+app.delete('/api/me/passkeys/:id',write(null,10),(req,res)=>res.json(S.passkeys.remove(req.auth,req.params.id,req.body?.confirm_recovery)));
 app.delete('/api/me',write(null,3),(req,res)=>{S.push.disableAll(req.auth);S.accounts.deactivate(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
 app.get('/api/push/config',(req,res)=>res.json(S.push.configView()));
 app.get('/api/push/subscriptions',read(null),(req,res)=>res.json({subscriptions:S.push.list(req.auth)}));

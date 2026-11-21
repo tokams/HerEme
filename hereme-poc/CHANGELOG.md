@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-21 — Passkey authentication
+
+- Added optional passkey sign-in and account security enrollment with recovery
+  fallback, preserving existing identities and roles.
+- Production enrollment stays disabled until canonical hereme.no rollout gates.
+- Documented additive storage, trust boundaries, rollback and physical-device gates.
+
+## 2026-11-21 — Domain migration preparation
+
+- Prepared canonical hereme.no with temporary www/legacy redirects.
+- Added guarded idempotent domain-only environment updates preserving secrets.
+- Deployment backs up private environment and rolls back without replacing live data.
+- Live cutover blocked by public DNS resolution; Uniweb DNSSEC activation pending.
+
 ## 2026-11-21 — Live notification and device-enrollment follow-up
 
 - Added schema 16 recipient-scoped notification events and immediate bell/inbox

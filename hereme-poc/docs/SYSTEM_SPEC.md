@@ -1,7 +1,16 @@
 # HerEme system specification
 
-**Snapshot:** 2026-11-21, E10-01 implementation (local worktree)
-**Code baseline:** `feature/push-notifications`, with the optional PWA and Web Push changes uncommitted at this snapshot.
+**Passkeys:** additive WebAuthn authentication is implemented locally for
+canonical hereme.no. Production remains disabled pending domain/security/device
+verification. Existing user identities and recovery login remain authoritative.
+See [ADR 0011](adr/0011-passkeys.md) and `PASSKEYS_PROGRESS.md`.
+
+**Proposed domain migration:** `https://hereme.no`; local deployment tooling and
+temporary www/legacy redirects are prepared. Live cutover is BLOCKED pending DNS
+resolution and a reviewed clean release. See [execution ledger](domain-migration.md).
+
+**Snapshot:** 2026-11-21, E12-01/E13-01 local implementation
+**Code baseline:** `master` at `2bdb336` with uncommitted domain migration and passkey changes.
 **Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 
@@ -114,7 +123,7 @@ The 13 bundled examples are marked synthetic. Existing user-authored content is 
 | `public/` | Plain browser JavaScript/CSS and static assets. UI renders API state and dispatches actions; it does not own durable policy. |
 | `server/index.js` | HTTP routes, authentication/CSRF middleware, limits and response mapping. |
 | `server/domain/` | Identity, posts, interactions, staff actions, chat, media, video, locations and verification rules. |
-| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, push subscriptions/outbox/deliveries, live notification events and audit records. Migrations reach schema 16. WAL mode is used. |
+| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, push subscriptions/outbox/deliveries, live notification events, passkey credentials/challenges/handles, ownership proofs and audit records. Migrations reach schema 18. WAL mode is used. |
 | Private data directory | SQLite plus public post media, temporary uploads and private chat bytes. Chat bytes are outside public static paths. |
 | Workers | Durable post-media processing, minute-based chat attachment cleanup and bounded Web Push delivery. |
 | WebSocket channel | Live signals only; persisted messages and notifications remain authoritative. |

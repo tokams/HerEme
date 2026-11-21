@@ -27,6 +27,11 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
       .run(sha256(raw),userId,sha256(csrf),expires,userAgent.slice(0,200));
     return {raw,csrf,expires};
   }
+  function markFresh(userId,sessionHash,proofType='new_account',seconds=300){
+    db.prepare("INSERT INTO authentication_stepups(session_hash,user_id,expires_at,proof_type) VALUES(?,?,datetime('now',?),?) ON CONFLICT(session_hash) DO UPDATE SET user_id=excluded.user_id,verified_at=datetime('now'),expires_at=excluded.expires_at,proof_type=excluded.proof_type").run(sessionHash,userId,`+${seconds} seconds`,proofType);
+  }
+  function requireFresh(auth,proofType=null){const row=db.prepare("SELECT proof_type FROM authentication_stepups WHERE session_hash=? AND user_id=? AND expires_at>datetime('now')").get(auth.sessionHash,auth.id);if(!row||proofType&&row.proof_type!==proofType)fail('STEP_UP_REQUIRED','Bekreft kontoeierskap før du endrer passnøkler.',403);return row;}
+  function requireActive(auth){if(!db.prepare("SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id_hash=? AND s.user_id=? AND s.revoked_at IS NULL AND s.expires_at>datetime('now') AND u.status='active'").get(auth.sessionHash,auth.id))fail('AUTH_REQUIRED','Sesjonen er ikke lenger aktiv.',401);}
   function setCookie(res,session){
     res.set('Set-Cookie',[`${cookieName}=${encodeURIComponent(session.raw)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${sessionDays*86400}${production?'; Secure':''}`,
       `hereme_csrf=${encodeURIComponent(session.csrf)}; Path=/; SameSite=Lax; Max-Age=${sessionDays*86400}${production?'; Secure':''}`]);
@@ -72,6 +77,7 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
     if(!row||candidate.length!==row.secret_hash.length||!crypto.timingSafeEqual(Buffer.from(candidate),Buffer.from(row.secret_hash)))fail('RECOVERY_FAILED','Gjenopprettingsnøkkelen er feil.',401);
     return {ok:true};
   }
+  function stepUp(auth,recoveryKey){confirmRecovery(auth,recoveryKey);markFresh(auth.id,auth.sessionHash,'recovery');return {ok:true,expires_in:300};}
   function requireCapability(auth,capability){if(!auth.capabilities.includes(capability))fail('FORBIDDEN','Du har ikke tilgang til denne handlingen.',403);}
   function createProfile({name,userAgent=''}){
     name=text(name,{name:'Pseudonym',min:2,max:24});
@@ -105,6 +111,6 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
   }
   function logout(auth,res){if(auth)db.prepare("UPDATE sessions SET revoked_at=datetime('now') WHERE id_hash=?").run(auth.sessionHash);clearCookie(res);}
   function rename(auth,name){name=text(name,{name:'Pseudonym',min:2,max:24});const normalized=normalize(name);if(db.prepare('SELECT id FROM users WHERE normalized_name=? AND id<>?').get(normalized,auth.id))fail('NAME_TAKEN','Pseudonymet er allerede i bruk.',409);db.prepare('UPDATE users SET name=?,normalized_name=? WHERE id=?').run(name,normalized,auth.id);return {...auth,name};}
-  return {readSession,requireUser,requireCsrf,requireCapability,createProfile,recover,confirmRecovery,rotateRecovery,revokeAll,logout,rename,setCookie,userProjection,sha256};
+  return {readSession,requireUser,requireCsrf,requireCapability,createProfile,recover,confirmRecovery,stepUp,markFresh,requireFresh,requireActive,issueSession,rotateRecovery,revokeAll,logout,rename,setCookie,userProjection,sha256,parseCookies};
 }
 module.exports={createIdentityService};
