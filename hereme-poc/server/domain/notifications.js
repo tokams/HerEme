@@ -10,8 +10,9 @@ function createNotificationService(db){
     db.prepare(`INSERT OR IGNORE INTO push_outbox(event_key,recipient_id,category,kind,actor_id,chat_id,post_id,comment_id,route)
       VALUES(?,?,?,?,?,?,?,?,?)`).run(eventKey,recipientId,categories[kind],kind,actorId,chatId,postId,commentId,route);
   }
-  function chat(notificationId,{recipientId,actorId,chatId,kind}){
-    enqueue({eventKey:'chat:'+notificationId,recipientId,actorId,chatId,kind,route:kind==='message'?'/chat/'+chatId:'/chat'});
+  function chat(notificationId,{recipientId,actorId,chatId,kind,messageId=null}){
+    const route='/chat/'+chatId+(kind==='message'&&Number.isSafeInteger(messageId)?'?message='+messageId:'');
+    enqueue({eventKey:'chat:'+notificationId,recipientId,actorId,chatId,kind,route});
     db.prepare('INSERT INTO notification_events(recipient_id,notification_id) VALUES(?,?)').run(recipientId,'chat:'+notificationId);
   }
   function forum({recipientId,actorId,postId,commentId,kind}){
@@ -24,11 +25,11 @@ function createNotificationService(db){
   function list(user,before=''){
     let cursor=Number.MAX_SAFE_INTEGER;
     if(before){cursor=Number(before);if(!Number.isSafeInteger(cursor)||cursor<1)fail('INVALID_CURSOR','Ugyldig sidepeker.');}
-    const chat=db.prepare(`SELECT id,'chat' source,kind,actor_id,chat_id,NULL post_id,NULL comment_id,created_at,read_at
+    const chat=db.prepare(`SELECT id,'chat' source,kind,actor_id,chat_id,NULL post_id,NULL comment_id,dedupe_key,created_at,read_at
       FROM chat_notifications WHERE recipient_id=?`).all(user.id);
     const forum=db.prepare(`SELECT id,'forum' source,kind,actor_id,NULL chat_id,post_id,comment_id,created_at,read_at
       FROM forum_notifications WHERE recipient_id=?`).all(user.id);
-    return [...chat,...forum].map(item=>({...item,notification_id:item.source+':'+item.id,sort_id:Number(item.id),route:item.source==='forum'?'/?post='+item.post_id:item.kind==='message'?'/chat/'+item.chat_id:'/chat'}))
+    return [...chat,...forum].map(item=>{const messageId=item.source==='chat'&&item.kind==='message'?Number(String(item.dedupe_key).split(':')[1]):null;return {...item,notification_id:item.source+':'+item.id,sort_id:Number(item.id),route:item.source==='forum'?'/?post='+item.post_id:'/chat/'+item.chat_id+(Number.isSafeInteger(messageId)?'?message='+messageId:'')};})
       .sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))||b.sort_id-a.sort_id).filter(item=>item.sort_id<cursor).slice(0,50);
   }
   function read(user,notificationId){

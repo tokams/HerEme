@@ -59,11 +59,15 @@
     setNotice(declined?'Denne meldingsforespørselen ble avslått.': 'Denne brukeren må godta meldingsforespørselen. De blir varslet.');setDecision({state:declined?'declined':'new',kind:'direct'});
     $('#messages').replaceChildren();$('#olderMessages').hidden=true;$('#toggleDetails').hidden=true;restoreDraft();$('#messageInput').focus();
   }
-  async function loadMessages(chatId){
+  async function loadMessages(chatId,targetMessage=null){
     const messages=[];let before=null,hasMore=false;
     while(messages.length<state.historyLimit){
       const page=(await api(`/api/chats/${encodeURIComponent(chatId)}/messages${before?`?before=${before}`:''}`)).messages;
       messages.unshift(...page);hasMore=page.length===50;if(!hasMore)break;before=page[0].id;
+    }
+    if(Number.isSafeInteger(targetMessage)&&!messages.some(message=>message.id===targetMessage)){
+      const context=(await api(`/api/chats/${encodeURIComponent(chatId)}/messages?before=${targetMessage+1}`)).messages;
+      const merged=new Map([...messages,...context].map(message=>[message.id,message]));messages.splice(0,messages.length,...[...merged.values()].sort((a,b)=>a.id-b.id));
     }
     $('#olderMessages').hidden=!hasMore;
     let date='';const html=[];
@@ -78,9 +82,10 @@
         else if(file.media_kind==='video')attachment=`<button class="attachment-card video-card" type="button" data-view-message="${message.id}" aria-label="Spill av ${name}"><video src="/api/chat/files/${fileId}/preview#t=0.1" preload="metadata" muted playsinline></video><span>▶ ${name}</span></button>`;
         else attachment=`<button class="attachment-card" type="button" data-view-message="${message.id}"><img src="/assets/icons/chat-attach-file.svg" alt=""><span>${name}</span></button>`;
       }else if(files.length>1)attachment=`<button class="attachment-card bundle-card" type="button" data-view-message="${message.id}"><span class="bundle-collage">${files.slice(0,3).map(file=>file.media_kind==='image'&&ready(file)?`<img src="/api/chat/files/${encodeURIComponent(file.id)}/preview" alt="">`:`<img src="/assets/icons/chat-attach-${file.media_kind}.svg" alt="">`).join('')}</span><span>${files.length} vedlegg · Se alle</span></button>`;
-      html.push(`<div class="message${own?' own':''}${system?' system':''}"><small class="message-meta">${escapeHtml(message.sender)} · ${escapeHtml(message.created_at)}</small>${message.body?`<div>${escapeHtml(message.body)}</div>`:''}${attachment}</div>`);
+      html.push(`<div class="message${own?' own':''}${system?' system':''}" data-message-id="${message.id}" tabindex="-1"><small class="message-meta">${escapeHtml(message.sender)} · ${escapeHtml(message.created_at)}</small>${message.body?`<div>${escapeHtml(message.body)}</div>`:''}${attachment}</div>`);
     }
     $('#messages').innerHTML=html.join('');$('#messages').scrollTop=$('#messages').scrollHeight;state.renderedMessages=messages;
+    if(Number.isSafeInteger(targetMessage)){const target=$(`[data-message-id="${targetMessage}"]`);if(target){target.classList.add('notification-target');target.scrollIntoView({block:'center'});target.focus({preventScroll:true});}}
   }
   async function renderDetails(row){
     if(!state.detailsOpen||!row||row.state==='incoming'||row.state==='invited'||row.id.startsWith('legacy:'))return;
@@ -89,12 +94,12 @@
     $('#inviteForm').hidden=row.kind!=='group';$('#leaveChat').hidden=false;
     $('#pendingInvites').innerHTML=row.creator_id===state.me?(await api(`/api/chats/${encodeURIComponent(row.id)}/invites`)).invites.map(invite=>`<div class="person-line"><span>${escapeHtml(invite.recipient)} · invitert</span><button type="button" data-cancel-invite="${escapeHtml(invite.id)}">Avlys</button></div>`).join(''):'';
   }
-  async function openChat(row,{route=true}={}){
+  async function openChat(row,{route=true,targetMessage=null}={}){
     if(!row)return;saveDraft();state.selection={type:'chat',id:row.id};state.historyLimit=50;$('#uploadStatus').textContent='';$('#uploadProgress').hidden=true;showConversation();restoreDraft();
-    await updateConversation(row);$('#messageInput').focus();renderInbox();
+    await updateConversation(row,targetMessage);if(!targetMessage)$('#messageInput').focus();renderInbox();
     if(route&&location.pathname!==`/chat/${row.id}`)history.pushState({chat:row.id},'',`/chat/${encodeURIComponent(row.id)}`);
   }
-  async function updateConversation(row){
+  async function updateConversation(row,targetMessage=null){
     if(state.selection?.id!==row.id)return;
     $('#conversationIcon').src=icon(row.kind);$('#conversationTitle').textContent=row.name;
     $('#conversationSubtitle').textContent=row.kind==='group'?'Gruppesamtale':row.state==='incoming'?'Venter på ditt svar':row.state==='pending'?'Venter på svar':row.state==='declined'?'Avslått':'Direkte samtale';
@@ -110,7 +115,7 @@
       row.unread=0;for(const item of state.notifications)if(item.chat_id===row.id)item.read_at='seen';renderInbox();
     }
     if(row.state==='incoming'||row.state==='invited'){$('#messages').replaceChildren();$('#olderMessages').hidden=true;return;}
-    await loadMessages(row.id);await renderDetails(row);
+    await loadMessages(row.id,targetMessage);await renderDetails(row);
   }
   async function refresh(){
     const [chats,notifications]=await Promise.all([api('/api/chats'),api('/api/chat/notifications')]);
@@ -204,7 +209,7 @@
   $('#cancelGroup').addEventListener('click',()=>{state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;searchChanged();renderInbox();});
   $('#selectedPeople').addEventListener('click',event=>{const button=event.target.closest('[data-remove]');if(!button)return;state.selected.delete(button.dataset.remove);renderSelected();searchChanged();});
   $('#confirmGroup').addEventListener('click',run(async()=>{if(!state.selected.size)return;const result=await api('/api/chats',{method:'POST',body:{name:$('#groupName').value,recipients:[...state.selected.keys()]}});state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;$('#groupName').value='';await refresh();const row=state.chats.find(item=>item.id===result.id);if(row)await openChat(row);}));
-  $('#backToInbox').addEventListener('click',()=>{if(location.pathname.startsWith('/chat/'))history.back();else{resetConversation();$('#usernameSearch').focus();}});
+  $('#backToInbox').addEventListener('click',()=>{if(location.pathname.startsWith('/chat/')&&history.state?.chat){history.back();return;}if(location.pathname.startsWith('/chat/'))history.replaceState({},'', '/chat');resetConversation();$('#usernameSearch').focus();});
   $('#messageForm').addEventListener('submit',run(sendMessage));
   $('#messageInput').addEventListener('input',()=>{saveDraft();renderStage();});
   $('#messageInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();$('#messageForm').requestSubmit();}});
@@ -228,7 +233,7 @@
     socket.onclose=()=>{if(state.socket!==socket)return;status.hidden=false;status.textContent='Chat er frakoblet. Kobler til igjen…';const delay=Math.min(30000,1000*2**Math.min(state.reconnect++,5));setTimeout(connectSocket,delay);};
     socket.onerror=()=>socket.close();
   }
-  async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();return;}const row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false});else{resetConversation();setNotice('Samtalen finnes ikke eller du har ikke tilgang.');}}
+  async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();return;}const value=new URLSearchParams(location.search).get('message'),targetMessage=value&&/^\d+$/.test(value)?Number(value):null,row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false,targetMessage:Number.isSafeInteger(targetMessage)?targetMessage:null});else{resetConversation();setNotice('Samtalen finnes ikke eller du har ikke tilgang.');}}
   async function init(){try{const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();await resolveRoute();connectSocket();window.addEventListener('popstate',()=>run(resolveRoute)());setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}catch(error){if(error.status===401||/aktiv sesjon/i.test(error.message)){window.HeremeAuth.open({message:'Logg inn eller opprett en konto for å bruke chat.',onSuccess:()=>location.reload(),onCancel:()=>location.assign('/')});return;}throw error;}}
   run(init)();
 })();

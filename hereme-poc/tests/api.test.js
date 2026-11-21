@@ -91,6 +91,7 @@ test('unified chat creates one pending request on first send and delivers durabl
   assert.equal((await request('/api/chats',{session:recipient})).body.chats.find(chat=>chat.id===chatId).last_body,'Second private message');
   const delivered=await request(`/api/chats/${chatId}/messages`,{method:'POST',session:sender,body:{body:'After acceptance',client_key:'accepted-message-key'}});assert.equal(delivered.status,201);
   assert.equal((await request('/api/chat/notifications',{session:recipient})).body.notifications.filter(item=>item.kind==='message').length,1);
+  const messageNotification=(await request('/api/notifications',{session:recipient})).body.notifications.find(item=>item.kind==='message');assert.equal(messageNotification.route,`/chat/${chatId}?message=${delivered.body.id}`);
   assert.equal((await request(`/api/chats/${chatId}/read`,{method:'POST',session:recipient})).status,200);
   assert.equal((await request('/api/chats',{session:recipient})).body.chats.find(chat=>chat.id===chatId).unread,0);
 });
@@ -116,7 +117,7 @@ test('notification settings, canonical inbox and forum reply events remain accou
   assert.equal((await request('/api/notifications/'+encodeURIComponent(notification.notification_id)+'/read',{method:'POST',session:replier})).status,404);
   assert.equal((await request('/api/notifications/'+encodeURIComponent(notification.notification_id)+'/read',{method:'POST',session:author})).status,200);
   const settings=await request('/api/notification-settings',{method:'PUT',session:author,body:{chat_messages:false,chat_requests_and_invitations:true,forum_replies:false}});assert.deepEqual({chat_messages:settings.body.settings.chat_messages,chat_requests_and_invitations:settings.body.settings.chat_requests_and_invitations,forum_replies:settings.body.settings.forum_replies},{chat_messages:0,chat_requests_and_invitations:1,forum_replies:0});
-  const direct=await request('/api/chats/direct',{method:'POST',session:author,body:{target_user_id:replier.user.id,body:'Request body must stay out of push',client_key:'notify-request'}});assert.equal(direct.status,201);const outbox=S.db.prepare("SELECT category,kind,route FROM push_outbox WHERE recipient_id=? AND chat_id=?").get(replier.user.id,direct.body.chat_id);assert.equal(outbox.category,'chat_requests_and_invitations');assert.equal(outbox.kind,'request');assert.equal(outbox.route,'/chat');
+  const direct=await request('/api/chats/direct',{method:'POST',session:author,body:{target_user_id:replier.user.id,body:'Request body must stay out of push',client_key:'notify-request'}});assert.equal(direct.status,201);const outbox=S.db.prepare("SELECT category,kind,route FROM push_outbox WHERE recipient_id=? AND chat_id=?").get(replier.user.id,direct.body.chat_id);assert.equal(outbox.category,'chat_requests_and_invitations');assert.equal(outbox.kind,'request');assert.equal(outbox.route,'/chat/'+direct.body.chat_id);
 });
 test('staged mixed attachments send as one private retry-safe message',async()=>{
   const sender=await profile('BundleSender'),recipient=await profile('BundleRecipient'),stranger=await profile('BundleStranger');

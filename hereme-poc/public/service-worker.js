@@ -1,5 +1,5 @@
 'use strict';
-const allowedRoute=value=>typeof value==='string'&&(/^(?:\/|\/me|\/chat|\/chat\/[0-9a-f-]{36}|\/\?post=\d+)$/.test(value));
+const allowedRoute=value=>typeof value==='string'&&(/^(?:\/|\/me|\/chat|\/chat\/[0-9a-f-]{36}(?:\?message=\d+)?|\/\?post=\d+)$/.test(value));
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 self.addEventListener('push',event=>{
