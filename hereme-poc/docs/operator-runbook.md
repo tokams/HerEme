@@ -1,5 +1,15 @@
 # Operator runbook
 
+## Install app controls
+
+The mobile wall displays INSTALL HEREME on eligible Chromium browsers after
+`beforeinstallprompt`, and on iPhone browsers where manual Home Screen
+instructions apply. The account menu provides the same action. A declined
+prompt or "Not now" hides the mobile banner for 30 days in that browser.
+Installed standalone windows hide the controls. Installation does not request
+notification permission. Verify the native prompt on Android and Windows and
+the Share menu instructions on a physical iPhone after deploying.
+
 ## Passkey rollout (not deployed)
 
 Keep `WEBAUTHN_ENABLED=false` until the canonical hereme.no cutover, trusted TLS,

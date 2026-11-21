@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22 — PWA installation entry points
+
+- Added a mobile install button above the forum wall and an install action in
+  the account menu. Chromium uses its native install prompt when available.
+- Added iPhone Home Screen instructions and browser-local dismissal for 30 days.
+  Installed standalone windows hide the install controls.
+
 ## 2026-11-21 — Account setup and iOS home screen
 
 - Label the recovery credential as an innloggingskode in the account dialog and

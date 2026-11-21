@@ -63,6 +63,7 @@
   async function loadProfile({append=false}={}){const params=new URLSearchParams({sort:state.profileSort,limit:'20'});if(append&&state.profileCursor)params.set('cursor',state.profileCursor);const result=await api('/api/me/summary?'+params);if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];state.profile=result;state.profileCursor=result.next_cursor;profileView();}
   async function applyRoute({fromPop=false}={}){
     const route=location.pathname,params=new URLSearchParams(location.search);
+    window.HeremePwa?.updateInstallUi();
     if(route==='/me'){
       if(!state.user){openAuth('Logg inn eller opprett en konto for å se profilen din.',async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
       await loadProfile();return;
@@ -198,6 +199,7 @@
     if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
+    if(state.modal==='menu')window.HeremePwa?.mountMenu($('.modal-content'));
     if(state.modal==='menu'&&state.user){const button=document.createElement('button');button.className='btn btn-secondary';button.textContent='Sikkerhet · Passnøkler';button.onclick=()=>window.HeremePasskeys.security();$('.account-actions')?.prepend(button);}
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
