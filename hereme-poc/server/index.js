@@ -54,6 +54,10 @@ app.use(web.json({limit:'256kb'}));
 app.use('/uploads',(req,res,next)=>{const original=req.pathname;req.pathname=req.pathname.slice(8)||'/';web.static(path.join(S.dataDir,'uploads'))(req,res,()=>{req.pathname=original;next();});});
 app.use('/media',(req,res,next)=>{const original=req.pathname;req.pathname=req.pathname.slice(6)||'/';web.static(path.join(S.dataDir,'media'))(req,res,()=>{req.pathname=original;next();});});
 app.use(web.static(path.resolve(__dirname,'..','public'),{extensions:['html']}));
+function appShell(name,res){res.set('Content-Type','text/html; charset=utf-8').send(fs.readFileSync(path.resolve(__dirname,'..','public',name)));}
+app.get('/chat',(req,res)=>appShell('chat.html',res));
+app.get('/chat/:id',(req,res)=>appShell('chat.html',res));
+app.get('/me',(req,res)=>appShell('index.html',res));
 
 app.get('/api/live',(req,res)=>res.json({ok:true,name:'HerEme'}));
 app.get('/api/health',(req,res)=>res.json({ok:true,name:'HerEme',storage:'SQLite',runtime:runtimeMetrics,chat_worker:S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get()||null}));
@@ -102,6 +106,7 @@ app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.identity.revokeAl
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true}));
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
 app.delete('/api/me',write(null,3),(req,res)=>{S.accounts.deactivate(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
+app.get('/api/me/summary',read(null),(req,res)=>res.json(S.profile.summary(req.auth,req.query)));
 app.get('/api/chat/users',read(null),(req,res)=>{S.rate.check(`chat-search:${req.auth.id}`,180);res.json({users:S.chat.search(req.auth,req.query.q)});});
 app.get('/api/chat/direct/:user',read(null),(req,res)=>res.json(S.chat.direct(req.auth,req.params.user)));
 app.post('/api/chats/direct',write(null,30),(req,res)=>res.status(201).json(S.chat.startDirect(req.auth,req.body?.target_user_id,req.body?.body,req.body?.client_key,req.body?.attachment_ids)));

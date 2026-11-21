@@ -8,7 +8,7 @@
   async function api(url,{method='GET',body,signal}={}){
     const headers={};if(method!=='GET')headers['x-csrf-token']=state.csrf;if(body!==undefined)headers['content-type']='application/json';
     const response=await fetch(url,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
-    const value=await response.json();if(!response.ok)throw Error(value.error?.message||'Forespørselen feilet.');return value;
+    const value=await response.json();if(!response.ok){const error=Error(value.error?.message||'Forespørselen feilet.');error.status=response.status;throw error;}return value;
   }
   function fail(error){$('#chatError').textContent=error.message||String(error);$('#chatError').hidden=false;}
   function run(action){return async event=>{try{$('#chatError').hidden=true;await action(event);}catch(error){fail(error);}};}
@@ -89,9 +89,10 @@
     $('#inviteForm').hidden=row.kind!=='group';$('#leaveChat').hidden=false;
     $('#pendingInvites').innerHTML=row.creator_id===state.me?(await api(`/api/chats/${encodeURIComponent(row.id)}/invites`)).invites.map(invite=>`<div class="person-line"><span>${escapeHtml(invite.recipient)} · invitert</span><button type="button" data-cancel-invite="${escapeHtml(invite.id)}">Avlys</button></div>`).join(''):'';
   }
-  async function openChat(row){
+  async function openChat(row,{route=true}={}){
     if(!row)return;saveDraft();state.selection={type:'chat',id:row.id};state.historyLimit=50;$('#uploadStatus').textContent='';$('#uploadProgress').hidden=true;showConversation();restoreDraft();
     await updateConversation(row);$('#messageInput').focus();renderInbox();
+    if(route&&location.pathname!==`/chat/${row.id}`)history.pushState({chat:row.id},'',`/chat/${encodeURIComponent(row.id)}`);
   }
   async function updateConversation(row){
     if(state.selection?.id!==row.id)return;
@@ -203,7 +204,7 @@
   $('#cancelGroup').addEventListener('click',()=>{state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;searchChanged();renderInbox();});
   $('#selectedPeople').addEventListener('click',event=>{const button=event.target.closest('[data-remove]');if(!button)return;state.selected.delete(button.dataset.remove);renderSelected();searchChanged();});
   $('#confirmGroup').addEventListener('click',run(async()=>{if(!state.selected.size)return;const result=await api('/api/chats',{method:'POST',body:{name:$('#groupName').value,recipients:[...state.selected.keys()]}});state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;$('#groupName').value='';await refresh();const row=state.chats.find(item=>item.id===result.id);if(row)await openChat(row);}));
-  $('#backToInbox').addEventListener('click',()=>{$('#chatShell').classList.remove('show-conversation');const row=selectedRow();if(row)$('#conversationList').querySelector(`[data-chat="${CSS.escape(row.id)}"]`)?.focus();else $('#usernameSearch').focus();});
+  $('#backToInbox').addEventListener('click',()=>{if(location.pathname.startsWith('/chat/'))history.back();else{resetConversation();$('#usernameSearch').focus();}});
   $('#messageForm').addEventListener('submit',run(sendMessage));
   $('#messageInput').addEventListener('input',()=>{saveDraft();renderStage();});
   $('#messageInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();$('#messageForm').requestSubmit();}});
@@ -227,6 +228,7 @@
     socket.onclose=()=>{if(state.socket!==socket)return;status.hidden=false;status.textContent='Chat er frakoblet. Kobler til igjen…';const delay=Math.min(30000,1000*2**Math.min(state.reconnect++,5));setTimeout(connectSocket,delay);};
     socket.onerror=()=>socket.close();
   }
-  async function init(){const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();connectSocket();setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}
+  async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();return;}const row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false});else{resetConversation();setNotice('Samtalen finnes ikke eller du har ikke tilgang.');}}
+  async function init(){try{const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();await resolveRoute();connectSocket();window.addEventListener('popstate',()=>run(resolveRoute)());setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}catch(error){if(error.status===401||/aktiv sesjon/i.test(error.message)){window.HeremeAuth.open({message:'Logg inn eller opprett en konto for å bruke chat.',onSuccess:()=>location.reload(),onCancel:()=>location.assign('/')});return;}throw error;}}
   run(init)();
 })();

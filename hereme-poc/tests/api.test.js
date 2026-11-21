@@ -14,6 +14,7 @@ async function profile(name){
   const result=await request('/api/session',{method:'POST',body:{name}});assert.equal(result.status,201);
   const cookies=result.headers.getSetCookie();return {user:result.body.user,recovery:result.body.recovery_key,csrf:result.body.csrf_token,cookie:cookies.map(value=>value.split(';')[0]).join('; ')};
 }
+function fixtureProfile(name){const result=S.identity.createProfile({name});return {user:result.user,recovery:result.recoveryKey,csrf:result.session.csrf,cookie:`hereme_session=${encodeURIComponent(result.session.raw)}; hereme_csrf=${encodeURIComponent(result.session.csrf)}`};}
 test('liveness, readiness, public pages and protected staff surfaces',async()=>{
   assert.equal((await request('/api/live')).status,200);const ready=await request('/api/ready');assert.equal(ready.status,200);assert.ok(Object.values(ready.body.checks).every(Boolean));
   assert.equal((await request('/api/rooms')).status,410);assert.equal((await request('/api/admin/queue')).status,401);
@@ -91,6 +92,18 @@ test('unified chat creates one pending request on first send and delivers durabl
   assert.equal((await request('/api/chat/notifications',{session:recipient})).body.notifications.filter(item=>item.kind==='message').length,1);
   assert.equal((await request(`/api/chats/${chatId}/read`,{method:'POST',session:recipient})).status,200);
   assert.equal((await request('/api/chats',{session:recipient})).body.chats.find(chat=>chat.id===chatId).unread,0);
+});
+test('own profile summary is private, paginated and uses actual received upvotes',async()=>{
+  const owner=fixtureProfile('ProfileOwner'),peer=fixtureProfile('ProfilePeer');
+  const first=await request('/api/posts',{method:'POST',session:owner,body:{title:'Profile first post',body:'First activity',type:'text',category:'story'}}),second=await request('/api/posts',{method:'POST',session:owner,body:{title:'Profile second post',body:'Second activity',type:'text',category:'tip'}});assert.equal(first.status,201);assert.equal(second.status,201);
+  assert.equal((await request('/api/posts/'+first.body.id+'/vote',{method:'POST',session:peer,body:{value:1}})).status,200);
+  const requested=await request('/api/me/summary?limit=1',{session:owner});assert.equal(requested.status,200);assert.equal(requested.body.profile.name,'ProfileOwner');assert.equal(requested.body.metrics.post_count,2);assert.equal(requested.body.metrics.upvotes_received,1);assert.equal(requested.body.posts.length,1);assert.ok(requested.body.next_cursor);
+  const next=await request('/api/me/summary?limit=1&cursor='+encodeURIComponent(requested.body.next_cursor),{session:owner});assert.equal(next.body.posts.length,1);assert.notEqual(next.body.posts[0].id,requested.body.posts[0].id);
+  assert.equal((await request('/api/me/summary')).status,401);
+  const direct=await request('/api/chats/direct',{method:'POST',session:owner,body:{target_user_id:peer.user.id,body:'Profile chat',client_key:'profile-summary-chat'}});const pending=(await request('/api/chats',{session:peer})).body.chats.find(chat=>chat.id===direct.body.chat_id);await request('/api/chat/requests/'+pending.request_id,{method:'POST',session:peer,body:{accept:true}});
+  const group=await request('/api/chats',{method:'POST',session:owner,body:{name:'Profile group',recipients:[peer.user.id]}});const invitation=(await request('/api/chat/inbox',{session:peer})).body.invites.find(item=>item.name==='Profile group');await request('/api/chat/invites/'+invitation.id,{method:'POST',session:peer,body:{accept:true}});
+  const summary=await request('/api/me/summary',{session:owner});assert.equal(summary.body.metrics.direct_chat_count,1);assert.equal(summary.body.metrics.group_chat_count,1);
+  assert.match((await request('/me')).body,/main id="profileRoot"/);assert.match((await request('/chat')).body,/chat-shell/);assert.match((await request('/chat/'+direct.body.chat_id)).body,/chat-shell/);
 });
 test('staged mixed attachments send as one private retry-safe message',async()=>{
   const sender=await profile('BundleSender'),recipient=await profile('BundleRecipient'),stranger=await profile('BundleStranger');

@@ -1,8 +1,8 @@
 # HerEme system specification
 
-**Snapshot:** 2026-11-21, 11:25 CET  
-**Code baseline:** `feature/chat` at `5d7b72d` (clean before this document was added)  
-**Frozen baseline:** `release/v2` points to `5d7b72d`  
+**Snapshot:** 2026-11-21, v3 issue implementation (local worktree)
+**Code baseline:** `feature/improvements`, with the v3 routing, unified authentication and personal-profile changes uncommitted at this snapshot.
+**Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 
 ## How to read this document
@@ -41,6 +41,19 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 | UI | Mobile full-screen post detail; desktop Simple and Advanced wall views; light/dark preference; locally served Cascadia Code; square controls and reduced-motion support. |
 | Media | Original images are kept and validated server-side; display and thumbnail derivatives are generated. Post video is at most 180 seconds and uses the media worker when enabled. |
 | Staff | Role-based moderator and administrator surfaces, with audited actions and server-side authorization. |
+| Personal profile | An authenticated member has a private, addressable `/me` profile with their identity, member date, received upvotes, authored-post activity and accepted direct/group-chat counts. |
+
+## Browser routes and authentication
+
+- `/` is the public wall. `/?post=<id>` is an addressable post-detail state. The wall selection, query, sort and scroll position are retained through browser Back/Forward navigation.
+- `/chat` is the authenticated inbox and `/chat/<opaque-chat-id>` is an authenticated conversation route. The server returns the chat application shell for these routes; authorization and conversation membership remain API-enforced, so a URL never grants access to chat content.
+- `/me` is the authenticated member's own profile only. There is no public user lookup or public profile route.
+- One shared responsive dialog provides **Logg inn** and **Opprett konto** everywhere an account is required, including the chat route. It preserves the recovery-key model, displays a newly issued key exactly once and does not auto-submit the action that originally required authentication.
+- A visitor who opens `/chat` is shown the contextual message `Logg inn eller opprett en konto for å bruke chat.`. Closing the gate returns to the public wall; no chat is created merely by authenticating.
+
+### Personal-profile projection
+
+`GET /api/me/summary` requires the current session and returns only the caller's account projection. It supports `sort=new|top`, a bounded cursor and a page limit of 1–50. Its metrics are canonical database counts: authored posts, comments received, positive votes from other accounts on authored posts, and accepted direct/group conversations. The authored-post rows contain compact moderation status, category, score, received upvotes and comment counts; the browser can page through them without loading all content at once.
 
 The 13 bundled examples are marked synthetic. Existing user-authored content is not replaced by automatic seeding. A prior verified selective import brought 15 historical user posts into the public database, which then held 28 posts on 2026-11-20; those counts are historical evidence, not a current count.
 
@@ -100,7 +113,7 @@ The public PoC target is `https://hereme.46.251.249.110.nip.io/`. At **2026-11-2
 
 `deploy/deploy-online.ps1` packages only a clean committed `hereme-poc` tree. It uploads a release, creates and verifies a backup, builds the Docker image, cuts over, checks public readiness and attempts rollback on failed cutover. `release/v2` is a local frozen code reference at `5d7b72d`; branch creation alone does not deploy or publish it.
 
-Last local implementation checks recorded for this baseline: **37 automated Node tests passed**, the desktop/mobile chat browser flow passed, **66 JavaScript files** passed syntax checking, and `git diff --check` passed. These checks do not replace a production smoke test or a real-device video test.
+Last local implementation checks recorded for this snapshot: **38 automated Node tests passed**, the desktop/mobile chat browser flow passed, **68 JavaScript files** passed syntax checking, and `git diff --check` passed. These checks do not replace a production smoke test or a real-device video test.
 
 ## Known gaps and decisions to scope next
 

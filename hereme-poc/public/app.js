@@ -9,7 +9,7 @@
     category:'story',postMode:null,composeStep:'select',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set(),staff:null,staffTab:'posts',staffReason:''
+    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={};
@@ -42,6 +42,7 @@
     HeremePoster.fitTitles(document);
   }
   function renderWall() {
+    $('#forumShell').hidden=false;$('#profileRoot').hidden=true;
     $('#profileLabel').textContent=state.user?.name||'Bli med';
     $('#profileMonogram').textContent=state.user?.name[0].toUpperCase()||'○';
     $('#feedCounter').textContent=state.loadError?'':state.posts.length;
@@ -52,6 +53,25 @@
     HeremePoster.enhance($('#feed'));
     $('#activityPanel').innerHTML=HeremeShell.activity(state.activity,state.loadError);
   }
+  function rememberWall(){history.replaceState({...history.state,wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',location.href);}
+  function profileView(){
+    const root=$('#profileRoot');$('#forumShell').hidden=true;root.hidden=false;
+    if(!state.profile){root.innerHTML='<p class="loading-card">Henter profilen …</p>';return;}
+    const {profile,metrics,posts,next_cursor}=state.profile,stat=(label,value)=>`<div class="profile-stat"><b>${value}</b><span>${label}</span></div>`;
+    root.innerHTML=`<section class="profile-header"><div><p class="eyebrow">MIN PROFIL</p><h1>@${E(profile.name)}</h1><p class="muted-note">Medlem siden ${E(String(profile.created_at).slice(0,10))}</p><div class="profile-stats">${stat('Innlegg',metrics.post_count)}${stat('Oppstemmer mottatt',metrics.upvotes_received)}${stat('Kommentarer mottatt',metrics.comments_received)}${stat('Direkte chatter',metrics.direct_chat_count)}${stat('Gruppechatter',metrics.group_chat_count)}</div></div><div class="profile-actions"><button class="btn btn-secondary" data-action="menu">Kontoinnstillinger</button><button class="btn btn-secondary" data-action="profile-wall">Til veggen</button></div></section><section class="profile-posts"><header><div><p class="eyebrow">MINE INNLEGG</p><b>${posts.length?`${posts.length} vist`: 'Ingen innlegg ennå'}</b></div><label>Sorter <select id="profileSort"><option value="new"${state.profileSort==='new'?' selected':''}>Nyeste</option><option value="top"${state.profileSort==='top'?' selected':''}>Høyest score</option></select></label></header>${posts.length?`<ol class="profile-post-list">${posts.map(post=>`<li><button class="profile-post-row" data-action="profile-post" data-id="${post.id}"><span class="profile-date">${E(String(post.created_at).slice(0,10))}</span><span class="profile-category">${E(post.category||'ukjent')}</span><strong>${E(post.title)}</strong><span>${E(post.status)} · ${post.score>=0?'+':''}${post.score}</span><span>${post.comment_count} svar</span></button></li>`).join('')}</ol>${next_cursor?'<button class="btn btn-secondary" data-action="profile-more">Vis flere</button>':''}`:'<p class="profile-empty">Du har ikke publisert noe ennå.</p>'}</section>`;
+  }
+  async function loadProfile({append=false}={}){const params=new URLSearchParams({sort:state.profileSort,limit:'20'});if(append&&state.profileCursor)params.set('cursor',state.profileCursor);const result=await api('/api/me/summary?'+params);if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];state.profile=result;state.profileCursor=result.next_cursor;profileView();}
+  async function applyRoute({fromPop=false}={}){
+    const route=location.pathname,params=new URLSearchParams(location.search);
+    if(route==='/me'){
+      if(!state.user){openAuth('Logg inn eller opprett en konto for å se profilen din.',async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
+      await loadProfile();return;
+    }
+    if(route!=='/'){document.title='HerEme · Fant ikke siden';$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML='<section class="empty-state"><h1>Fant ikke siden</h1><button class="btn btn-primary" data-action="profile-wall">Til veggen</button></section>';return;}
+    if(history.state?.wall){const wall=history.state.wall;state.categories=wall.categories||state.categories;state.sort=wall.sort||state.sort;state.query=wall.query||'';$('#searchInput').value=state.query;$('#sortSelect').value=state.sort;renderFilters();}
+    renderWall();const id=Number(params.get('post'));if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
+  }
+  function navigate(url,{replace=false}={}){rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);return applyRoute();}
   async function loadPosts({append=false}={}) {
     const request=++state.loadRequest;state.loadError='';
     $('#feed').setAttribute('aria-busy','true');
@@ -85,14 +105,14 @@
     if(type==='compose'){resetPhoto();state.postMode=null;state.composeStep='select';state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';state.draft={title:'',body:'',link:''};}
     renderModal();
   }
-  function closeModal() {
+  function closeModal({fromRoute=false}={}) {
     if(state.publishing)return;
     resetPhoto();state.detailRequest++;state.modal=null;state.replyTo=null;state.pending=null;
     $('#modalRoot').innerHTML='';lockBackground(false);
     const returnTarget=state.returnFocus?.isConnected?state.returnFocus:
       document.querySelector(`[data-post-id="${state.detailPost?.id}"] .tile-open`)||$('.logo');
     returnTarget.focus({preventScroll:true});
-    if(location.search.includes('post='))history.replaceState({},'',location.pathname);
+    if(location.search.includes('post=')&&!fromRoute){history.back();return;}
   }
   function profileModal() {
     if(state.user)return wrapper('Din profil',`<h3>Javel, ${E(state.user.name)}!</h3><p>Dette er en pseudonym konto. Lagre gjenopprettingsnøkkelen for å bruke kontoen på en annen enhet.</p><button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-secondary" data-action="logout">Logg ut</button><p><a href="/privacy.html">Personvern</a> · <a href="/rules.html">Fellesskapsregler</a></p>`);
@@ -102,8 +122,8 @@
   function accountMenu(){
     const links=`<p class="account-links"><a href="/rules.html">Fellesskapsregler</a> · <a href="/privacy.html">Personvern</a></p>`;
     const connection=state.meta?.addresses?`<details class="connection-details"><summary>Åpne på mobilen lokalt</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="QR-kode til denne instansen"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">Kopier adressen</button></details>`:'';
-    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?'<button class="btn btn-primary" data-action="staff-panel">Administrasjon og moderering</button>':'';return wrapper('Din profil',`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">Logget inn som</p><h3>${E(state.user.name)}</h3><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions">${staff}<button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-danger" data-action="logout">Logg ut</button></div>${connection}${links}`);}
-    return wrapper('Logg inn',`<p>Bruk pseudonymet og gjenopprettingsnøkkelen din.</p>${loginForm()}<div class="account-register"><p><b>Ny på HerEme?</b></p><button class="btn btn-secondary" data-action="register">Opprett nytt pseudonym →</button></div>${connection}${links}`);
+    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?'<button class="btn btn-primary" data-action="staff-panel">Administrasjon og moderering</button>':'';return wrapper('Din profil',`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">Logget inn som</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} → Min profil</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions">${staff}<button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-danger" data-action="logout">Logg ut</button></div>${connection}${links}`);}
+    return wrapper('Konto',`<p>Logg inn eller opprett en pseudonym konto.</p><button class="btn btn-primary" data-action="auth-login">Logg inn</button><button class="btn btn-secondary" data-action="auth-register">Opprett konto</button>${connection}${links}`);
   }
   const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error('Skriv en begrunnelse på minst tre tegn.');state.staffReason=value;return value;};
   function staffPanel(){
@@ -122,9 +142,11 @@
   async function loadStaff(){state.staff=await api('/api/admin/overview');if(!state.user.capabilities.includes('content:manage'))state.staffTab='posts';}
   async function openStaffPanel(){state.staff=null;openModal('staff');await loadStaff();renderModal();}
   async function refreshStaff(message){await loadStaff();renderModal({preserve:true});await loadPosts();if(message)toast(message);}
+  async function refreshIdentity(){const current=await api('/api/me');state.user=current.user;state.csrf=current.csrf_token||csrfCookie();state.legacyToken='';localStorage.removeItem('hereme_token');}
+  function openAuth(message,onSuccess){window.HeremeAuth.open({message,onSuccess:async(result,{created})=>{await refreshIdentity();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast('Lagre gjenopprettingsnøkkelen din på et trygt sted.');}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
   function requireUser(action) {
     if(state.user)return true;
-    state.pending=action;openModal('profile');return false;
+    openAuth('',async()=>action?.());return false;
   }
   function renderModal({preserve=false}={}) {
     const content=$('.modal-content'),scroll=preserve?content?.scrollTop||0:0;
@@ -164,7 +186,7 @@
     if($('#posterPreview')){$('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.postMode==='video'?'<span class="video-preview-badge">'+HeremeIcons.icon('video')+' Video</span>':'');HeremePoster.enhance($('#posterPreview'));}
     if($('#categoryHint'))$('#categoryHint').textContent=HeremeThemes.get(state.category).description;
   }
-  async function openDetail(id) {
+  async function openDetail(id,{route=true}={}) {
     const request=++state.detailRequest;
     if(!state.modal)state.returnFocus=document.activeElement;
     state.detailPost=state.posts.find(p=>p.id===id)||null;state.comments=[];state.replyTo=null;
@@ -173,7 +195,7 @@
       const [post,comments]=await Promise.all([api('/api/posts/'+id),api(`/api/posts/${id}/comments`)]);
       if(state.modal!=='detail'||request!==state.detailRequest)return;
       state.detailPost=post.post;state.comments=comments.comments;renderModal({preserve:true});
-      history.replaceState({},'',`/?post=${id}`);
+      if(route){rememberWall();history.pushState({...history.state,detail:true},'',`/?post=${id}`);}
     } catch(error) {if(request!==state.detailRequest)return;closeModal();toast(error.message);}
   }
   async function vote(id,value) {
@@ -313,7 +335,7 @@
     if(action==='layout'){document.documentElement.dataset.layout=target.dataset.layout;localStorage.setItem('hereme_layout',target.dataset.layout);renderPreferences();return;}
     if(action==='theme'){const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;localStorage.setItem('hereme_theme',theme);renderPreferences();return;}
     if(action==='category'){const category=target.dataset.category;state.categories=state.categories.includes(category)?state.categories.filter(value=>value!==category):[...state.categories,category];renderFilters();$('#simpleCategories [data-category="'+category+'"]').focus({preventScroll:true});await loadPosts();return;}
-    if(action==='home'){state.query='';$('#searchInput').value='';state.categories=[...HeremeThemes.ids];renderFilters();await loadPosts();window.scrollTo({top:0,behavior:'smooth'});return;}
+    if(action==='home'||action==='profile-wall'){state.query='';$('#searchInput').value='';state.categories=[...HeremeThemes.ids];renderFilters();if(location.pathname!=='/')await navigate('/');await loadPosts();window.scrollTo({top:0,behavior:'smooth'});return;}
     if(action==='reset-filters'){state.categories=[...HeremeThemes.ids];renderFilters();await loadPosts();return;}
     if(action==='toggle-filters'){state.filtersOpen=!state.filtersOpen;$('#forumShell').classList.toggle('filters-open',state.filtersOpen);$('#filterToggle').setAttribute('aria-expanded',state.filtersOpen);return;}
     if(action==='discussion'){await openDetail(id);$('#discussion')?.scrollIntoView({block:'start',behavior:'smooth'});return;}
@@ -338,8 +360,13 @@
     if(action==='areas'){state.draftAreas=[...state.selectedAreas];openModal('areas');return;}
     if(action==='area-toggle'){const area=target.dataset.areaId;state.draftAreas=state.draftAreas.includes(area)?state.draftAreas.filter(id=>id!==area):[...state.draftAreas,area];for(const item of document.querySelectorAll(`[data-area-id="${CSS.escape(area)}"]`))item.setAttribute('aria-pressed',state.draftAreas.includes(area));return;}
     if(action==='save-areas'){const result=await api('/api/me/areas',{method:'PUT',body:{area_ids:state.draftAreas}});state.selectedAreas=result.areas.map(area=>area.id);closeModal();await loadPosts();return;}
-    if(action==='profile'){openModal('profile');return;}
-    if(action==='register'){openModal('profile');return;}
+    if(action==='profile'){if(state.user)await navigate('/me');else openAuth('',async()=>{});return;}
+    if(action==='my-profile'){closeModal({fromRoute:true});await navigate('/me');return;}
+    if(action==='auth-login'){closeModal({fromRoute:true});openAuth('',async()=>{});return;}
+    if(action==='auth-register'){closeModal({fromRoute:true});openAuth('',async()=>{});return;}
+    if(action==='register'){openAuth('',async()=>{});return;}
+    if(action==='profile-post'){await openDetail(id);return;}
+    if(action==='profile-more'){await loadProfile({append:true});return;}
     if(action==='logout'){await api('/api/session/logout',{method:'POST'});state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');closeModal();await loadPosts();return;}
     if(action==='rotate-recovery'){const result=await api('/api/recovery/rotate',{method:'POST'});state.recoveryKey=result.recovery_key;openModal('recovery-key');return;}
     if(action==='toggle-recovery'){const input=$('#recoveryPassword'),show=input.type==='password';input.type=show?'text':'password';target.textContent=show?'Skjul':'Vis';input.focus();return;}
@@ -404,6 +431,7 @@
     const input=event.target;
     if(input.name==='category'){state.categories=[...document.querySelectorAll('input[name=category]:checked')].map(el=>el.value);$('#simpleCategories').innerHTML=HeremeFeed.categoryButtons(state.categories);$('#filterCount').textContent=state.categories.length===5?'':state.categories.length;await loadPosts();}
     if(input.id==='sortSelect'){state.sort=input.value;await loadPosts();}
+    if(input.id==='profileSort'){state.profileSort=input.value;state.profile=null;state.profileCursor=null;await loadProfile();}
     if(input.id==='textPosition'){state.textPosition=input.value;updatePreview();}
     if(input.id==='postArea'){state.postArea=input.value;}
     if(input.name==='postCategory'){state.category=input.value;updatePreview();}
@@ -436,6 +464,7 @@
         else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
       }
     });
+    window.addEventListener('popstate',()=>{if(state.modal==='detail'){state.modal=null;state.detailPost=null;$('#modalRoot').innerHTML='';lockBackground(false);}applyRoute({fromPop:true}).catch(error=>toast(error.message));});
     try {
       state.meta=await api('/api/meta');
       state.csrf=csrfCookie();
@@ -444,7 +473,7 @@
       if(state.meta.features?.locations){$('#areaButton').hidden=false;const [available,geometry,subscribed]=await Promise.all([api('/api/areas'),api('/api/areas/geometry'),state.user?api('/api/me/areas'):Promise.resolve({areas:[]})]);state.areas=available.areas;state.areaGeometry=geometry;state.selectedAreas=subscribed.areas.map(area=>area.id);}
       await loadPosts();
       if(new URLSearchParams(location.search).get('recovery-saved')==='1'){history.replaceState({},'',location.pathname);toast('Innloggingen er bekreftet. Enheten kan nå tilby å lagre den.');}
-      const id=Number(new URLSearchParams(location.search).get('post'));if(id)await openDetail(id);
+      state.routeReady=true;await applyRoute({fromPop:true});
     } catch(error) {state.loadError=error.message;renderWall();}
   }
   init();
