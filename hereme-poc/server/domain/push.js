@@ -1,0 +1,31 @@
+'use strict';
+const crypto=require('node:crypto');
+const {fail}=require('./errors');
+
+const allowedHosts=host=>host==='fcm.googleapis.com'||host==='updates.push.services.mozilla.com'||host.endsWith('.push.services.mozilla.com')||host==='web.push.apple.com'||host.endsWith('.push.apple.com')||/^wns\d*-.*\.notify\.windows\.com$/.test(host);
+function endpoint(value){
+  if(typeof value!=='string'||value.length<20||value.length>4096)fail('INVALID_PUSH_ENDPOINT','Ugyldig push-adresse.');
+  let parsed;try{parsed=new URL(value);}catch{fail('INVALID_PUSH_ENDPOINT','Ugyldig push-adresse.');}
+  const host=parsed.hostname.toLowerCase();if(parsed.protocol!=='https:'||parsed.username||parsed.password||!allowedHosts(host))fail('INVALID_PUSH_ENDPOINT','Push-tjenesten er ikke tillatt.');return parsed.href;
+}
+function key(value,name){if(typeof value!=='string'||value.length<16||value.length>512||!/^[A-Za-z0-9_-]+$/.test(value))fail('INVALID_PUSH_KEY',`Ugyldig ${name}.`);return value;}
+function createPushService(db,config){
+  const enabled=()=>Boolean(config.enableWebPush&&config.vapidPublicKey);
+  function configView(){return {enabled:enabled(),public_key:enabled()?config.vapidPublicKey:null};}
+  function preferences(user){return db.prepare(`SELECT chat_messages,chat_requests_and_invitations,forum_replies,updated_at FROM notification_preferences WHERE user_id=?`).get(user.id)||{chat_messages:1,chat_requests_and_invitations:1,forum_replies:1,updated_at:null};}
+  function setPreferences(user,input={}){const values=['chat_messages','chat_requests_and_invitations','forum_replies'].map(name=>input[name]===false||input[name]===0?0:1);db.prepare(`INSERT INTO notification_preferences(user_id,chat_messages,chat_requests_and_invitations,forum_replies,updated_at) VALUES(?,?,?,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET chat_messages=excluded.chat_messages,chat_requests_and_invitations=excluded.chat_requests_and_invitations,forum_replies=excluded.forum_replies,updated_at=excluded.updated_at`).run(user.id,...values);return preferences(user);}
+  function list(user){return db.prepare(`SELECT id,device_label,created_at,updated_at,last_success_at,last_failure_at FROM push_subscriptions WHERE user_id=? AND disabled_at IS NULL ORDER BY created_at DESC`).all(user.id);}
+  function subscribe(user,input={}){
+    if(!enabled())fail('PUSH_DISABLED','Push-varslinger er ikke aktivert på serveren.',503);
+    const value=input.subscription||input,href=endpoint(value.endpoint),p256dh=key(value.keys?.p256dh,'p256dh-nøkkel'),auth=key(value.keys?.auth,'auth-nøkkel');
+    const label=typeof input.device_label==='string'?input.device_label.trim().slice(0,80):'';const id=crypto.randomUUID();
+    db.exec('BEGIN IMMEDIATE');try{const cursor=db.prepare('SELECT COALESCE(max(id),0) id FROM push_outbox').get().id,existing=db.prepare('SELECT id,user_id,disabled_at FROM push_subscriptions WHERE endpoint=?').get(href);if(existing&&(existing.user_id!==user.id||existing.disabled_at))db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(existing.id);db.prepare(`INSERT INTO push_subscriptions(id,user_id,endpoint,p256dh,auth,device_label,start_outbox_id) VALUES(?,?,?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh,auth=excluded.auth,device_label=excluded.device_label,updated_at=datetime('now')`).run(id,user.id,href,p256dh,auth,label,cursor);const row=db.prepare('SELECT id,device_label,created_at,updated_at FROM push_subscriptions WHERE endpoint=? AND user_id=?').get(href,user.id);db.exec('COMMIT');return row;}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  function stopDeliveries(ids){for(const id of ids)db.prepare("UPDATE push_deliveries SET state='permanent',lease_until=NULL,last_error_code='subscription_disabled',updated_at=datetime('now') WHERE subscription_id=? AND state IN ('pending','retry','leased')").run(id);}
+  function disable(user,id){db.exec('BEGIN IMMEDIATE');try{const result=db.prepare("UPDATE push_subscriptions SET disabled_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND user_id=? AND disabled_at IS NULL").run(id,user.id);if(!result.changes)fail('SUBSCRIPTION_NOT_FOUND','Enheten finnes ikke.',404);stopDeliveries([id]);db.exec('COMMIT');return {ok:true};}catch(error){db.exec('ROLLBACK');throw error;}}
+  function disableOwned(user,id){if(!id)return {ok:true};db.exec('BEGIN IMMEDIATE');try{const changed=db.prepare("UPDATE push_subscriptions SET disabled_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND user_id=? AND disabled_at IS NULL").run(id,user.id);if(changed.changes)stopDeliveries([id]);db.exec('COMMIT');return {ok:true};}catch(error){db.exec('ROLLBACK');throw error;}}
+  function disableDevice(user,{id='',endpoint:href=''}={}){db.exec('BEGIN IMMEDIATE');try{const ids=new Set();if(id)for(const row of db.prepare('SELECT id FROM push_subscriptions WHERE id=? AND user_id=? AND disabled_at IS NULL').all(id,user.id))ids.add(row.id);if(typeof href==='string'&&href.length<=4096)for(const row of db.prepare('SELECT id FROM push_subscriptions WHERE endpoint=? AND user_id=? AND disabled_at IS NULL').all(href,user.id))ids.add(row.id);for(const subscriptionId of ids)db.prepare("UPDATE push_subscriptions SET disabled_at=datetime('now'),updated_at=datetime('now') WHERE id=?").run(subscriptionId);stopDeliveries([...ids]);db.exec('COMMIT');return {ok:true};}catch(error){db.exec('ROLLBACK');throw error;}}
+  function disableAll(user){db.exec('BEGIN IMMEDIATE');try{const ids=db.prepare('SELECT id FROM push_subscriptions WHERE user_id=? AND disabled_at IS NULL').all(user.id).map(row=>row.id);db.prepare("UPDATE push_subscriptions SET disabled_at=datetime('now'),updated_at=datetime('now') WHERE user_id=? AND disabled_at IS NULL").run(user.id);stopDeliveries(ids);db.exec('COMMIT');return {ok:true};}catch(error){db.exec('ROLLBACK');throw error;}}
+  return {enabled,configView,preferences,setPreferences,list,subscribe,disable,disableOwned,disableDevice,disableAll,endpoint};
+}
+module.exports={createPushService,allowedHosts};

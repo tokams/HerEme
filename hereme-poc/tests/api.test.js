@@ -19,6 +19,7 @@ test('liveness, readiness, public pages and protected staff surfaces',async()=>{
   assert.equal((await request('/api/live')).status,200);const ready=await request('/api/ready');assert.equal(ready.status,200);assert.ok(Object.values(ready.body.checks).every(Boolean));
   assert.equal((await request('/api/rooms')).status,410);assert.equal((await request('/api/admin/queue')).status,401);
   assert.match((await request('/privacy.html')).body,/Personvern/);assert.match((await request('/rules.html')).body,/Fellesskapsregler/);
+  assert.equal((await request('/manifest.webmanifest')).body.id,'/');assert.match((await request('/service-worker.js')).body,/notificationclick/);
 });
 test('chat consent, membership, groups, blocked delivery, resumable files and expiry',async()=>{
   const alice=await profile('ChatAlice'),bob=await profile('ChatBob'),third=await profile('ChatThird');
@@ -104,6 +105,18 @@ test('own profile summary is private, paginated and uses actual received upvotes
   const group=await request('/api/chats',{method:'POST',session:owner,body:{name:'Profile group',recipients:[peer.user.id]}});const invitation=(await request('/api/chat/inbox',{session:peer})).body.invites.find(item=>item.name==='Profile group');await request('/api/chat/invites/'+invitation.id,{method:'POST',session:peer,body:{accept:true}});
   const summary=await request('/api/me/summary',{session:owner});assert.equal(summary.body.metrics.direct_chat_count,1);assert.equal(summary.body.metrics.group_chat_count,1);
   assert.match((await request('/me')).body,/main id="profileRoot"/);assert.match((await request('/chat')).body,/chat-shell/);assert.match((await request('/chat/'+direct.body.chat_id)).body,/chat-shell/);
+});
+test('notification settings, canonical inbox and forum reply events remain account scoped',async()=>{
+  const author=fixtureProfile('NotifyAuthor'),replier=fixtureProfile('NotifyReplier');
+  assert.deepEqual((await request('/api/push/config')).body,{enabled:false,public_key:null});assert.equal((await request('/api/push/subscriptions')).status,401);
+  assert.equal((await request('/api/push/subscriptions',{method:'POST',headers:{cookie:author.cookie},body:{}})).status,403);
+  const post=await request('/api/posts',{method:'POST',session:author,body:{title:'Notification post',body:'Question',type:'text',category:'question'}});
+  const reply=await request('/api/posts/'+post.body.id+'/comments',{method:'POST',session:replier,body:{body:'A reply'}});assert.equal(reply.status,201);
+  const inbox=await request('/api/notifications',{session:author});assert.equal(inbox.status,200);const notification=inbox.body.notifications.find(item=>item.kind==='post_reply'&&item.post_id===post.body.id);assert.ok(notification);assert.equal(notification.route,'/?post='+post.body.id);assert.equal(inbox.body.unread,1);
+  assert.equal((await request('/api/notifications/'+encodeURIComponent(notification.notification_id)+'/read',{method:'POST',session:replier})).status,404);
+  assert.equal((await request('/api/notifications/'+encodeURIComponent(notification.notification_id)+'/read',{method:'POST',session:author})).status,200);
+  const settings=await request('/api/notification-settings',{method:'PUT',session:author,body:{chat_messages:false,chat_requests_and_invitations:true,forum_replies:false}});assert.deepEqual({chat_messages:settings.body.settings.chat_messages,chat_requests_and_invitations:settings.body.settings.chat_requests_and_invitations,forum_replies:settings.body.settings.forum_replies},{chat_messages:0,chat_requests_and_invitations:1,forum_replies:0});
+  const direct=await request('/api/chats/direct',{method:'POST',session:author,body:{target_user_id:replier.user.id,body:'Request body must stay out of push',client_key:'notify-request'}});assert.equal(direct.status,201);const outbox=S.db.prepare("SELECT category,kind,route FROM push_outbox WHERE recipient_id=? AND chat_id=?").get(replier.user.id,direct.body.chat_id);assert.equal(outbox.category,'chat_requests_and_invitations');assert.equal(outbox.kind,'request');assert.equal(outbox.route,'/chat');
 });
 test('staged mixed attachments send as one private retry-safe message',async()=>{
   const sender=await profile('BundleSender'),recipient=await profile('BundleRecipient'),stranger=await profile('BundleStranger');

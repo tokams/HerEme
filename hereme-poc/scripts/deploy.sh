@@ -10,9 +10,14 @@ node "$release/scripts/validate-config.js"
 previous=$(readlink -f /opt/hereme/current 2>/dev/null || true)
 ln -sfn "$release" /opt/hereme/current.next
 mv -Tf /opt/hereme/current.next /opt/hereme/current
-if ! systemctl restart hereme || { test "${HEREME_ENABLE_VIDEO:-0}" = 1 && ! systemctl restart hereme-worker; }; then
+failed=0
+systemctl restart hereme || failed=1
+if test "${HEREME_ENABLE_VIDEO:-0}" = 1; then systemctl restart hereme-worker || failed=1; fi
+systemctl restart hereme-push-worker || failed=1
+if test "$failed" -ne 0; then
   test -n "$previous" && ln -sfn "$previous" /opt/hereme/current
   systemctl restart hereme
+  systemctl restart hereme-push-worker || true
   exit 1
 fi
 for ignored in 1 2 3 4 5 6 7 8 9 10; do
@@ -21,5 +26,6 @@ for ignored in 1 2 3 4 5 6 7 8 9 10; do
 done
 test -n "$previous" && ln -sfn "$previous" /opt/hereme/current
 systemctl restart hereme
+systemctl restart hereme-push-worker || true
 echo "Readiness failed; rolled back release symlink" >&2
 exit 1

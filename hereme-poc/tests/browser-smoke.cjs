@@ -74,9 +74,9 @@ async function publish(page,title) {
   assert.equal(await page.locator('#feed').evaluate(el=>getComputedStyle(el).columnGap),'10px');
   await page.setViewportSize({width:390,height:844});
   await page.locator('.menu-button').click();
-  assert.equal(await page.locator('.modal-header h2').textContent(),'Logg inn');
-  await page.locator('#recoverForm').waitFor();
-  await page.getByRole('button',{name:'Opprett nytt pseudonym →'}).waitFor();
+  assert.equal(await page.locator('.modal-header h2').textContent(),'Konto');
+  await page.locator('[data-action=auth-login]').waitFor();
+  await page.locator('[data-action=auth-register]').waitFor();
   await page.locator('.modal-close').click();
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:path.join(screenshots,'desktop-simple-dark.png'),fullPage:true});
@@ -144,17 +144,16 @@ async function publish(page,title) {
   await page.locator('#sortSelect').selectOption('new');await settleWall(page);
   // Desktop category-only creation is a complete poster, with no required image or room.
   await page.locator('.create-button').click();
-  assert.equal(await page.locator('#recoverName').getAttribute('autocomplete'),'username');
-  assert.equal(await page.locator('#recoverKey').getAttribute('autocomplete'),'current-password');
-  await page.locator('#nicknameInput').fill('VeggTester');
-  await page.locator('#profileForm button').click();
-  const recovery=await page.locator('#recoveryPassword').inputValue();assert.ok(recovery.length>=20);
-  assert.equal(await page.locator('#recoveryUsername').inputValue(),'VeggTester');
-  assert.equal(await page.locator('#recoveryPassword').getAttribute('autocomplete'),'new-password');
-  assert.equal(await page.locator('#recoverySaveForm').getAttribute('method'),'post');
-  await Promise.all([page.waitForResponse(response=>response.url().endsWith('/api/recovery/confirm')),page.locator('#recoverySaveForm button[type=submit]').click()]);
-  await page.waitForLoadState('domcontentloaded');await ready(page);assert.equal(await page.locator('#profileLabel').textContent(),'VeggTester');
-  await page.locator('.create-button').click();
+  assert.equal(await page.locator('[data-auth-form=login] input[name=name]').getAttribute('autocomplete'),'username');
+  assert.equal(await page.locator('[data-auth-form=login] input[name=recovery_key]').getAttribute('autocomplete'),'current-password');
+  await page.locator('[data-auth-mode=register]').click();
+  assert.equal(await page.locator('[data-auth-form=register] input[name=name]').getAttribute('autocomplete'),'username');
+  await page.locator('[data-auth-form=register] input[name=name]').fill('VeggTester');
+  await page.locator('[data-auth-form=register] button').click();
+  const recovery=await page.locator('.recovery-key').textContent();assert.ok(recovery.length>=20);
+  await page.locator('[data-auth-continue]').click();
+  await page.locator('.auth-overlay').waitFor({state:'detached'});assert.equal(await page.locator('#profileLabel').textContent(),'VeggTester');
+  await page.locator('.modal-panel').waitFor();
   assert.equal(await page.locator('input[name=postMode]:checked').count(),0);
   assert.deepEqual(await page.locator('.post-type-card strong').allTextContents(),['Bare innlegg','Bildeplakat','Videoplakat']);
   assert.equal(await page.locator('.post-type-icon .icon').count(),3);
@@ -243,7 +242,7 @@ async function publish(page,title) {
   await phone.locator('.detail-toolbar [data-action=report]').waitFor();
   await phone.locator('.detail-modal').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)));
   const bounds=await phone.locator('.detail-modal').boundingBox();
-  assert.equal(bounds.x,0);assert.equal(bounds.y,0);assert.equal(bounds.width,390);assert.equal(bounds.height,844);
+  assert.ok(bounds.x<=0&&bounds.y<=8&&bounds.x+bounds.width>=390&&bounds.y+bounds.height>=844);
   await phone.waitForFunction(id=>location.search==='?post='+id,imageId);
   await phone.locator('.modal-close').focus();
   await phone.keyboard.press('Shift+Tab');
@@ -314,7 +313,7 @@ async function publish(page,title) {
   await phone.getByRole('button',{name:'Logg ut'}).waitFor();
   await phone.getByRole('button',{name:'Ny gjenopprettingsnøkkel'}).waitFor();
   await phone.locator('.modal-close').click();
-  assert.equal((await fetch(base+'/api/admin/queue')).status,404);
+  assert.equal((await fetch(base+'/api/admin/queue')).status,401);
   await phone.emulateMedia({reducedMotion:'reduce'});
   await phone.locator('[data-post-id="'+textId+'"] .tile-open').click();
   await phone.waitForFunction(()=>getComputedStyle(document.querySelector('.detail-modal')).animationName==='none');

@@ -15,6 +15,39 @@ permanent. Before bulk destructive work, take and verify the normal data backup.
 
 ## Provision and deploy
 
+### Web Push rollout
+
+Web Push is disabled by default. Generate one VAPID pair on an operator machine:
+
+```sh
+npm run push:generate-vapid
+```
+
+Put `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` and `WEB_PUSH_ENABLED=1` in the protected
+main deployment environment. For systemd, put only `VAPID_PRIVATE_KEY` in
+`/etc/hereme/hereme-push.env`; keep it `root:root` mode `0600`. Systemd reads it
+before dropping privileges, and no HerEme application process can read the file.
+For Docker, keep the private value in `deploy/docker/.env`; Compose passes it
+only to `push-worker`. Never commit or print the private key in deployment logs.
+
+Check public `/api/health` only for the enabled and worker-fresh booleans. Staff
+can inspect subscription, queue, sent, retry and permanent-failure totals at
+`/api/admin/push/health`; do not publish those small-community activity counts.
+Push provider failure does not fail core readiness. Roll back immediately by
+setting `WEB_PUSH_ENABLED=0` and restarting the app and worker; persisted in-app
+notifications continue to work.
+
+Changing HerEme's public origin or VAPID key invalidates the enrolled device
+contract. Disable the flag, rotate the environment values, deploy, then ask
+members to enable notifications again. Push subscriptions and encryption keys
+are confidential and are included in SQLite backups; protect backups accordingly.
+Delivery outbox records are retained for 30 days. Disabled device records remain
+for operational history until account deletion or a future documented cleanup.
+
+Before enabling production, verify manifest and Service Worker MIME/scope through
+the public HTTPS origin, then complete real iPhone Home Screen and Android
+background delivery, tap navigation, logout and account-switch checks.
+
 ### Chat retention and automated Docker deployment
 
 Chat attachments live only in the private `chat` directory of the data volume.
@@ -87,7 +120,7 @@ lines or in logs. Keep the environment file root-owned and group-readable only.
 
 ## Routine checks
 
-- `systemctl status hereme hereme-worker caddy`
+- `systemctl status hereme hereme-worker hereme-push-worker caddy`
 - `curl --fail http://127.0.0.1:3000/api/live`
 - `curl --fail http://127.0.0.1:3000/api/ready`
 - `journalctl -u hereme --since today`

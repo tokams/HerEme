@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 14) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 15) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -291,6 +291,49 @@ function applyMigrations(db) {
       CREATE TABLE chat_events(id INTEGER PRIMARY KEY AUTOINCREMENT,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN ('conversation.updated','message.created','invitation.created','invitation.decided')),created_at TEXT NOT NULL DEFAULT (datetime('now')));
       CREATE INDEX chat_events_recipient ON chat_events(recipient_id,id);
       INSERT INTO schema_migrations(version) VALUES(14); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<15){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE notification_preferences(
+        user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        chat_messages INTEGER NOT NULL DEFAULT 1 CHECK(chat_messages IN (0,1)),
+        chat_requests_and_invitations INTEGER NOT NULL DEFAULT 1 CHECK(chat_requests_and_invitations IN (0,1)),
+        forum_replies INTEGER NOT NULL DEFAULT 1 CHECK(forum_replies IN (0,1)),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE push_subscriptions(
+        id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,device_label TEXT NOT NULL DEFAULT '',start_outbox_id INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_success_at TEXT,last_failure_at TEXT,disabled_at TEXT
+      );
+      CREATE INDEX push_subscriptions_user ON push_subscriptions(user_id,disabled_at,created_at);
+      CREATE TABLE forum_notifications(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        comment_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,kind TEXT NOT NULL CHECK(kind IN ('post_reply','comment_reply')),
+        dedupe_key TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL DEFAULT (datetime('now')),read_at TEXT
+      );
+      CREATE INDEX forum_notifications_inbox ON forum_notifications(recipient_id,read_at,id DESC);
+      CREATE TABLE push_outbox(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        category TEXT NOT NULL CHECK(category IN ('chat_messages','chat_requests_and_invitations','forum_replies')),
+        kind TEXT NOT NULL,actor_id TEXT REFERENCES users(id) ON DELETE SET NULL,chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE,
+        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,comment_id INTEGER REFERENCES comments(id) ON DELETE CASCADE,
+        route TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX push_outbox_recipient ON push_outbox(recipient_id,id);
+      CREATE TABLE push_deliveries(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,outbox_id INTEGER NOT NULL REFERENCES push_outbox(id) ON DELETE CASCADE,
+        subscription_id TEXT NOT NULL REFERENCES push_subscriptions(id) ON DELETE CASCADE,
+        state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','leased','retry','sent','permanent')),
+        attempts INTEGER NOT NULL DEFAULT 0,next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')),lease_until TEXT,
+        last_error_code TEXT,created_at TEXT NOT NULL DEFAULT (datetime('now')),updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(outbox_id,subscription_id)
+      );
+      CREATE INDEX push_deliveries_due ON push_deliveries(state,next_attempt_at,id);
+      CREATE TABLE push_worker_state(id INTEGER PRIMARY KEY CHECK(id=1),last_run TEXT NOT NULL,queued INTEGER NOT NULL DEFAULT 0,sent INTEGER NOT NULL DEFAULT 0,retried INTEGER NOT NULL DEFAULT 0,permanent_failures INTEGER NOT NULL DEFAULT 0);
+      INSERT INTO schema_migrations(version) VALUES(15); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

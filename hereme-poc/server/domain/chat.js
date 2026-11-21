@@ -2,13 +2,13 @@
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
 const {fail}=require('./errors');const V=require('./validation');
-function createChatService(db,dataDir,config,{audit}){
+function createChatService(db,dataDir,config,{audit,notifications:notificationService}){
   const root=path.join(dataDir,'chat');fs.mkdirSync(root,{recursive:true});
   const id=()=>crypto.randomUUID();const uploads=new Set();
   const record=(actor,action,type,subject)=>audit.record({actorId:actor?.id||null,action,subjectType:type,subjectId:subject});
   const pairKey=(a,b)=>[a,b].sort().join(':');
   function event(recipient,chatId,kind){db.prepare('INSERT INTO chat_events(recipient_id,chat_id,kind) VALUES(?,?,?)').run(recipient,chatId,kind);}
-  function notify(recipient,actor,chatId,kind,key){const result=db.prepare('INSERT OR IGNORE INTO chat_notifications(recipient_id,actor_id,chat_id,kind,dedupe_key) VALUES(?,?,?,?,?)').run(recipient,actor,chatId,kind,key);if(result.changes)event(recipient,chatId,kind==='message'?'message.created':kind==='request'||kind==='invite'?'invitation.created':'invitation.decided');}
+  function notify(recipient,actor,chatId,kind,key){const result=db.prepare('INSERT OR IGNORE INTO chat_notifications(recipient_id,actor_id,chat_id,kind,dedupe_key) VALUES(?,?,?,?,?)').run(recipient,actor,chatId,kind,key);if(result.changes){notificationService.chat(Number(result.lastInsertRowid),{recipientId:recipient,actorId:actor,chatId,kind});event(recipient,chatId,kind==='message'?'message.created':kind==='request'||kind==='invite'?'invitation.created':'invitation.decided');}}
   function editDistance(left,right){const a=[...left],b=[...right],row=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){let previous=row[0];row[0]=i;for(let j=1;j<=b.length;j++){const above=row[j];row[j]=Math.min(row[j]+1,row[j-1]+1,previous+(a[i-1]===b[j-1]?0:1));previous=above;}}return row[b.length];}
   function member(chatId,user){if(!db.prepare('SELECT 1 FROM chat_members WHERE chat_id=? AND user_id=?').get(chatId,user.id))fail('FORBIDDEN','Ingen tilgang til samtalen.',403);}
   function active(userId){return db.prepare("SELECT id,name FROM users WHERE id=? AND status='active'").get(userId);}

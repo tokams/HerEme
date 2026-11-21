@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-21 — Optional PWA and Web Push notifications
+
+- Added an installable PWA shell, branded icons and a root Service Worker with
+  generic push display and validated same-origin click routes.
+- Added schema 15 subscription ownership, category preferences, forum reply
+  notifications, durable outbox/delivery state and supervised worker telemetry.
+- Added per-device opt-in/off, notification settings, unified in-app inbox and
+  account-safe login/logout rebinding. Production rollout defaults off pending
+  real iPhone, Android and deployed HTTPS verification.
+
 ## 2026-11-21 — System specification and v2 baseline
 
 - Added `docs/SYSTEM_SPEC.md` as a single current-behavior and change-scoping

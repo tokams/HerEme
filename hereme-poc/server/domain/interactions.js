@@ -2,7 +2,7 @@
 const {fail}=require('./errors');
 const V=require('./validation');
 const {nextId}=require('../migrations');
-function createInteractionService(db,{audit}={}){
+function createInteractionService(db,{audit,notifications}={}){
   function published(id){const row=db.prepare("SELECT id FROM posts WHERE id=? AND status='published'").get(id);if(!row)fail('POST_NOT_FOUND','Innlegget finnes ikke.',404);return row;}
   function vote(postId,user,value){
     postId=V.integer(postId,{name:'Innleggs-ID'});value=Number(value);if(![-1,1].includes(value))fail('INVALID_VOTE','Stem opp eller ned.');
@@ -24,9 +24,12 @@ function createInteractionService(db,{audit}={}){
   }
   function comment(postId,user,{body,parent_id=null}){
     postId=V.integer(postId,{name:'Innleggs-ID'});published(postId);body=V.text(body,{name:'Kommentar',min:1,max:1200});
-    let depth=0,parent=null;if(parent_id!=null){parent_id=V.integer(parent_id,{name:'Svar-ID'});parent=db.prepare('SELECT id,depth FROM comments WHERE id=? AND post_id=?').get(parent_id,postId);if(!parent)fail('INVALID_PARENT','Ugyldig svar.');if(parent.depth>=3)fail('MAX_DEPTH','Maks fire nivåer med svar.');depth=parent.depth+1;}
-    const row=db.prepare('INSERT INTO comments(id,post_id,parent_id,author_id,body,depth) VALUES(?,?,?,?,?,?)').run(nextId(db,'comments'),postId,parent?.id||null,user.id,body,depth);
-    return {id:Number(row.lastInsertRowid)};
+    let depth=0,parent=null;if(parent_id!=null){parent_id=V.integer(parent_id,{name:'Svar-ID'});parent=db.prepare('SELECT id,depth,author_id FROM comments WHERE id=? AND post_id=?').get(parent_id,postId);if(!parent)fail('INVALID_PARENT','Ugyldig svar.');if(parent.depth>=3)fail('MAX_DEPTH','Maks fire nivåer med svar.');depth=parent.depth+1;}
+    db.exec('BEGIN IMMEDIATE');try{const row=db.prepare('INSERT INTO comments(id,post_id,parent_id,author_id,body,depth) VALUES(?,?,?,?,?,?)').run(nextId(db,'comments'),postId,parent?.id||null,user.id,body,depth),commentId=Number(row.lastInsertRowid),postAuthor=db.prepare('SELECT author_id FROM posts WHERE id=?').get(postId)?.author_id;
+      if(postAuthor&&postAuthor!==user.id)notifications.forum({recipientId:postAuthor,actorId:user.id,postId,commentId,kind:'post_reply'});
+      if(parent?.author_id&&parent.author_id!==user.id&&parent.author_id!==postAuthor)notifications.forum({recipientId:parent.author_id,actorId:user.id,postId,commentId,kind:'comment_reply'});
+      db.exec('COMMIT');return {id:commentId};
+    }catch(error){db.exec('ROLLBACK');throw error;}
   }
   function report(postId,user,reason){
     postId=V.integer(postId,{name:'Innleggs-ID'});published(postId);

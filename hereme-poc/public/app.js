@@ -9,7 +9,7 @@
     category:'story',postMode:null,composeStep:'select',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false
+    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={};
@@ -122,7 +122,7 @@
   function accountMenu(){
     const links=`<p class="account-links"><a href="/rules.html">Fellesskapsregler</a> · <a href="/privacy.html">Personvern</a></p>`;
     const connection=state.meta?.addresses?`<details class="connection-details"><summary>Åpne på mobilen lokalt</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="QR-kode til denne instansen"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">Kopier adressen</button></details>`:'';
-    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?'<button class="btn btn-primary" data-action="staff-panel">Administrasjon og moderering</button>':'';return wrapper('Din profil',`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">Logget inn som</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} → Min profil</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions">${staff}<button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-danger" data-action="logout">Logg ut</button></div>${connection}${links}`);}
+    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?'<button class="btn btn-primary" data-action="staff-panel">Administrasjon og moderering</button>':'';return wrapper('Din profil',`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">Logget inn som</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} → Min profil</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="notifications">Varslinger</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">Ny gjenopprettingsnøkkel</button><button class="btn btn-danger" data-action="logout">Logg ut</button></div>${connection}${links}`);}
     return wrapper('Konto',`<p>Logg inn eller opprett en pseudonym konto.</p><button class="btn btn-primary" data-action="auth-login">Logg inn</button><button class="btn btn-secondary" data-action="auth-register">Opprett konto</button>${connection}${links}`);
   }
   const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error('Skriv en begrunnelse på minst tre tegn.');state.staffReason=value;return value;};
@@ -143,7 +143,28 @@
   async function openStaffPanel(){state.staff=null;openModal('staff');await loadStaff();renderModal();}
   async function refreshStaff(message){await loadStaff();renderModal({preserve:true});await loadPosts();if(message)toast(message);}
   async function refreshIdentity(){const current=await api('/api/me');state.user=current.user;state.csrf=current.csrf_token||csrfCookie();state.legacyToken='';localStorage.removeItem('hereme_token');}
-  function openAuth(message,onSuccess,mode='login'){window.HeremeAuth.open({mode,message,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast('Lagre gjenopprettingsnøkkelen din på et trygt sted.');}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
+  async function loadNotificationBadge(){if(!state.user)return;const result=await api('/api/notifications');$('#notificationButton').hidden=false;$('#notificationBadge').textContent=String(result.unread);$('#notificationBadge').hidden=!result.unread;}
+  async function loadNotifications(){const [config,devices,settings,inbox]=await Promise.all([api('/api/push/config'),api('/api/push/subscriptions'),api('/api/notification-settings'),api('/api/notifications')]);state.notificationData={config,devices:devices.subscriptions,settings:settings.settings,inbox:inbox.notifications,unread:inbox.unread};}
+  function notificationPanel(){
+    if(!state.notificationData)return wrapper('Varslinger','<p class="loading-card">Henter varslinger …</p>');
+    const {config,devices,settings,inbox}=state.notificationData,deviceId=localStorage.getItem('hereme_push_subscription_id'),device=devices.find(item=>item.id===deviceId),supported='Notification' in window&&'PushManager' in window&&'serviceWorker' in navigator;
+    let status='Ikke aktivert på denne enheten.',action='<button class="btn btn-primary" data-action="push-enable">Aktiver varslinger</button>';
+    if(!config.enabled){status='Push-varslinger er ikke aktivert på serveren.';action='';}
+    else if(!supported){status='Denne nettleseren støtter ikke push-varslinger.';action='';}
+    else if(window.HeremePwa?.ios()&&!window.HeremePwa.standalone()){status='På iPhone og iPad må du først legge HerEme til på Hjem-skjermen og åpne appen derfra.';action='<button class="btn btn-secondary" data-action="pwa-install-help">Vis installasjonshjelp</button>';}
+    else if(Notification.permission==='denied'){status='Varslinger er blokkert i nettleser- eller enhetsinnstillingene.';action='';}
+    else if(device){status='Varslinger er aktivert på denne enheten.';action='<button class="btn btn-danger" data-action="push-disable">Slå av på denne enheten</button>';}
+    else if(window.HeremePwa?.canInstall)action='<button class="btn btn-secondary" data-action="pwa-install">Installer HerEme</button>'+action;
+    const labels={request:'Meldingsforespørsel',invite:'Gruppeinvitasjon',accepted:'Forespørsel godtatt',declined:'Forespørsel avslått',message:'Ny chatmelding',post_reply:'Svar på innlegget ditt',comment_reply:'Svar på kommentaren din'};
+    const choices=[['chat_messages','Chatmeldinger'],['chat_requests_and_invitations','Forespørsler og invitasjoner'],['forum_replies','Svar på innlegg og kommentarer']].map(([name,label])=>`<label class="notification-choice"><input type="checkbox" data-notification-setting="${name}"${settings[name]?' checked':''}> ${label}</label>`).join('');
+    const rows=inbox.length?inbox.map(item=>`<button class="notification-row${item.read_at?'':' unread'}" data-action="notification-open" data-id="${E(item.notification_id)}" data-route="${E(item.route)}"><img src="/assets/icons/notification.svg" alt=""><span><b>${E(labels[item.kind]||'Varsling')}</b><small>${E(String(item.created_at).replace('T',' ').slice(0,16))}</small></span></button>`).join(''):'<p class="profile-empty">Ingen varslinger ennå.</p>';
+    return wrapper('Varslinger',`<section class="notification-settings"><p>${E(status)}</p><div class="notification-actions">${action}</div><fieldset><legend>Hva vil du varsles om?</legend>${choices}</fieldset></section><section class="notification-inbox"><h3>Innboks</h3>${rows}</section>`);
+  }
+  async function openNotifications(){state.notificationData=null;openModal('notifications');await loadNotifications();renderModal();}
+  const pushKey=value=>{const padding='='.repeat((4-value.length%4)%4),raw=atob((value+padding).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,char=>char.charCodeAt(0));};
+  async function enablePush(){const config=state.notificationData.config,permission=await Notification.requestPermission();if(permission!=='granted'){await loadNotifications();renderModal();return;}const registration=await window.HeremePwa.ready;if(!registration)throw new Error('Service Worker kunne ikke startes.');let subscription=await registration.pushManager.getSubscription();if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushKey(config.public_key)});try{const result=await api('/api/push/subscriptions',{method:'POST',body:{subscription:subscription.toJSON(),device_label:navigator.userAgent.slice(0,80)}});localStorage.setItem('hereme_push_subscription_id',result.subscription.id);}catch(error){await subscription.unsubscribe();throw error;}await loadNotifications();renderModal();}
+  async function disablePush(){const id=localStorage.getItem('hereme_push_subscription_id');if(id)await api('/api/push/subscriptions/'+encodeURIComponent(id),{method:'DELETE'});const registration=await window.HeremePwa.ready,subscription=await registration?.pushManager.getSubscription();await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');await loadNotifications();renderModal();}
+  function openAuth(message,onSuccess,mode='login'){window.HeremeAuth.open({mode,message,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await loadNotificationBadge();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast('Lagre gjenopprettingsnøkkelen din på et trygt sted.');}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
   function requireUser(action) {
     if(state.user)return true;
     openAuth('',async()=>action?.());return false;
@@ -169,6 +190,7 @@
     if(state.modal==='report')html=wrapper('Rapporter innlegg',`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>Hva er problemet?</span><select id="reportReason"><option>Personopplysninger</option><option>Trakassering</option><option>Ulovlig innhold</option><option>Spam / svindel</option><option>Annet</option></select></label><p class="notice">Tre forskjellige demokontoers rapporter setter innlegget på vent for vurdering.</p><button class="btn btn-primary" type="submit">Send rapport</button></form>`);
     if(state.modal==='menu')html=accountMenu();
     if(state.modal==='staff')html=staffPanel();
+    if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
@@ -196,7 +218,7 @@
       if(state.modal!=='detail'||request!==state.detailRequest)return;
       state.detailPost=post.post;state.comments=comments.comments;renderModal({preserve:true});
       if(route){rememberWall();history.pushState({...history.state,detail:true},'',`/?post=${id}`);}
-    } catch(error) {if(request!==state.detailRequest)return;closeModal();toast(error.message);}
+    } catch(error) {if(request!==state.detailRequest)return;closeModal({fromRoute:true});if(new URLSearchParams(location.search).has('post'))history.replaceState(history.state,'','/');renderWall();toast('Dette innholdet er ikke lenger tilgjengelig.');}
   }
   async function vote(id,value) {
     if(!requireUser(()=>vote(id,value))||state.voting.has(id))return;
@@ -357,6 +379,12 @@
       await api(`/api/admin/users/${encodeURIComponent(userId)}`,{method:'DELETE',body:{delete_posts:deletePosts,reason:staffReason()}});await refreshStaff('Brukeren er slettet permanent.');return;
     }
     if(action==='menu'){openModal('menu');return;}
+    if(action==='notifications'){if(requireUser(openNotifications))await openNotifications();return;}
+    if(action==='push-enable'){await enablePush();return;}
+    if(action==='push-disable'){await disablePush();return;}
+    if(action==='pwa-install'){await window.HeremePwa.install();await loadNotifications();renderModal();return;}
+    if(action==='pwa-install-help'){toast('Åpne Del-menyen i Safari, velg «Legg til på Hjem-skjermen», og åpne HerEme derfra.');return;}
+    if(action==='notification-open'){await api('/api/notifications/'+encodeURIComponent(target.dataset.id)+'/read',{method:'POST'});location.assign(target.dataset.route);return;}
     if(action==='areas'){state.draftAreas=[...state.selectedAreas];openModal('areas');return;}
     if(action==='area-toggle'){const area=target.dataset.areaId;state.draftAreas=state.draftAreas.includes(area)?state.draftAreas.filter(id=>id!==area):[...state.draftAreas,area];for(const item of document.querySelectorAll(`[data-area-id="${CSS.escape(area)}"]`))item.setAttribute('aria-pressed',state.draftAreas.includes(area));return;}
     if(action==='save-areas'){const result=await api('/api/me/areas',{method:'PUT',body:{area_ids:state.draftAreas}});state.selectedAreas=result.areas.map(area=>area.id);closeModal();await loadPosts();return;}
@@ -367,7 +395,7 @@
     if(action==='register'){openAuth('',async()=>{},'register');return;}
     if(action==='profile-post'){await openDetail(id);return;}
     if(action==='profile-more'){await loadProfile({append:true});return;}
-    if(action==='logout'){await api('/api/session/logout',{method:'POST'});state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');closeModal();await loadPosts();return;}
+    if(action==='logout'){const pushId=localStorage.getItem('hereme_push_subscription_id'),registration=await window.HeremePwa?.ready,subscription=await registration?.pushManager.getSubscription();await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');$('#notificationButton').hidden=true;closeModal();await loadPosts();return;}
     if(action==='rotate-recovery'){const result=await api('/api/recovery/rotate',{method:'POST'});state.recoveryKey=result.recovery_key;openModal('recovery-key');return;}
     if(action==='toggle-recovery'){const input=$('#recoveryPassword'),show=input.type==='password';input.type=show?'text':'password';target.textContent=show?'Skjul':'Vis';input.focus();return;}
     if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast('Nøkkelen er kopiert.');return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast('Nøkkelen er kopiert.');return;}}window.prompt('Kopier gjenopprettingsnøkkelen:',state.recoveryKey);return;}
@@ -432,6 +460,7 @@
     if(input.name==='category'){state.categories=[...document.querySelectorAll('input[name=category]:checked')].map(el=>el.value);$('#simpleCategories').innerHTML=HeremeFeed.categoryButtons(state.categories);$('#filterCount').textContent=state.categories.length===5?'':state.categories.length;await loadPosts();}
     if(input.id==='sortSelect'){state.sort=input.value;await loadPosts();}
     if(input.id==='profileSort'){state.profileSort=input.value;state.profile=null;state.profileCursor=null;await loadProfile();}
+    if(input.dataset.notificationSetting){const settings={...state.notificationData.settings,[input.dataset.notificationSetting]:input.checked};state.notificationData.settings=(await api('/api/notification-settings',{method:'PUT',body:settings})).settings;renderModal();}
     if(input.id==='textPosition'){state.textPosition=input.value;updatePreview();}
     if(input.id==='postArea'){state.postArea=input.value;}
     if(input.name==='postCategory'){state.category=input.value;updatePreview();}
@@ -471,6 +500,7 @@
       if(state.legacyToken||state.csrf)try{const current=await api('/api/me');state.user=current.user;state.csrf=current.csrf_token||csrfCookie();if(current.legacy_migrated){state.legacyToken='';localStorage.removeItem('hereme_token');if(current.recovery_key){state.recoveryKey=current.recovery_key;state.modal='recovery-key';}}}
       catch(error){if(error.status!==401)throw error;state.legacyToken='';state.csrf='';localStorage.removeItem('hereme_token');}
       if(state.meta.features?.locations){$('#areaButton').hidden=false;const [available,geometry,subscribed]=await Promise.all([api('/api/areas'),api('/api/areas/geometry'),state.user?api('/api/me/areas'):Promise.resolve({areas:[]})]);state.areas=available.areas;state.areaGeometry=geometry;state.selectedAreas=subscribed.areas.map(area=>area.id);}
+      if(state.user)await loadNotificationBadge();
       await loadPosts();
       if(new URLSearchParams(location.search).get('recovery-saved')==='1'){history.replaceState({},'',location.pathname);toast('Innloggingen er bekreftet. Enheten kan nå tilby å lagre den.');}
       state.routeReady=true;await applyRoute({fromPop:true});

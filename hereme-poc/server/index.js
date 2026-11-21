@@ -60,13 +60,13 @@ app.get('/chat/:id',(req,res)=>appShell('chat.html',res));
 app.get('/me',(req,res)=>appShell('index.html',res));
 
 app.get('/api/live',(req,res)=>res.json({ok:true,name:'HerEme'}));
-app.get('/api/health',(req,res)=>res.json({ok:true,name:'HerEme',storage:'SQLite',runtime:runtimeMetrics,chat_worker:S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get()||null}));
+app.get('/api/health',(req,res)=>{const worker=S.db.prepare('SELECT last_run FROM push_worker_state WHERE id=1').get();res.json({ok:true,name:'HerEme',storage:'SQLite',runtime:runtimeMetrics,chat_worker:S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get()||null,push:{enabled:S.push.enabled(),worker_fresh:!S.push.enabled()||Boolean(worker&&Date.now()-new Date(worker.last_run+'Z').getTime()<120000)}});});
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=14').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=15').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===14;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===15;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();});
@@ -77,7 +77,7 @@ app.get('/api/ready',(req,res)=>{
 app.get('/api/categories',(req,res)=>res.json({categories:themes}));
 app.get('/api/meta',(req,res)=>{
   const port=req.socket.localPort;
-  const features={video:S.config.enableVideo,locations:S.config.enableLocations,verification:S.config.enableVerification,staff_panel:true};
+  const features={video:S.config.enableVideo,locations:S.config.enableLocations,verification:S.config.enableVerification,staff_panel:true,web_push:S.push.enabled()};
   if(S.config.production)return res.json({port,public_origin:S.config.publicOrigin,connect_url:S.config.publicOrigin,features});
   const ips=lanIps();res.json({port,connect_url:ips.length?`http://${ips[0].ip}:${port}`:`http://localhost:${port}`,addresses:ips.map(item=>({...item,url:`http://${item.ip}:${port}`})),features});
 });
@@ -101,11 +101,20 @@ app.post('/api/recovery/confirm',async(req,res,next)=>{try{
   res.status(303).set('Location','/?recovery-saved=1').send('');
 }catch(error){next(error);}});
 app.get('/api/me',(req,res)=>{const current=S.identity.readSession(req,res);if(!current)return errors(res,401,'AUTH_REQUIRED','Ingen aktiv sesjon.');res.json({user:current,csrf_token:current.csrf||null,legacy_migrated:Boolean(current.legacyMigrated),recovery_key:current.recoveryKey||null,recovery_key_shown_once:Boolean(current.recoveryKey)});});
-app.post('/api/session/logout',write(null,20),(req,res)=>{S.identity.logout(req.auth,res);res.json({ok:true});});
-app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.identity.revokeAll(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
+app.post('/api/session/logout',write(null,20),(req,res)=>{S.push.disableDevice(req.auth,{id:req.body?.push_subscription_id,endpoint:req.body?.push_endpoint});S.identity.logout(req.auth,res);res.json({ok:true});});
+app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.push.disableAll(req.auth);S.identity.revokeAll(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true}));
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
-app.delete('/api/me',write(null,3),(req,res)=>{S.accounts.deactivate(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
+app.delete('/api/me',write(null,3),(req,res)=>{S.push.disableAll(req.auth);S.accounts.deactivate(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
+app.get('/api/push/config',(req,res)=>res.json(S.push.configView()));
+app.get('/api/push/subscriptions',read(null),(req,res)=>res.json({subscriptions:S.push.list(req.auth)}));
+app.post('/api/push/subscriptions',write(null,20),(req,res)=>res.status(201).json({subscription:S.push.subscribe(req.auth,req.body)}));
+app.delete('/api/push/subscriptions/:id',write(null,20),(req,res)=>res.json(S.push.disable(req.auth,req.params.id)));
+app.get('/api/notification-settings',read(null),(req,res)=>res.json({settings:S.push.preferences(req.auth)}));
+app.put('/api/notification-settings',write(null,20),(req,res)=>res.json({settings:S.push.setPreferences(req.auth,req.body)}));
+app.get('/api/notifications',read(null),(req,res)=>res.json({notifications:S.notifications.list(req.auth,req.query.before),unread:S.notifications.unread(req.auth)}));
+app.post('/api/notifications/:id/read',write(null,60),(req,res)=>res.json(S.notifications.read(req.auth,req.params.id)));
+app.get('/api/admin/push/health',read('staff:read'),(req,res)=>res.json({worker:S.db.prepare('SELECT * FROM push_worker_state WHERE id=1').get()||null,subscriptions:S.db.prepare('SELECT count(*) count FROM push_subscriptions WHERE disabled_at IS NULL').get().count,states:S.db.prepare('SELECT state,count(*) count FROM push_deliveries GROUP BY state').all()}));
 app.get('/api/me/summary',read(null),(req,res)=>res.json(S.profile.summary(req.auth,req.query)));
 app.get('/api/chat/users',read(null),(req,res)=>{S.rate.check(`chat-search:${req.auth.id}`,180);res.json({users:S.chat.search(req.auth,req.query.q)});});
 app.get('/api/chat/direct/:user',read(null),(req,res)=>res.json(S.chat.direct(req.auth,req.params.user)));

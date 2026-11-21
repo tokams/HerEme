@@ -1,7 +1,7 @@
 # HerEme system specification
 
-**Snapshot:** 2026-11-21, v3 issue implementation (local worktree)
-**Code baseline:** `feature/improvements`, with the v3 routing, unified authentication and personal-profile changes uncommitted at this snapshot.
+**Snapshot:** 2026-11-21, E10-01 implementation (local worktree)
+**Code baseline:** `feature/push-notifications`, with the optional PWA and Web Push changes uncommitted at this snapshot.
 **Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 
@@ -42,6 +42,29 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 | Media | Original images are kept and validated server-side; display and thumbnail derivatives are generated. Post video is at most 180 seconds and uses the media worker when enabled. |
 | Staff | Role-based moderator and administrator surfaces, with audited actions and server-side authorization. |
 | Personal profile | An authenticated member has a private, addressable `/me` profile with their identity, member date, received upvotes, authored-post activity and accepted direct/group-chat counts. |
+| PWA and notifications | The site exposes an optional installable PWA. Members have one in-app inbox, account category preferences and per-device Web Push opt-in. Production push remains disabled until device verification. |
+
+## PWA and notification delivery
+
+- `manifest.webmanifest`, branded 192/512 PNG icons and a root Service Worker
+  support installation without changing normal browser use. The worker handles
+  push and safe same-origin notification routes and caches no protected data.
+- SQLite remains authoritative. Chat requests, invitations, decisions and
+  accepted-chat messages reuse `chat_notifications`; replies add compact
+  `forum_notifications`. Both feed the unified in-app inbox.
+- Schema 15 adds account preferences, per-device subscriptions, a transactional
+  outbox, retry-safe deliveries and worker telemetry. Newly subscribed devices
+  receive future events only.
+- Push payloads contain generic text and a validated HerEme route. They exclude
+  message bodies, attachment metadata, credentials and tokens. The worker
+  rechecks preferences, subscription ownership, blocks, membership and content
+  availability immediately before delivery.
+- `WEB_PUSH_ENABLED` defaults off. The supervised worker applies bounded retries,
+  disables HTTP 404/410 endpoints and reports only enabled/fresh state publicly.
+  Detailed counts require staff access. In-app notifications work while push is
+  off or denied.
+- Physical iPhone Home Screen, Android background and deployed HTTPS delivery
+  remain **NOT VERIFIED** and are required before enabling production push.
 
 ## Browser routes and authentication
 
@@ -91,9 +114,9 @@ The 13 bundled examples are marked synthetic. Existing user-authored content is 
 | `public/` | Plain browser JavaScript/CSS and static assets. UI renders API state and dispatches actions; it does not own durable policy. |
 | `server/index.js` | HTTP routes, authentication/CSRF middleware, limits and response mapping. |
 | `server/domain/` | Identity, posts, interactions, staff actions, chat, media, video, locations and verification rules. |
-| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, events and audit records. Migrations reach schema 14 at this baseline. WAL mode is used. |
+| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, push subscriptions/outbox/deliveries, events and audit records. Migrations reach schema 15. WAL mode is used. |
 | Private data directory | SQLite plus public post media, temporary uploads and private chat bytes. Chat bytes are outside public static paths. |
-| Workers | Durable post-media processing and minute-based chat attachment cleanup. |
+| Workers | Durable post-media processing, minute-based chat attachment cleanup and bounded Web Push delivery. |
 | WebSocket channel | Live signals only; persisted messages and notifications remain authoritative. |
 | Caddy | HTTPS/WSS reverse proxy in the Docker deployment. Production Node binds to loopback. |
 
