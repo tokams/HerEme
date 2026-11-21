@@ -12,7 +12,7 @@ const app=require('../server/index'),S=require('../server/services');
   await page.locator('[data-auth-form=register] input[name=name]').fill('PasskeyBrowser');await page.locator('[data-auth-form=register] button').click();
   await page.locator('[data-save-passkey]').waitFor({state:'visible'});const recovery=await page.locator('.recovery-key').textContent();assert.ok(recovery.length>=20);
   const before=await context.request.get('http://localhost:3399/api/me').then(response=>response.json());
-  await page.locator('[data-save-passkey]').click();await page.getByText('Passnøkkelen er lagret. Gjenopprettingsnøkkelen er en anbefalt reserve.',{exact:true}).waitFor();await page.locator('[data-auth-continue]').click();
+  await page.locator('[data-save-passkey]').click();await page.locator('[role=status]').getByText('Enheten er klar for innlogging.',{exact:false}).waitFor();await page.locator('form[action="/api/recovery/confirm"] button[type=submit]').click();await page.waitForURL('**/?recovery-saved=1');
   await page.waitForFunction(()=>document.querySelector('#profileLabel')?.textContent==='PasskeyBrowser');if(await page.locator('.modal-close').count())await page.locator('.modal-close').click();await page.locator('.menu-button').click();await page.getByRole('button',{name:'Logg ut',exact:true}).click();await page.waitForFunction(async()=>{const response=await fetch('/api/me');return response.status===401;});
   await page.reload();await page.locator('.menu-button').click();await page.locator('[data-action=auth-login]').click();
   for(const mutation of ['signature','origin','uv','rp','handle','credential','disabled','revoked']){

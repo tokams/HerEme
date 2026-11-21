@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-21 — Account setup and iOS home screen
+
+- Label the recovery credential as an innloggingskode in the account dialog and
+  submit it through the existing browser password-save form after registration.
+- Give the iOS standalone app an opaque status bar and safe-area spacing above
+  the masthead.
+
 ## 2026-11-21 — Domain cutover recovery
 
 - Retry public readiness during TLS startup and check the live database schema
