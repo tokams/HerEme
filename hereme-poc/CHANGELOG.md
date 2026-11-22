@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Route responsiveness follow-up
+
+- Removed the whole-screen 480 ms entry animation after reports of flicker and lag.
+- Kept the current view visible until profile or post-detail data is ready; post detail now renders once, and returning to an unchanged wall reuses its post and image nodes instead of rebuilding and refetching them.
+
 ## 2026-11-22 — E23 interaction motion
 
 - Added shared timing/easing tokens and tactile controls, keyboard press response, icon tooltips, menu entry, modal entry/exit, same-document view entry, and guarded chat message/media animations.

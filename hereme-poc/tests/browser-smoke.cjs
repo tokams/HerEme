@@ -70,7 +70,7 @@ async function publish(page,title) {
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await page.goto(base);await ready(page);await fits(page);
-  const motionTokens=await page.evaluate(()=>({press:getComputedStyle(document.documentElement).getPropertyValue('--motion-press-in').trim(),screen:getComputedStyle(document.documentElement).getPropertyValue('--motion-screen').trim()}));assert.deepEqual(motionTokens,{press:'90ms',screen:'480ms'});
+  const motionTokens=await page.evaluate(()=>({press:getComputedStyle(document.documentElement).getPropertyValue('--motion-press-in').trim(),screen:getComputedStyle(document.documentElement).getPropertyValue('--motion-screen').trim()}));assert.deepEqual(motionTokens,{press:'90ms',screen:''});
   const motionButton=page.locator('#themeToggle');await motionButton.focus();await page.keyboard.down('Enter');assert.equal(await motionButton.evaluate(node=>node.classList.contains('motion-key-press')),true);await page.keyboard.up('Enter');assert.equal(await motionButton.evaluate(node=>node.classList.contains('motion-key-press')),false);await motionButton.click();
   const logo=page.locator('.logo'),logoBounds=await logo.boundingBox();await page.mouse.move(logoBounds.x+logoBounds.width/2,logoBounds.y+logoBounds.height/2);await page.mouse.down();assert.notEqual(await logo.evaluate(node=>getComputedStyle(node).transform),'none','Pointer press responds immediately.');await page.mouse.move(0,0);await page.mouse.up();await page.waitForFunction(()=>getComputedStyle(document.querySelector('.logo')).transform==='none');
   const videoBadgeBounds=await page.evaluate(()=>{
@@ -180,6 +180,22 @@ async function publish(page,title) {
   const textPost=await publish(page,'Kor e bussen? Et spørsmål fra en isolert test.');
   assert.equal(await textPost.getAttribute('data-category'),'question');
   const textId=await textPost.getAttribute('data-post-id');
+  await page.locator('.post-card img').first().evaluate(node=>window.__routeMedia=node);
+  let releaseProfile,requestProfile;const profileGate=new Promise(resolve=>releaseProfile=resolve),profileRequested=new Promise(resolve=>requestProfile=resolve);
+  const holdProfile=async route=>{requestProfile();await profileGate;await route.continue();};
+  await page.route('**/api/me/summary?*',holdProfile);
+  await page.locator('.profile-chip').click();await profileRequested;
+  assert.equal(await page.locator('#forumShell').isVisible(),true,'Wall stays visible while profile data loads.');
+  assert.equal(await page.locator('#profileRoot').isVisible(),false,'Profile does not open with partial data.');
+  await page.goBack();assert.equal(await page.locator('#forumShell').isVisible(),true);
+  const staleProfileResponse=page.waitForResponse(response=>response.url().includes('/api/me/summary?'));
+  releaseProfile();await (await staleProfileResponse).finished();await page.waitForTimeout(50);
+  assert.equal(await page.locator('#profileRoot').isVisible(),false,'A stale profile response cannot reopen the page.');
+  await page.unroute('**/api/me/summary?*',holdProfile);
+  await page.locator('.profile-chip').click();await page.locator('#profileRoot .profile-header').waitFor();
+  assert.equal(await page.locator('#profileRoot').evaluate(node=>getComputedStyle(node).animationName),'none');
+  await page.goBack();await page.locator('#forumShell').waitFor({state:'visible'});
+  assert.equal(await page.evaluate(()=>window.__routeMedia===document.querySelector('.post-card img')),true,'Returning to the wall preserves media DOM.');
   await page.locator('.create-button').click();
   await page.locator('#postBody').fill('Regn på veien. Kjør forsiktig i dag.');
   await page.locator('input[name=postCategory][value=alert]').check();
@@ -278,7 +294,7 @@ async function publish(page,title) {
   await page.locator('#articleTitle').fill('Unfinished article');
   await page.locator('[data-action=article-save-draft]').click();await page.locator('.modal-close').click();
   await page.locator('.profile-chip').click();
-  assert.equal(await page.locator('#profileRoot').evaluate(node=>getComputedStyle(node).animationDuration),'0.48s','Profile route uses the shared screen duration.');
+  await page.locator('#profileRoot .profile-header').waitFor();
   await page.locator(`.profile-post-edit[data-id="${articleId}"]`).click();
   assert.equal(await page.locator('#articleTitle').inputValue(),'Oppdaterte turer i Rogaland');
   await page.locator('.modal-close').click();
@@ -286,11 +302,19 @@ async function publish(page,title) {
   assert.equal(await page.locator('#articleTitle').inputValue(),'Unfinished article');
   page.once('dialog',dialog=>dialog.accept());await page.locator('[data-action=article-delete-draft]').click();
   await page.locator('[data-action=profile-wall]').click();
-  assert.equal(await page.locator('#forumShell').evaluate(node=>getComputedStyle(node).animationDuration),'0.48s','Returning to the wall uses the shared screen duration.');
+  await page.locator('#forumShell').waitFor({state:'visible'});
   // Demo posters use their preserved source to apply v3, while linking the untouched original.
   const seeded=page.locator('.post-card').filter({hasText:'Ka skjer i helgå?'}).first();
-  await seeded.locator('.tile-open').click();
-  await page.locator('.detail-modal .poster-copy').waitFor();
+  const seededId=await seeded.getAttribute('data-post-id');
+  let releasePost,requestPost;const postGate=new Promise(resolve=>releasePost=resolve),postRequested=new Promise(resolve=>requestPost=resolve);
+  const holdPost=async route=>{requestPost();await postGate;await route.continue();};
+  await page.route(`**/api/posts/${seededId}`,holdPost);
+  await seeded.locator('.tile-open').click();await postRequested;
+  assert.equal(await page.locator('.detail-modal').count(),0,'Post detail stays closed until post data is ready.');
+  assert.equal(await page.locator('#forumShell').isVisible(),true);
+  releasePost();await page.locator('.detail-modal .poster-copy').waitFor();await page.unroute(`**/api/posts/${seededId}`,holdPost);
+  assert.equal(await page.locator('.detail-modal.modal-refresh').count(),0,'Post detail renders once.');
+  assert.equal(await page.locator('.detail-modal .poster-photo').evaluate(image=>image.complete&&image.naturalWidth>0),true,'Primary post image is decoded when detail opens.');
   assert.match(await page.locator('.detail-modal .poster-photo').getAttribute('src'),/\/sources\//);
   await page.getByRole('link',{name:'Original plakat'}).waitFor();
   await page.locator('.modal-close').click();

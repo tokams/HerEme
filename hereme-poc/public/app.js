@@ -4,14 +4,13 @@
   const E=HeremePoster.escape;
   const t=(key,params)=>window.HeremeI18n.t(`wall.${key}`,params);
   const csrfCookie=()=>document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf='))?.slice(12)?decodeURIComponent(document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf=')).slice(12)):'';
-  let motionRoute=location.pathname;
   const state={
     legacyToken:localStorage.getItem('hereme_token')||'',csrf:'',user:null,posts:[],meta:null,nextCursor:null,
     categories:[...HeremeThemes.ids],sort:'new',query:'',filtersOpen:false,activity:null,textPosition:'auto',modal:null,detailPost:null,comments:[],replyTo:null,
     category:'story',postMode:'poster',composeStep:'edit',draft:{title:'',body:'',link:''},articleDraft:{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]},articleDraftRecord:null,articleDrafts:[],articleDraftCreateId:null,articlePublishKey:null,articlePublishPrepared:false,articleDirty:false,historyData:null,historyComparison:null,historyVersion:null,articleUploading:false,editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
+    loadRequest:0,loadedFeedKey:null,feedRendered:false,routeRequest:0,profileRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={};
@@ -58,17 +57,20 @@
     const nav=document.querySelectorAll('.desktop-navigation .nav-link');if(nav[0])nav[0].lastChild.textContent=' '+t('chrome.whole_wall');if(nav[1])nav[1].lastChild.textContent=' '+t('feed.create');
     text('.category-filters legend','chrome.categories');text('.reset-filters','chrome.all_categories');text('.sidebar-note .eyebrow','chrome.room_for_all');text('.sidebar-note > p:not([class])','chrome.tagline');text('.sidebar-note .muted-note','chrome.demo_notice');text('.sidebar-note button','chrome.about');text('.wall-toolbar h1','chrome.wall');if($('.wall-toolbar > span')?.lastChild)$('.wall-toolbar > span').lastChild.textContent=' '+t('chrome.posts_count_label');attr('#feed','aria-label','chrome.wall_posts');if($('#feed .loading-card'))text('#feed .loading-card','chrome.loading_wall');
   }
-  function renderWall() {
+  function feedKey(){return JSON.stringify([state.categories,state.sort,state.query,state.selectedAreas]);}
+  function renderWall({preserveFeed=false}={}) {
     $('#forumShell').hidden=false;$('#profileRoot').hidden=true;
     $('#profileLabel').textContent=state.user?.name||t('profile.join');
     $('#profileMonogram').textContent=state.user?.name[0].toUpperCase()||'○';
     $('#feedCounter').textContent=state.loadError?'':state.posts.length;
+    if(preserveFeed&&state.feedRendered)return;
     $('#feed').innerHTML=state.loadError?
       `<div class="empty-state"><h2>${E(t('feed.load_error_title'))}</h2><p>${E(state.loadError)}</p><button class="btn btn-secondary" data-action="retry-feed">${E(t('common.retry'))}</button></div>`:
       state.posts.length?state.posts.map(HeremeFeed.card).join('')+(state.nextCursor?`<button class="load-more btn btn-secondary" data-action="load-more">${E(t('feed.load_more'))}</button>`:''):
       `<div class="empty-state"><h2>${E(t(state.categories.length?'feed.empty':'feed.no_categories'))}</h2><p>${E(t(state.categories.length?'feed.empty_help':'feed.no_categories_help'))}</p><button class="btn btn-secondary" data-action="${state.categories.length?'compose':'home'}">${E(t(state.categories.length?'feed.create':'feed.show_all_categories'))}</button></div>`;
     HeremePoster.enhance($('#feed'));
     $('#activityPanel').innerHTML=HeremeShell.activity(state.activity,state.loadError);
+    state.feedRendered=true;
   }
   function rememberWall(){history.replaceState({...history.state,wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',location.href);}
   function profileView(){
@@ -81,7 +83,16 @@
     const edit=document.createElement('button');edit.className='btn btn-secondary';edit.dataset.action='profile-avatar-edit';edit.textContent=t('profile.avatar_edit');root.querySelector('.profile-actions').prepend(edit);
     [...root.querySelectorAll('.profile-post-row')].forEach((row,index)=>{const post=posts[index],cell=row.querySelectorAll('span')[2];if(post&&cell)cell.textContent=`${statusLabel(post.status)} · ${post.score>=0?'+':''}${post.score}`;if(post?.content_format==='article'&&post.status==='published'){const button=document.createElement('button');button.type='button';button.className='btn btn-secondary profile-post-edit';button.dataset.action='article-edit';button.dataset.id=post.id;button.textContent=t('e21.edit_article');row.parentElement.append(button);}});
   }
-  async function loadProfile({append=false}={}){const params=new URLSearchParams({sort:state.profileSort,limit:'20'});if(append&&state.profileCursor)params.set('cursor',state.profileCursor);const [result,drafts]=await Promise.all([api('/api/me/summary?'+params),api('/api/me/article-drafts')]);if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];state.profile=result;state.articleDrafts=drafts.drafts;state.profileCursor=result.next_cursor;profileView();}
+  async function loadProfile({append=false}={}){
+    const request=++state.profileRequest,routeRequest=state.routeRequest,params=new URLSearchParams({sort:state.profileSort,limit:'20'});
+    if(append&&state.profileCursor)params.set('cursor',state.profileCursor);
+    let result,drafts;
+    try{[result,drafts]=await Promise.all([api('/api/me/summary?'+params),api('/api/me/article-drafts')]);}
+    catch(error){if(request!==state.profileRequest||routeRequest!==state.routeRequest||location.pathname!=='/me')return;throw error;}
+    if(request!==state.profileRequest||routeRequest!==state.routeRequest||location.pathname!=='/me')return;
+    if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];
+    state.profile=result;state.articleDrafts=drafts.drafts;state.profileCursor=result.next_cursor;profileView();
+  }
   function publicProfileView(profile){
     $('#forumShell').hidden=true;const root=$('#profileRoot');root.hidden=false;
     const score=value=>`${value>0?'+':''}${value}`;
@@ -90,20 +101,22 @@
   }
   const avatarEditor=HeremeAvatarEditor.setup({api,t,onSaved:result=>{Object.assign(state.profile.profile,result);Object.assign(state.user,result);profileView();toast(t('profile.avatar_saved'));}});
   async function applyRoute({fromPop=false}={}){
-    const route=location.pathname,params=new URLSearchParams(location.search);
+    const request=++state.routeRequest,route=location.pathname,params=new URLSearchParams(location.search);
     window.HeremePwa?.updateInstallUi();
     const publicMatch=/^\/u\/([A-Za-z0-9_-]{1,100})$/.exec(route);
-    if(publicMatch){if(state.modal)closeModal({fromRoute:true});try{publicProfileView(await api(`/api/users/${publicMatch[1]}/public`));}catch(error){if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
+    if(publicMatch){if(state.modal)closeModal({fromRoute:true});try{const profile=await api(`/api/users/${publicMatch[1]}/public`);if(request!==state.routeRequest)return;publicProfileView(profile);}catch(error){if(request!==state.routeRequest)return;if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
     if(route==='/me'){
       if(!state.user){openAuth(t('account.login_for_profile'),async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
       await loadProfile();return;
     }
     if(route!=='/'){document.title=t('route.not_found_title');$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('route.not_found'))}</h1><button class="btn btn-primary" data-action="profile-wall">${E(t('route.to_wall'))}</button></section>`;return;}
     if(history.state?.wall){const wall=history.state.wall;state.categories=wall.categories||state.categories;state.sort=wall.sort||state.sort;state.query=wall.query||'';$('#searchInput').value=state.query;$('#sortSelect').value=state.sort;renderFilters();}
-    renderWall();const id=Number(params.get('post'));if(id&&params.has('history'))await openHistory(id,{route:false,from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
+    if(state.loadedFeedKey!==feedKey())await loadPosts({render:false});
+    if(request!==state.routeRequest)return;
+    renderWall({preserveFeed:true});const id=Number(params.get('post'));if(id&&params.has('history'))await openHistory(id,{route:false,from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
   }
-  async function navigate(url,{replace=false}={}){const previous=location.pathname;rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);await applyRoute();motionRoute=location.pathname;if(previous!==motionRoute)window.HeremeMotion?.enter(motionRoute==='/'?$('#forumShell'):$('#profileRoot'),'motion-screen-enter');}
-  async function loadPosts({append=false}={}) {
+  async function navigate(url,{replace=false}={}){rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);await applyRoute();}
+  async function loadPosts({append=false,render=true}={}) {
     const request=++state.loadRequest;state.loadError='';
     $('#feed').setAttribute('aria-busy','true');
     try {
@@ -111,9 +124,9 @@
       const activityParams=new URLSearchParams({categories:state.categories.join(','),sort:state.sort,q:state.query,limit:'50'});if(state.selectedAreas.length)activityParams.set('areas',state.selectedAreas.join(','));
       const [response,activity]=await Promise.all([api('/api/posts?'+params),api('/api/activity?'+activityParams)]);
       if(request!==state.loadRequest)return;
-      state.posts=append?[...state.posts,...response.posts]:response.posts;state.nextCursor=response.next_cursor;state.activity=activity;
-    } catch(error) {if(request!==state.loadRequest)return;state.loadError=error.message;}
-    $('#feed').setAttribute('aria-busy','false');renderWall();
+      state.posts=append?[...state.posts,...response.posts]:response.posts;state.nextCursor=response.next_cursor;state.activity=activity;state.loadedFeedKey=feedKey();
+    } catch(error) {if(request!==state.loadRequest)return;state.loadError=error.message;state.loadedFeedKey=feedKey();}
+    $('#feed').setAttribute('aria-busy','false');if(render)renderWall();else state.feedRendered=false;
   }
   function lockBackground(locked) {
     document.body.classList.toggle('modal-open',locked);
@@ -144,9 +157,9 @@
     for(const entry of entries){const media=await api('/api/article-assets/'+encodeURIComponent(entry.id));if(state.modal!=='compose'||state.articleDraft!==article)return;if(entry.cover&&article.cover?.media_id===entry.id)article.cover={...article.cover,...media};if(entry.chapter?.media_id===entry.id)entry.chapter.media={...media,name:entry.chapter.media_name||''};}
     if(entries.length&&state.modal==='compose'){saveDraft();updateArticlePreview();}
   }
-  function removeModalVisual(){
+  function removeModalVisual({immediate=false}={}){
     const root=$('#modalRoot'),overlay=root.querySelector('.modal-overlay');
-    if(!overlay||!window.HeremeMotion||window.HeremeMotion.reduced()){root.replaceChildren();return;}
+    if(!overlay||immediate||!window.HeremeMotion||window.HeremeMotion.reduced()){root.replaceChildren();return;}
     const duration=Number.parseFloat(getComputedStyle(root).getPropertyValue('--motion-modal-exit'));
     if(!Number.isFinite(duration)){root.replaceChildren();return;}
     overlay.removeAttribute('data-action');overlay.setAttribute('aria-hidden','true');
@@ -164,7 +177,7 @@
     const returnTarget=state.returnFocus?.isConnected?state.returnFocus:
       document.querySelector(`[data-post-id="${state.detailPost?.id}"] .tile-open`)||$('.logo');
     returnTarget.focus({preventScroll:true});
-    removeModalVisual();
+    removeModalVisual({immediate:fromRoute||closingHistory||location.search.includes('post=')});
     if(closingHistory){history.replaceState(history.state,'','/');renderWall();return;}
     if(location.search.includes('post=')&&!fromRoute){history.back();return;}
   }
@@ -311,17 +324,24 @@
     state.modal='history';lockBackground(true);renderModal();
     if(route)history.pushState({...history.state,history:true},'',`/?post=${id}&history=1`);
   }
+  async function preloadDetailImage(post){
+    const url=post.content_format==='article'?HeremeArticleView.safeMediaUrl(post.article?.cover?.thumbnail_url||post.image_url):
+      HeremePoster.image(post.type==='video'?post.media_thumbnail_url||post.image_url:post.synthetic_demo?post.poster?.source_image_url:post.image_url);
+    if(!url||[...document.images].some(image=>image.complete&&image.naturalWidth>0&&new URL(image.currentSrc).pathname===url))return;
+    const image=new Image();image.src=url;
+    try{await image.decode();}catch{ /* The detail's media error state handles unavailable images. */ }
+  }
   async function openDetail(id,{route=true}={}) {
-    const request=++state.detailRequest;
-    if(!state.modal)state.returnFocus=document.activeElement;
-    state.detailPost=state.posts.find(p=>p.id===id)||null;state.comments=[];state.replyTo=null;
+    const request=++state.detailRequest,routeRequest=state.routeRequest,returnFocus=state.modal?state.returnFocus:document.activeElement;
+    let post,comments;
+    try{[post,comments]=await Promise.all([api('/api/posts/'+id),api(`/api/posts/${id}/comments`)]);}
+    catch(error){if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;if(new URLSearchParams(location.search).has('post'))history.replaceState(history.state,'','/');toast('Dette innholdet er ikke lenger tilgjengelig.');return;}
+    if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;
+    await preloadDetailImage(post.post);
+    if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;
+    state.returnFocus=returnFocus;state.detailPost=post.post;state.comments=comments.comments;state.replyTo=null;
     state.modal='detail';lockBackground(true);renderModal();
-    try {
-      const [post,comments]=await Promise.all([api('/api/posts/'+id),api(`/api/posts/${id}/comments`)]);
-      if(state.modal!=='detail'||request!==state.detailRequest)return;
-      state.detailPost=post.post;state.comments=comments.comments;renderModal({preserve:true});
-      if(route){rememberWall();history.pushState({...history.state,detail:true},'',`/?post=${id}`);}
-    } catch(error) {if(request!==state.detailRequest)return;closeModal({fromRoute:true});if(new URLSearchParams(location.search).has('post'))history.replaceState(history.state,'','/');renderWall();toast('Dette innholdet er ikke lenger tilgjengelig.');}
+    if(route){rememberWall();history.pushState({...history.state,detail:true},'',`/?post=${id}`);}
   }
   async function vote(id,value) {
     if(!requireUser(()=>vote(id,value)))return;
@@ -550,7 +570,15 @@
     if(action==='layout'){document.documentElement.dataset.layout=target.dataset.layout;localStorage.setItem('hereme_layout',target.dataset.layout);renderPreferences();return;}
     if(action==='theme'){const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;localStorage.setItem('hereme_theme',theme);renderPreferences();return;}
     if(action==='category'){const category=target.dataset.category;state.categories=state.categories.includes(category)?state.categories.filter(value=>value!==category):[...state.categories,category];renderFilters();$('#simpleCategories [data-category="'+category+'"]').focus({preventScroll:true});await loadPosts();return;}
-    if(action==='home'||action==='profile-wall'){state.query='';$('#searchInput').value='';state.categories=[...HeremeThemes.ids];renderFilters();if(location.pathname!=='/')await navigate('/');await loadPosts();window.scrollTo({top:0,behavior:'smooth'});return;}
+    if(action==='home'||action==='profile-wall'){
+      state.query='';$('#searchInput').value='';state.categories=[...HeremeThemes.ids];renderFilters();
+      const needsFeed=state.loadedFeedKey!==feedKey();
+      if(location.pathname!=='/'){
+        if(needsFeed)await loadPosts({render:false});
+        await navigate('/');
+      }else if(needsFeed)await loadPosts();
+      window.scrollTo(0,0);return;
+    }
     if(action==='reset-filters'){state.categories=[...HeremeThemes.ids];renderFilters();await loadPosts();return;}
     if(action==='toggle-filters'){state.filtersOpen=!state.filtersOpen;$('#forumShell').classList.toggle('filters-open',state.filtersOpen);$('#filterToggle').setAttribute('aria-expanded',state.filtersOpen);return;}
     if(action==='discussion'){await openDetail(id);$('#discussion')?.scrollIntoView({block:'start',behavior:'smooth'});return;}
@@ -730,7 +758,7 @@
         else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
       }
     });
-    window.addEventListener('popstate',()=>{const previous=motionRoute;if(state.modal==='detail'){state.modal=null;state.detailPost=null;lockBackground(false);(state.returnFocus?.isConnected?state.returnFocus:$('.logo')).focus({preventScroll:true});removeModalVisual();}applyRoute({fromPop:true}).then(()=>{motionRoute=location.pathname;if(previous!==motionRoute)window.HeremeMotion?.enter(motionRoute==='/'?$('#forumShell'):$('#profileRoot'),'motion-screen-enter');}).catch(error=>toast(error.message));});
+    window.addEventListener('popstate',()=>{if(state.modal==='detail'){state.modal=null;state.detailPost=null;lockBackground(false);(state.returnFocus?.isConnected?state.returnFocus:$('.logo')).focus({preventScroll:true});removeModalVisual({immediate:true});}applyRoute({fromPop:true}).catch(error=>toast(error.message));});
     try {
       state.meta=await api('/api/meta');
       state.csrf=csrfCookie();

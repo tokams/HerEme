@@ -59,7 +59,7 @@ const app=require('../server/index'),S=require('../server/services');
     await alice.locator('#messageInput').fill('Hei fra nettleseren');await alice.locator('#sendMessage').click();
     await alice.locator('.conversation-row').getByText('Venter på svar').waitFor();
     await bob.goto(base+'/chat.html');await bob.locator('.conversation-row').getByText('Meldingsforespørsel').click();
-    const motion=await bob.evaluate(()=>({press:getComputedStyle(document.documentElement).getPropertyValue('--motion-press-in').trim(),screen:getComputedStyle(document.documentElement).getPropertyValue('--motion-screen').trim()}));assert.deepEqual(motion,{press:'90ms',screen:'480ms'});
+    const motion=await bob.evaluate(()=>({press:getComputedStyle(document.documentElement).getPropertyValue('--motion-press-in').trim(),screen:getComputedStyle(document.documentElement).getPropertyValue('--motion-screen').trim()}));assert.deepEqual(motion,{press:'90ms',screen:''});
     assert.equal(await bob.locator('#conversation').isVisible(),true);assert.equal(await bob.locator('#chatShell .chat-inbox').isVisible(),false);
     assert.equal(await bob.locator('#messages').textContent(),'');
     await bob.locator('#acceptInvite').click();await bob.locator('#messages').getByText('Hei fra nettleseren').waitFor();
