@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-22 — E21 drafts and revision history (local worktree)
+
+- Added additive schema 23 with idempotent legacy v1 capture, owner-only article drafts, conflict-safe publishing and poster text edits. Existing post IDs, votes, comments and media remain attached.
+- Added public history, bounded line diffs, deep links and bilingual editing controls. Added moderation hiding, audited staff inspection, SQL/Git erasure and exclusive historical media purge.
+- Added a private Git archive worker/volume, reconciliation, deployment archive backup and local API/browser coverage. Production restore rehearsal, physical-device checks and privacy sign-off remain open gates.
+
 ## 2026-11-22 — E20 UI refinement (local worktree)
 
 - Installed the supplied Source Sans 3 WOFF2 with OFL notice and static server MIME support.

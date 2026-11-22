@@ -12,6 +12,7 @@
     "content:import-users": "node scripts/import-user-content.js",
     "push:generate-vapid": "node scripts/generate-vapid.js",
     "push:worker": "node server/push-worker.js",
+    "content:git-worker": "node server/content-git-worker.js",
     "test:browser": "node tests/browser-smoke.cjs",
     "test:chat-browser": "node tests/chat-browser.cjs",
     "test:pwa-browser": "node tests/pwa-browser.cjs",

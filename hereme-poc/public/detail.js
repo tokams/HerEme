@@ -1,5 +1,13 @@
 'use strict';
 window.HeremeDetail={
+  revision(row){
+    const E=HeremePoster.escape,content=row.content,assets=new Map(row.assets.map(asset=>[asset.media_id,asset]));
+    const label=HeremeI18n.t('wall.e21.older_version');
+    const allowed=new Set(row.assets.flatMap(asset=>[asset.url,asset.thumbnail_url].filter(Boolean)));
+    const media=id=>{const item=assets.get(id);if(!item)return '';const url=HeremeArticleView.safeMediaUrl(item.url);if(!url)return '';return item.kind==='video'?`<video controls preload="metadata" src="${E(url)}"></video>`:`<img src="${E(HeremeArticleView.safeMediaUrl(item.thumbnail_url)||url)}" alt="" loading="lazy">`;};
+    if(content.format==='poster')return `<article class="historical-version"><p class="eyebrow">${E(label)} · v${row.version}</p><pre>${E(content.text)}</pre></article>`;
+    return `<article class="historical-version detail-article"><p class="eyebrow">${E(label)} · v${row.version}</p><header class="article-hero theme-${E(content.category)}"><div><h1>${E(content.title)}</h1><p>${E(content.abstract)}</p></div></header>${media(content.cover_media_id)}<div class="article-reader">${content.chapters.map((chapter,index)=>`<section class="article-chapter"><h2>${index+1}. ${E(chapter.heading)}</h2><div class="article-markdown">${HeremeArticleMarkdown.render(chapter.markdown,allowed)}</div>${media(chapter.media_id)}</section>`).join('')}</div></article>`;
+  },
   author(person){
     const E=HeremePoster.escape,t=key=>HeremeI18n.t(`wall.${key}`);
     return person.author_public_id?`<button type="button" class="author-trigger" data-action="author-menu" data-user-id="${E(person.author_public_id)}" data-user-name="${E(person.author)}" aria-haspopup="menu" aria-expanded="false" aria-label="${E(t('profile.author_actions'))}: ${E(person.author)}">${E(person.author)}</button>`:E(person.author);

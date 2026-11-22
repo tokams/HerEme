@@ -1,6 +1,7 @@
 'use strict';
 const {fail}=require('./errors');
 const V=require('./validation');
+const {insertRevision}=require('./content-revisions');
 const {ids:categoryIds,legacyCategory,parseDesign,insertDesign}=require('../post-design');
 const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
 const decode=value=>{try{return JSON.parse(Buffer.from(value,'base64url').toString('utf8'));}catch{fail('INVALID_CURSOR','Ugyldig sidepeker.');}};
@@ -9,6 +10,7 @@ function createPostService(db,{media,audit,articles,config={}}={}){
     COALESCE(CASE WHEN u.status='active' THEN u.name END,p.demo_author,'anonym') author,CASE WHEN u.status='active' AND COALESCE(pp.synthetic_demo,0)=0 THEN u.id ELSE NULL END author_public_id,COALESCE(pp.synthetic_demo,0) synthetic_demo,pp.poster_json,
     d.category,d.image_zoom,d.image_x,d.image_y,d.text_position,pa.area_id,pm.media_id,m.kind media_kind,m.status media_status,
     CASE WHEN ar.post_id IS NULL THEN 'poster' ELSE 'article' END content_format,ar.abstract article_abstract,pc.text poster_text,
+    (SELECT MAX(version) FROM content_revisions cr WHERE cr.post_id=p.id) version,
     m.display_path media_display_path,m.thumbnail_path media_thumbnail_path,m.duration_ms,
     p.base_score+COALESCE((SELECT sum(v.value) FROM votes v WHERE v.post_id=p.id),0) score,
     (SELECT count(*) FROM comments c WHERE c.post_id=p.id) comment_count`;
@@ -67,6 +69,7 @@ function createPostService(db,{media,audit,articles,config={}}={}){
       db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(?,?,1)').run(id,user.id);
       insertDesign(db,id,design);
       if(stored)db.prepare('INSERT INTO post_media(post_id,media_id) VALUES(?,?)').run(id,stored.id);
+      insertRevision(db,{id,format:'poster',editor:user.id,origin:'publish',snapshot:{format:'poster',text:modern?body:body?`${title}\n\n${body}`:title,title,body,category:design.category,type,link_url:link,image_url:stored?.url||null},mediaIds:stored?[stored.id]:[]});
       if(input.area_id){if(!config.enableLocations)fail('LOCATIONS_DISABLED','Områder er ikke aktivert.',404);if(!db.prepare('SELECT id FROM areas WHERE id=? AND active=1').get(input.area_id))fail('INVALID_AREAS','Ugyldig område.');db.prepare('INSERT INTO post_areas(post_id,area_id) VALUES(?,?)').run(id,input.area_id);}
       audit?.record({actorId:user.id,action:'post.created',subjectType:'post',subjectId:id,next:{status:'published',type,category:design.category}});db.exec('COMMIT');
       return {id};

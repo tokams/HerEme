@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { snapshotData } = require('./snapshot-data');
-const { readRows, tables, keys, applyMigrations } = require('../server/migrations');
+const { readRows, tables, keys, applyMigrations, backfillContentRevisions } = require('../server/migrations');
 const { backfillDesigns } = require('../server/post-design');
 const { backfillLegacyMedia } = require('../server/domain/media');
 const key = (table, row) => JSON.stringify(keys[table].map(column => row[column]));
@@ -120,6 +120,7 @@ async function mergeData(sourceDir, targetDir) {
       for(const id of insertedPosts){const row=incomingRelease.posterContent.find(item=>item.post_id===id);if(row)targetDb.prepare('INSERT INTO poster_content(post_id,text) VALUES(?,?)').run(id,row.text);else targetDb.prepare(`INSERT INTO poster_content(post_id,text) SELECT id,CASE WHEN trim(body)='' THEN title WHEN substr(trim(body),1,length(title))=title THEN body ELSE title||char(10)||char(10)||body END FROM posts WHERE id=?`).run(id);}
       backfillDesigns(targetDb);
       backfillLegacyMedia(targetDb,target);
+      backfillContentRevisions(targetDb);
       // Reports from two instances may jointly reach the existing moderation threshold.
       targetDb.exec(`UPDATE posts SET status='review' WHERE status='published' AND
         (SELECT count(*) FROM reports WHERE post_id=posts.id AND resolved=0)>=3`);

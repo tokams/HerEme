@@ -74,9 +74,15 @@ app.use('/share-previews',(req,res,next)=>{
 app.use('/uploads',(req,res,next)=>{const original=req.pathname;req.pathname=req.pathname.slice(8)||'/';web.static(path.join(S.dataDir,'uploads'))(req,res,()=>{req.pathname=original;next();});});
 app.use('/media',(req,res,next)=>{
   const original=req.pathname,mediaId=/^\/media\/([0-9a-f-]{36})\//.exec(original)?.[1];
+  if(!mediaId)return res.status(404).send('Not found.');
   if(mediaId){
-    const asset=S.db.prepare('SELECT a.owner_id,p.status FROM article_assets a LEFT JOIN posts p ON p.id=a.post_id WHERE a.media_id=?').get(mediaId);
-    if(asset&&asset.status!=='published'&&S.identity.readSession(req,res)?.id!==asset.owner_id)return res.status(404).send('Not found.');
+    const mediaRow=S.db.prepare('SELECT owner_id FROM media WHERE id=?').get(mediaId);
+    if(!mediaRow)return res.status(404).send('Not found.');
+    const asset=S.db.prepare('SELECT a.owner_id,a.post_id,p.status FROM article_assets a LEFT JOIN posts p ON p.id=a.post_id WHERE a.media_id=?').get(mediaId);
+    if(asset){
+      const publicReference=asset.status==='published'&&S.db.prepare("SELECT 1 FROM content_media_references mr JOIN content_revisions r ON r.post_id=mr.post_id AND r.version=mr.version WHERE mr.media_id=? AND r.visibility='public' LIMIT 1").get(mediaId);
+      if(!publicReference&&S.identity.readSession(req,res)?.id!==asset.owner_id)return res.status(404).send('Not found.');
+    }else if(!S.db.prepare("SELECT 1 FROM post_media pm JOIN posts p ON p.id=pm.post_id WHERE pm.media_id=? AND p.status='published'").get(mediaId)&&S.identity.readSession(req,res)?.id!==mediaRow.owner_id)return res.status(404).send('Not found.');
   }
   req.pathname=req.pathname.slice(6)||'/';web.static(path.join(S.dataDir,'media'))(req,res,()=>{req.pathname=original;next();});
 });
@@ -89,12 +95,13 @@ app.get('/u/:id',(req,res)=>appShell('index.html',res));
 
 app.get('/api/live',(req,res)=>res.json({ok:true,name:'HerEme'}));
 app.get('/api/health',(req,res)=>{const worker=S.db.prepare('SELECT last_run FROM push_worker_state WHERE id=1').get();res.json({ok:true,name:'HerEme',storage:'SQLite',runtime:runtimeMetrics,chat_worker:S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get()||null,push:{enabled:S.push.enabled(),worker_fresh:!S.push.enabled()||Boolean(worker&&Date.now()-new Date(worker.last_run+'Z').getTime()<120000)}});});
+app.get('/api/admin/content-git/status',read('staff:read'),(req,res)=>res.json({jobs:S.db.prepare('SELECT status,count(*) count FROM content_git_outbox GROUP BY status').all(),purges_pending:S.db.prepare('SELECT count(*) count FROM content_git_purges WHERE completed_at IS NULL').get().count,media_purges_pending:S.db.prepare('SELECT count(*) count FROM content_media_purges WHERE completed_at IS NULL').get().count,last_error:S.db.prepare("SELECT last_error FROM content_git_outbox WHERE status='failed' ORDER BY next_attempt_at DESC LIMIT 1").get()?.last_error||null}));
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=22').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=23').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===22;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===23;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','avatars','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();})&&S.avatars.verify();
@@ -195,6 +202,20 @@ app.post('/api/posts',write('post:create',12),imageUpload.single('image'),async(
 app.post('/api/article-assets/images',write('post:create',24),imageUpload.single('image'),async(req,res)=>res.status(201).json(await S.articles.uploadImage(req.file,req.auth)));
 app.get('/api/article-assets/:id',(req,res)=>{const user=S.identity.readSession(req,res);if(!user)return errors(res,401,'AUTH_REQUIRED','Innlogging kreves.');res.json(S.articles.asset(req.params.id,user));});
 app.post('/api/articles',write('post:create',12),async(req,res)=>{const result=S.articles.create(req.body||{},req.auth),post=S.posts.visible(result.id);if(post)await S.sharePreviews.queue(post);res.status(201).json(result);});
+app.get('/api/me/article-drafts',read(),(req,res)=>res.set('Cache-Control','no-store').json(S.contentRevisions.listDrafts(req.auth)));
+app.post('/api/articles/drafts',write('post:create',60,'article:draft'),(req,res)=>res.status(201).set('Cache-Control','no-store').json(S.contentRevisions.createDraft(req.body||{},req.auth)));
+app.get('/api/articles/drafts/:id',read(),(req,res)=>res.set('Cache-Control','no-store').json(S.contentRevisions.getDraft(req.params.id,req.auth)));
+app.patch('/api/articles/drafts/:id',write('post:create',120,'article:draft'),(req,res)=>res.set('Cache-Control','no-store').json(S.contentRevisions.saveDraft(req.params.id,req.body||{},req.auth)));
+app.delete('/api/articles/drafts/:id',write('post:create',60,'article:draft'),(req,res)=>res.json(S.contentRevisions.deleteDraft(req.params.id,req.auth)));
+app.post('/api/articles/drafts/:id/publish',write('post:create',12,'article:publish'),async(req,res)=>{const result=S.contentRevisions.publishDraft(req.params.id,req.auth,req.body?.request_key,req.body?.change_summary),post=S.posts.visible(result.post_id);if(post)await S.sharePreviews.queue(post);res.json(result);});
+app.post('/api/articles/:id/edit',write('post:create',40,'article:draft'),(req,res)=>res.set('Cache-Control','no-store').json(S.contentRevisions.startEdit(req.params.id,req.auth)));
+app.patch('/api/posts/:id/text',write('post:create',30,'poster:edit'),async(req,res)=>{const result=S.contentRevisions.editPoster(req.params.id,req.body||{},req.auth);await syncSharePreview(req.params.id);res.json(result);});
+app.get('/api/posts/:id/revisions',(req,res)=>{S.rate.check('revision:read:'+ipKey(req),120);res.set('Cache-Control','no-store').json(S.contentRevisions.list(req.params.id,req.query));});
+app.get('/api/posts/:id/revisions/:version',(req,res)=>{S.rate.check('revision:read:'+ipKey(req),120);res.set('Cache-Control','no-store').json(S.contentRevisions.get(req.params.id,req.params.version));});
+app.get('/api/posts/:id/revisions/:version/diff',(req,res)=>{S.rate.check('revision:read:'+ipKey(req),120);res.set('Cache-Control','no-store').json(S.contentRevisions.diff(req.params.id,req.params.version,req.query.to));});
+app.post('/api/admin/posts/:id/revisions/:version/hide',write('moderate',30),(req,res)=>res.json(S.contentRevisions.hide(req.params.id,req.params.version,req.auth,req.body?.reason)));
+app.post('/api/admin/posts/:id/revisions/:version/inspect',write('moderate',60,'revision:inspect'),(req,res)=>res.set('Cache-Control','no-store').json(S.contentRevisions.inspect(req.params.id,req.params.version,req.auth,req.body?.reason)));
+app.post('/api/admin/posts/:id/revisions/:version/erase',write('content:manage',10),(req,res)=>res.json(S.contentRevisions.erase(req.params.id,req.params.version,req.auth,req.body?.reason)));
 app.post('/api/posts/:id/vote',write('vote',180),(req,res)=>res.json(S.interactions.vote(req.params.id,req.auth,req.body?.value)));
 app.get('/api/posts/:id/comments',(req,res)=>{const current=S.identity.readSession(req,res);res.json(S.interactions.comments(req.params.id,{...req.query,userId:current?.id}));});
 app.post('/api/comments/:id/vote',write('vote',180),(req,res)=>res.json(S.interactions.voteComment(req.params.id,req.auth,req.body?.value)));

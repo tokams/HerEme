@@ -1,4 +1,5 @@
 'use strict';
+const crypto=require('node:crypto');
 const tables = ['users', 'rooms', 'posts', 'votes', 'comments', 'reports'];
 const keys = { users: ['id'], rooms: ['id'], posts: ['id'], votes: ['post_id', 'user_id'], comments: ['id'], reports: ['id'] };
 const normalizedName=name=>String(name).normalize('NFKC').toLocaleLowerCase('no');
@@ -10,10 +11,31 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
     used.add(key);if(writeNormalized)update.run(name,key,row.id);else if(name!==row.name)update.run(name,row.id);
   }
 }
+function backfillContentRevisions(db){
+  const insert=db.prepare(`INSERT INTO content_revisions(post_id,version,format,editor_user_id,snapshot,content_hash,created_at,origin,visibility)
+    VALUES (?,1,?,?,?,?,?,'legacy_snapshot',?)`);
+  const ref=db.prepare('INSERT OR IGNORE INTO content_media_references(post_id,version,media_id) VALUES(?,1,?)');
+  const outbox=db.prepare('INSERT INTO content_git_outbox(post_id,version) VALUES(?,1)');
+  let count=0;
+  for(const row of db.prepare(`SELECT p.id,p.author_id,p.title,p.body,p.type,p.link_url,p.image_url,p.created_at,p.status,d.category,pc.text poster_text,
+    a.abstract,a.markdown_source,a.chapters_json,a.cover_media_id
+    FROM posts p LEFT JOIN post_design d ON d.post_id=p.id LEFT JOIN poster_content pc ON pc.post_id=p.id
+    LEFT JOIN articles a ON a.post_id=p.id WHERE p.status IN ('published','review','hidden')
+    AND NOT EXISTS(SELECT 1 FROM content_revisions cr WHERE cr.post_id=p.id) ORDER BY p.id`).all()){
+    const article=row.chapters_json!==null;
+    const snapshot=article?{format:'article',title:row.title,abstract:row.abstract,category:row.category,chapters:JSON.parse(row.chapters_json),cover_media_id:row.cover_media_id,markdown_source:row.markdown_source}:{format:'poster',text:row.poster_text??(row.body?`${row.title}\n\n${row.body}`:row.title),title:row.title,body:row.body,category:row.category,type:row.type,link_url:row.link_url,image_url:row.image_url};
+    const source=JSON.stringify(snapshot);
+    insert.run(row.id,article?'article':'poster',row.author_id,source,crypto.createHash('sha256').update(source).digest('hex'),row.created_at,row.status==='published'?'public':'hidden');
+    if(article){for(const media of db.prepare('SELECT media_id FROM article_assets WHERE post_id=?').all(row.id))ref.run(row.id,media.media_id);}
+    else {for(const media of db.prepare('SELECT media_id FROM post_media WHERE post_id=?').all(row.id))ref.run(row.id,media.media_id);}
+    outbox.run(row.id);count++;
+  }
+  return count;
+}
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 22) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 23) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -438,6 +460,79 @@ function applyMigrations(db) {
     );
     INSERT INTO schema_migrations(version) VALUES(22); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
+  if(version<23){
+    db.exec('BEGIN IMMEDIATE');
+    try{
+      db.exec(`CREATE TABLE content_revisions (
+        post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK(version>0),
+        format TEXT NOT NULL CHECK(format IN ('article','poster')),
+        editor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+        snapshot TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        change_summary TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        revision_captured_at TEXT NOT NULL DEFAULT (datetime('now')),
+        origin TEXT NOT NULL CHECK(origin IN ('legacy_snapshot','publish','edit')),
+        visibility TEXT NOT NULL DEFAULT 'public' CHECK(visibility IN ('public','hidden','erased')),
+        PRIMARY KEY(post_id,version)
+      );
+      CREATE INDEX content_revisions_editor ON content_revisions(editor_user_id,created_at);
+      CREATE TRIGGER content_revisions_sequence BEFORE INSERT ON content_revisions
+      WHEN NEW.version!=(SELECT COALESCE(MAX(version),0)+1 FROM content_revisions WHERE post_id=NEW.post_id)
+      BEGIN SELECT RAISE(ABORT,'revision version must be sequential'); END;
+      CREATE TABLE article_working_copies (
+        id TEXT PRIMARY KEY,
+        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        base_version INTEGER,
+        content_json TEXT NOT NULL,
+        edit_counter INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK((post_id IS NULL AND base_version IS NULL) OR (post_id IS NOT NULL AND base_version IS NOT NULL))
+      );
+      CREATE UNIQUE INDEX article_working_post_owner ON article_working_copies(post_id,owner_id) WHERE post_id IS NOT NULL;
+      CREATE TABLE content_media_references (
+        post_id INTEGER NOT NULL,
+        version INTEGER NOT NULL,
+        media_id TEXT NOT NULL REFERENCES media(id),
+        PRIMARY KEY(post_id,version,media_id),
+        FOREIGN KEY(post_id,version) REFERENCES content_revisions(post_id,version) ON DELETE CASCADE
+      );
+      CREATE TABLE content_publish_requests (
+        actor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        request_key TEXT NOT NULL,
+        post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        PRIMARY KEY(actor_id,request_key)
+      );
+      CREATE TABLE content_git_outbox (
+        post_id INTEGER NOT NULL,
+        version INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','synced','failed','cancelled')),
+        commit_oid TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(post_id,version),
+        FOREIGN KEY(post_id,version) REFERENCES content_revisions(post_id,version) ON DELETE CASCADE
+      );`);
+      db.exec(`CREATE TABLE content_git_purges (
+        post_id INTEGER PRIMARY KEY,
+        requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT
+      );`);
+      db.exec(`CREATE TABLE content_media_purges (
+        media_id TEXT PRIMARY KEY,
+        paths_json TEXT NOT NULL,
+        queued_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT
+      );`);
+      backfillContentRevisions(db);
+      db.exec('INSERT INTO schema_migrations(version) VALUES(23); COMMIT;');
+    }catch(error){db.exec('ROLLBACK');throw error;}
+  }
 }
 function readRows(db) {
   return Object.fromEntries(tables.map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]));
@@ -453,4 +548,4 @@ function nextId(db, table) {
   if (!Number.isSafeInteger(id)) throw new Error(`Identity range exhausted for ${table}`);
   return id;
 }
-module.exports = { applyMigrations, readRows, nextId, tables, keys };
+module.exports = { applyMigrations, backfillContentRevisions, readRows, nextId, tables, keys };

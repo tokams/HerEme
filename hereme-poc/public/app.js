@@ -7,7 +7,7 @@
   const state={
     legacyToken:localStorage.getItem('hereme_token')||'',csrf:'',user:null,posts:[],meta:null,nextCursor:null,
     categories:[...HeremeThemes.ids],sort:'new',query:'',filtersOpen:false,activity:null,textPosition:'auto',modal:null,detailPost:null,comments:[],replyTo:null,
-    category:'story',postMode:'poster',composeStep:'edit',draft:{title:'',body:'',link:''},articleDraft:{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]},articleUploading:false,editorImage:null,editorFile:null,
+    category:'story',postMode:'poster',composeStep:'edit',draft:{title:'',body:'',link:''},articleDraft:{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]},articleDraftRecord:null,articleDrafts:[],articleDraftCreateId:null,articlePublishKey:null,articlePublishPrepared:false,articleDirty:false,historyData:null,historyComparison:null,historyVersion:null,articleUploading:false,editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
     loadRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
@@ -70,11 +70,12 @@
     if(!state.profile){root.innerHTML=`<p class="loading-card">${E(t('profile.loading'))}</p>`;return;}
     const {profile,metrics,posts,next_cursor}=state.profile,stat=(key,value)=>`<div class="profile-stat"><b>${value}</b><span>${E(t(`profile.${key}`))}</span></div>`;
     root.innerHTML=`<section class="profile-header"><div><p class="eyebrow">${E(t('profile.heading'))}</p><h1>@${E(profile.name)}</h1><p class="muted-note">${E(t('profile.member_since',{date:String(profile.created_at).slice(0,10)}))}</p><div class="profile-stats">${stat('posts',metrics.post_count)}${stat('upvotes',metrics.upvotes_received)}${stat('comments',metrics.comments_received)}${stat('direct_chats',metrics.direct_chat_count)}${stat('group_chats',metrics.group_chat_count)}</div></div><div class="profile-actions"><button class="btn btn-secondary" data-action="menu">${E(t('profile.account_settings'))}</button><button class="btn btn-secondary" data-action="profile-wall">${E(t('route.to_wall'))}</button></div></section><section class="profile-posts"><header><div><p class="eyebrow">${E(t('profile.my_posts'))}</p><b>${E(posts.length?t('profile.shown',{count:posts.length}):t('profile.no_posts'))}</b></div><label>${E(t('profile.sort'))} <select id="profileSort"><option value="new"${state.profileSort==='new'?' selected':''}>${E(t('profile.newest'))}</option><option value="top"${state.profileSort==='top'?' selected':''}>${E(t('profile.top_score'))}</option></select></label></header>${posts.length?`<ol class="profile-post-list">${posts.map(post=>`<li><button class="profile-post-row" data-action="profile-post" data-id="${post.id}"><span class="profile-date">${E(String(post.created_at).slice(0,10))}</span><span class="profile-category">${E(post.category||t('profile.unknown'))}</span><strong>${E(post.title)}</strong><span>${E(post.status)} · ${post.score>=0?'+':''}${post.score}</span><span>${E(t('profile.reply_count',{count:post.comment_count}))}</span></button></li>`).join('')}</ol>${next_cursor?`<button class="btn btn-secondary" data-action="profile-more">${E(t('profile.show_more'))}</button>`:''}`:`<p class="profile-empty">${E(t('profile.empty'))}</p>`}</section>`;
+    root.insertAdjacentHTML('beforeend',`<section class="profile-posts"><header><h2>${t('e21.draft_articles')}</h2></header>${state.articleDrafts.length?`<ol class="profile-post-list">${state.articleDrafts.map(d=>`<li><button class="profile-post-row" data-action="draft-open" data-draft-id="${E(d.id)}"><strong>${E(d.content.title||t('e21.untitled'))}</strong><span>${E(d.content.category)}</span><time>${E(d.updated_at)}</time></button><button class="btn btn-secondary" data-action="draft-delete" data-draft-id="${E(d.id)}">${t('e21.delete_draft')}</button></li>`).join('')}</ol>`:`<p class="profile-empty">${t('e21.no_drafts')}</p>`}</section>`);
     const avatar=document.createElement('div');avatar.className='profile-avatar';avatar.innerHTML=HeremeAvatar.html({id:state.user.id,name:profile.name,avatar_url:profile.avatar_url});root.querySelector('.profile-header').prepend(avatar);
     const edit=document.createElement('button');edit.className='btn btn-secondary';edit.dataset.action='profile-avatar-edit';edit.textContent=t('profile.avatar_edit');root.querySelector('.profile-actions').prepend(edit);
     [...root.querySelectorAll('.profile-post-row')].forEach((row,index)=>{const post=posts[index],cell=row.querySelectorAll('span')[2];if(post&&cell)cell.textContent=`${statusLabel(post.status)} · ${post.score>=0?'+':''}${post.score}`;});
   }
-  async function loadProfile({append=false}={}){const params=new URLSearchParams({sort:state.profileSort,limit:'20'});if(append&&state.profileCursor)params.set('cursor',state.profileCursor);const result=await api('/api/me/summary?'+params);if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];state.profile=result;state.profileCursor=result.next_cursor;profileView();}
+  async function loadProfile({append=false}={}){const params=new URLSearchParams({sort:state.profileSort,limit:'20'});if(append&&state.profileCursor)params.set('cursor',state.profileCursor);const [result,drafts]=await Promise.all([api('/api/me/summary?'+params),api('/api/me/article-drafts')]);if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];state.profile=result;state.articleDrafts=drafts.drafts;state.profileCursor=result.next_cursor;profileView();}
   function publicProfileView(profile){
     $('#forumShell').hidden=true;const root=$('#profileRoot');root.hidden=false;
     const score=value=>`${value>0?'+':''}${value}`;
@@ -93,7 +94,7 @@
     }
     if(route!=='/'){document.title=t('route.not_found_title');$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('route.not_found'))}</h1><button class="btn btn-primary" data-action="profile-wall">${E(t('route.to_wall'))}</button></section>`;return;}
     if(history.state?.wall){const wall=history.state.wall;state.categories=wall.categories||state.categories;state.sort=wall.sort||state.sort;state.query=wall.query||'';$('#searchInput').value=state.query;$('#sortSelect').value=state.sort;renderFilters();}
-    renderWall();const id=Number(params.get('post'));if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
+    renderWall();const id=Number(params.get('post'));if(id&&params.has('history'))await openHistory(id,{route:false,from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
   }
   function navigate(url,{replace=false}={}){rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);return applyRoute();}
   async function loadPosts({append=false}={}) {
@@ -124,10 +125,10 @@
     state.tempUrl=null;state.editorFile=null;state.editorImage=null;state.editorSynthetic=false;state.editorVideo=false;state.videoDuration=0;state.videoThumbnail='';state.videoProgress=0;state.videoUploading=false;state.videoPaused=false;state.videoCancelled=false;state.videoUpload=null;
     state.editorZoom=1;state.editorX=50;state.editorY=50;
   }
-  function openModal(type) {
+  function openModal(type,{resume=false}={}) {
     if(!state.modal)state.returnFocus=document.activeElement;
     state.modal=type;lockBackground(true);
-    if(type==='compose'){resetPhoto();state.postMode='poster';state.composeStep='edit';state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';const saved=JSON.parse(localStorage.getItem('hereme_design_draft:'+state.user.id)||'null');state.draft={title:'',body:saved?.body||'',link:''};state.articleDraft=saved?.article||{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]};}
+    if(type==='compose'&&!resume){resetPhoto();state.articleDraftRecord=null;state.articleDraftCreateId=null;state.articlePublishKey=null;state.articlePublishPrepared=false;state.articleDirty=false;state.postMode='poster';state.composeStep='edit';state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';const saved=JSON.parse(localStorage.getItem('hereme_design_draft:'+state.user.id)||'null');state.draft={title:'',body:saved?.body||'',link:''};state.articleDraft=saved?.article||{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]};}
     renderModal();
     if(type==='compose')hydrateArticleMedia().catch(error=>toast(error.message));
   }
@@ -140,11 +141,13 @@
   function closeModal({fromRoute=false}={}) {
     if(state.publishing)return;
     if(state.modal==='compose'&&state.articleUploading){toast(t('design.uploading'));return;}
-    resetPhoto();state.detailRequest++;state.modal=null;state.replyTo=null;state.pending=null;
+    if(state.modal==='compose'&&state.postMode==='article'&&state.articleDirty&&!confirm(t('e21.unsaved_confirm')))return;
+    const closingHistory=state.modal==='history';resetPhoto();state.detailRequest++;state.modal=null;state.replyTo=null;state.pending=null;
     $('#modalRoot').innerHTML='';lockBackground(false);
     const returnTarget=state.returnFocus?.isConnected?state.returnFocus:
       document.querySelector(`[data-post-id="${state.detailPost?.id}"] .tile-open`)||$('.logo');
     returnTarget.focus({preventScroll:true});
+    if(closingHistory){history.replaceState(history.state,'','/');renderWall();return;}
     if(location.search.includes('post=')&&!fromRoute){history.back();return;}
   }
   function profileModal() {
@@ -226,20 +229,31 @@
     if(state.modal==='recovery-key')html=wrapper(t('recovery.title'),`<p>${t('recovery.intro')}</p><form id="recoverySaveForm" class="form-stack recovery-save-form" action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${E(state.csrf)}"><label class="field" for="recoveryUsername"><span>${t('account.pseudonym')}</span><input id="recoveryUsername" name="username" value="${E(state.user?.name||'')}" autocomplete="username" required></label><label class="field" for="recoveryPassword"><span>${t('account.recovery_key')}</span><span class="credential-row"><input id="recoveryPassword" class="recovery-key" name="password" type="password" value="${E(state.recoveryKey)}" autocomplete="new-password" required><button class="btn btn-secondary" type="button" data-action="toggle-recovery">${t('recovery.show')}</button></span></label><div class="recovery-actions"><button class="btn btn-secondary" type="button" data-action="copy-recovery">${t('recovery.copy')}</button><button class="btn btn-primary" type="submit">${t('recovery.save_device')} ${HeremeIcons.icon('arrow-right')}</button></div></form><p class="notice">${t('recovery.notice')}</p>`, `<button class="text-button" data-action="recovery-continue">${t('recovery.continue_without')}</button>`);
     if(state.modal==='areas')html=wrapper(t('areas.title'),HeremeLocations.body(state.areas,state.areaGeometry,state.draftAreas),`<button class="btn btn-primary" data-action="save-areas">${t('areas.save')}</button>`,'area-modal');
     if(state.modal==='compose'){
-      const footer=`<button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${HeremeIcons.icon('publish')} ${t(`design.publish_${state.postMode}`)}</button>`;
+    const footer=`${state.postMode==='article'?`<button type="button" class="btn btn-secondary" data-action="article-save-draft">${t('e21.save_draft')}</button>${state.articleDraftRecord?`<button type="button" class="btn btn-secondary" data-action="article-delete-draft">${t('e21.delete_draft')}</button>`:''}`:''}<button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${HeremeIcons.icon('publish')} ${state.articleDraftRecord?.post_id?t('e21.publish_changes'):t(`design.publish_${state.postMode}`)}</button>`;
       html=wrapper(t('compose.add_to_wall'),HeremeCompose.body(state),footer,'compose-modal');
     }
     if(state.modal==='detail') {
       const p=state.detailPost;
       html=`<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel detail-modal" role="dialog" aria-modal="true" aria-label="${t('detail.post')}">
-        <header class="detail-toolbar"><button class="modal-close" data-action="close-modal">${HeremeIcons.icon('close')} ${t('common.close')}</button>${p?`<button class="report-button" data-action="report" data-id="${p.id}">${t('detail.report')}</button><button class="btn btn-secondary" data-action="share" data-id="${p.id}">${HeremeIcons.icon('share')} ${t('detail.share')}</button>`:''}</header>
+        <header class="detail-toolbar"><button class="modal-close" data-action="close-modal">${HeremeIcons.icon('close')} ${t('common.close')}</button>${p?`<button class="btn btn-secondary" data-action="history" data-id="${p.id}">${t('e21.history')}</button>${p.author_public_id===state.user?.id?`<button class="btn btn-secondary" data-action="${p.content_format==='article'?'article-edit':'poster-edit'}" data-id="${p.id}">${t(p.content_format==='article'?'e21.edit_article':'e21.edit_text')}</button>`:''}<button class="report-button" data-action="report" data-id="${p.id}">${t('detail.report')}</button><button class="btn btn-secondary" data-action="share" data-id="${p.id}">${HeremeIcons.icon('share')} ${t('detail.share')}</button>`:''}</header>
         <div class="modal-content">${p&&(p.content_format!=='article'||p.article)?HeremeDetail.body(p,state.comments,state.replyTo):`<p class="loading-card">${t('detail.loading')}</p>`}</div></section></div>`;
     }
+    if(state.modal==='history'){
+      const data=state.historyData,comparison=state.historyComparison;
+      html=wrapper(t('e21.history'),`${data?`<ol class="revision-list">${data.revisions.map(row=>`<li>${row.visibility==='unavailable'?`v${row.version} · ${t('e21.unavailable')}`:`<strong>v${row.version}</strong> · ${E(row.editor||t('e21.deleted_user'))} · ${E(row.created_at)} ${row.change_summary?`· ${E(row.change_summary)}`:''} <button class="btn btn-secondary" data-action="history-view" data-version="${row.version}">${t('e21.view_version')}</button>${row.version>1&&data.revisions.some(other=>other.version===row.version-1&&other.visibility==='public')?` <button class="btn btn-secondary" data-action="history-compare" data-version="${row.version}">${t('e21.view_changes')}</button>`:''}`}</li>`).join('')}</ol>`:`<p>${t('detail.loading')}</p>`}${comparison?`<section class="revision-diff" aria-label="${t('e21.view_changes')}"><h3>v${comparison.from} → v${comparison.to}</h3>${comparison.lines.map(line=>`<div class="diff-${line.kind}"><span>${line.kind==='added'?'+':line.kind==='removed'?'-':' '}</span> ${E(line.text)}</div>`).join('')}</section>`:''}`);
+    }
+    if(state.modal==='poster-edit')html=wrapper(t('e21.edit_text'),`<form id="posterEditForm" class="form-stack"><label class="field"><span>${t('e21.poster_text')}</span><textarea id="posterEditText" maxlength="3000" required>${E(state.posterEdit?.text||'')}</textarea></label><label class="field"><span>${t('e21.change_summary')}</span><input id="posterEditSummary" maxlength="300"></label><button class="btn btn-primary" type="submit">${t('e21.save_edit')}</button></form>`);
     if(state.modal==='report')html=wrapper(t('report.title'),`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>${t('report.problem')}</span><select id="reportReason">${['personal','harassment','illegal','spam','other'].map(reason=>`<option value="${reason}">${t(`report.${reason}`)}</option>`).join('')}</select></label><p class="notice">${t('report.notice')}</p><button class="btn btn-primary" type="submit">${t('report.send')}</button></form>`);
     if(state.modal==='menu')html=accountMenu();
     if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
+    if(state.modal==='history'&&state.historyVersion)$('.modal-content')?.insertAdjacentHTML('beforeend',HeremeDetail.revision(state.historyVersion));
+    if(state.modal==='history')$('.modal-content')?.insertAdjacentHTML('afterbegin',`<button class="btn btn-secondary" data-action="history-current">${t('e21.current_version')}</button>`);
+    if(state.modal==='history'&&state.historyComparison?.from===state.historyComparison?.to)$('.revision-diff')?.insertAdjacentHTML('afterbegin',`<p class="notice">${t('e21.older_version')}</p>`);
+    if(state.modal==='history'&&state.historyData?.total>state.historyData.revisions.length)$('.modal-content .revision-list')?.insertAdjacentHTML('afterend',`<button class="btn btn-secondary" data-action="history-more">${t('e21.more')}</button>`);
+    if(state.modal==='history'&&state.historyData){const available=state.historyData.revisions.filter(row=>row.visibility==='public').map(row=>row.version).sort((a,b)=>a-b);if(available.length>1){const options=available.map(v=>`<option value="${v}">v${v}</option>`).join('');$('.modal-content')?.insertAdjacentHTML('afterbegin',`<div class="history-compare-controls"><label>${t('e21.from')} <select id="historyFrom">${options}</select></label><label>${t('e21.to')} <select id="historyTo">${options}</select></label><button class="btn btn-secondary" data-action="history-custom-compare">${t('e21.compare')}</button></div>`);$('#historyFrom').value=String(state.historyComparison?.from||available.at(-2));$('#historyTo').value=String(state.historyComparison?.to||available.at(-1));}}
+    if(state.modal==='detail'&&state.detailPost?.version>1){const label=document.createElement('span');label.className='revision-edited';label.textContent=' · '+t('e21.edited');$('#modalRoot .detail-meta')?.append(label);}
     if(state.modal==='staff')localizeStaffIdentifiers();
     if(state.modal==='menu'&&state.user){const roles=$('.account-summary .muted-note');if(roles)roles.textContent=rolesLabel(state.user.roles);}
     if(state.modal==='menu')window.HeremePwa?.mountMenu($('.modal-content'));
@@ -269,6 +283,13 @@
     saveDraft();
     if($('#posterPreview')){$('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.postMode==='video'?'<span class="video-preview-badge">'+HeremeIcons.icon('video')+' Video</span>':'');HeremePoster.enhance($('#posterPreview'));}
     if($('#categoryHint'))$('#categoryHint').textContent=HeremeThemes.get(state.category).description;
+  }
+  async function openHistory(id,{route=true,from=null,to=null,view=null}={}){
+    state.historyData=await api(`/api/posts/${id}/revisions`);state.historyPostId=id;state.historyComparison=null;state.historyVersion=null;
+    if(view)state.historyVersion=await api(`/api/posts/${id}/revisions/${view}`);
+    else if(from&&to)state.historyComparison=await api(`/api/posts/${id}/revisions/${from}/diff?to=${to}`);
+    state.modal='history';lockBackground(true);renderModal();
+    if(route)history.pushState({...history.state,history:true},'',`/?post=${id}&history=1`);
   }
   async function openDetail(id,{route=true}={}) {
     const request=++state.detailRequest;
@@ -416,6 +437,25 @@
     ctx.drawImage(image,0,0,canvas.width,canvas.height);
     return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Kunne ikke lagre bildet.')),'image/jpeg',.86));
   }
+  function articleContent(){saveDraft();const article=state.articleDraft;return {title:article.title,abstract:article.abstract,category:state.category,cover_media_id:article.cover?.media_id||null,chapters:article.chapters.map(({heading,markdown,alt,media_id})=>({heading,markdown,alt,media_id:media_id||null}))};}
+  function invalidateArticlePublish(){if(state.postMode==='article'){state.articlePublishPrepared=false;state.articlePublishKey=null;state.articleDirty=true;}}
+  async function openArticleDraft(record){
+    state.articleDraftRecord=record;state.articleDraftCreateId=record.id;state.articlePublishKey=null;state.articlePublishPrepared=false;state.articleDirty=false;state.postMode='article';state.category=record.content.category;
+    const content=record.content;
+    state.articleDraft={title:content.title,abstract:content.abstract,chapters:content.chapters.length?content.chapters:[{heading:'',markdown:'',alt:'',media_id:null}],cover:null};
+    const ids=[content.cover_media_id,...state.articleDraft.chapters.map(c=>c.media_id)].filter(Boolean);
+    const assets=new Map(await Promise.all(ids.map(async id=>[id,await api('/api/article-assets/'+encodeURIComponent(id))])));
+    if(content.cover_media_id)state.articleDraft.cover=assets.get(content.cover_media_id);
+    for(const chapter of state.articleDraft.chapters)if(chapter.media_id)chapter.media=assets.get(chapter.media_id);
+    openModal('compose',{resume:true});
+  }
+  async function saveArticleDraft(){
+    if(state.articleUploading)throw new Error(t('design.uploading'));
+    const content=articleContent();
+    if(!state.articleDraftRecord)state.articleDraftCreateId ||= crypto.randomUUID();
+    state.articleDraftRecord=state.articleDraftRecord?await api(`/api/articles/drafts/${state.articleDraftRecord.id}`,{method:'PATCH',body:{...content,edit_counter:state.articleDraftRecord.edit_counter}}):await api('/api/articles/drafts',{method:'POST',body:{...content,draft_id:state.articleDraftCreateId}});state.articlePublishKey=null;state.articlePublishPrepared=false;state.articleDirty=false;
+    toast(t('e21.saved'));
+  }
   async function submitCompose() {
     if(state.publishing||state.photoLoading)return;
     saveDraft();
@@ -427,8 +467,14 @@
     state.publishing=true;
     try {
       if(state.postMode==='article'){
-        const article=state.articleDraft,result=await api('/api/articles',{method:'POST',body:{title:article.title.trim(),abstract:article.abstract.trim(),category:state.category,cover_media_id:article.cover?.media_id||null,chapters:article.chapters.map(({heading,markdown,alt,media_id})=>({heading,markdown,alt,media_id}))}});
-        localStorage.removeItem('hereme_design_draft:'+state.user.id);state.publishing=false;closeModal();await loadPosts();document.querySelector(`[data-post-id="${result.id}"]`)?.scrollIntoView({block:'center'});toast(t('compose.published'));return;
+        const content=articleContent();let result;
+        if(!state.articlePublishPrepared){
+          if(!state.articleDraftRecord)state.articleDraftCreateId ||= crypto.randomUUID();
+          state.articleDraftRecord=state.articleDraftRecord?await api(`/api/articles/drafts/${state.articleDraftRecord.id}`,{method:'PATCH',body:{...content,edit_counter:state.articleDraftRecord.edit_counter}}):await api('/api/articles/drafts',{method:'POST',body:{...content,draft_id:state.articleDraftCreateId}});
+          state.articlePublishKey=crypto.randomUUID();state.articlePublishPrepared=true;
+        }
+        result=await api(`/api/articles/drafts/${state.articleDraftRecord.id}/publish`,{method:'POST',body:{request_key:state.articlePublishKey,change_summary:$('#changeSummary')?.value||''}});
+        localStorage.removeItem('hereme_design_draft:'+state.user.id);state.articleDraftRecord=null;state.articlePublishKey=null;state.articlePublishPrepared=false;state.articleDirty=false;state.publishing=false;closeModal();await loadPosts();document.querySelector(`[data-post-id="${result.post_id}"]`)?.scrollIntoView({block:'center'});toast(t('compose.published'));return;
       }
       const body=state.draft.body.trim();
       if(state.editorVideo){await uploadVideo(state.editorFile,{format:'poster',body,category:state.category,poster_style:state.category,text_position:state.textPosition,area_id:state.postArea||undefined});localStorage.removeItem('hereme_design_draft:'+state.user.id);state.publishing=false;closeModal();toast(t('compose.video_processing'));return;}
@@ -522,6 +568,8 @@
     if(action==='auth-register'){closeModal({fromRoute:true});openAuth('',async()=>{},'register');return;}
     if(action==='register'){openAuth('',async()=>{},'register');return;}
     if(action==='profile-post'){await openDetail(id);return;}
+    if(action==='draft-open'){await openArticleDraft(await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId)));return;}
+    if(action==='draft-delete'){if(!confirm(t('e21.delete_confirm')))return;await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId),{method:'DELETE'});await loadProfile();return;}
     if(action==='profile-more'){await loadProfile({append:true});return;}
     if(action==='logout'){const pushId=localStorage.getItem('hereme_push_subscription_id'),registration=await window.HeremePwa?.ready,subscription=await registration?.pushManager?.getSubscription();await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');state.notificationSocket?.close();state.notificationSocket=null;$('#notificationButton').hidden=true;closeModal();await loadPosts();return;}
     if(action==='rotate-recovery'){const result=await api('/api/recovery/rotate',{method:'POST'});state.recoveryKey=result.recovery_key;openModal('recovery-key');return;}
@@ -529,7 +577,18 @@
     if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast(t('recovery.copied'));return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast(t('recovery.copied'));return;}}window.prompt(t('recovery.copy_prompt'),state.recoveryKey);return;}
     if(action==='recovery-continue'){const pending=state.pending;state.pending=null;state.recoveryKey='';closeModal();await loadPosts();if(pending)await pending();return;}
     if(action==='compose'){if(requireUser(()=>openModal('compose')))openModal('compose');return;}
+    if(action==='article-save-draft'){await saveArticleDraft();renderModal({preserve:true});return;}
+    if(action==='article-delete-draft'){if(!confirm(t('e21.delete_confirm')))return;await api('/api/articles/drafts/'+encodeURIComponent(state.articleDraftRecord.id),{method:'DELETE'});state.articleDraftRecord=null;closeModal();return;}
+    if(action==='article-edit'){const record=await api(`/api/articles/${id}/edit`,{method:'POST'});await openArticleDraft(record);return;}
+    if(action==='poster-edit'){state.posterEdit={id,text:state.detailPost.poster_text,base_version:state.detailPost.version};openModal('poster-edit');return;}
+    if(action==='history'){await openHistory(id);return;}
+    if(action==='history-current'){const id=state.historyPostId;history.replaceState({...history.state,detail:true},'',`/?post=${id}`);await openDetail(id,{route:false});return;}
+    if(action==='history-more'){const page=await api(`/api/posts/${state.historyPostId}/revisions?offset=${state.historyData.revisions.length}`);state.historyData.revisions.push(...page.revisions);renderModal({preserve:true});return;}
+    if(action==='history-compare'){const to=Number(target.dataset.version);await openHistory(state.historyPostId,{route:false,from:to-1,to});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&from=${to-1}&to=${to}`);return;}
+    if(action==='history-custom-compare'){const from=Number($('#historyFrom').value),to=Number($('#historyTo').value);await openHistory(state.historyPostId,{route:false,from,to});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&from=${from}&to=${to}`);return;}
+    if(action==='history-view'){const version=Number(target.dataset.version);await openHistory(state.historyPostId,{route:false,view:version});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&version=${version}`);return;}
     if(action==='format-poster'||action==='format-article'){saveDraft();state.postMode=action==='format-poster'?'poster':'article';renderModal({preserve:true});return;}
+    if(['chapter-add','chapter-up','chapter-down','chapter-remove','article-cover-remove','article-media-remove'].includes(action))invalidateArticlePublish();
     if(action==='chapter-add'){saveDraft();state.articleDraft.chapters.push({heading:'',markdown:'',alt:'',media_id:null});renderModal({preserve:true});return;}
     if(['chapter-up','chapter-down','chapter-remove'].includes(action)){saveDraft();const chapters=state.articleDraft.chapters,index=Number(target.dataset.index);if(action==='chapter-remove'&&chapters.length>1)chapters.splice(index,1);if(action==='chapter-up'&&index>0)[chapters[index-1],chapters[index]]=[chapters[index],chapters[index-1]];if(action==='chapter-down'&&index<chapters.length-1)[chapters[index+1],chapters[index]]=[chapters[index],chapters[index+1]];renderModal({preserve:true});return;}
     if(action==='article-cover-remove'){saveDraft();if(state.articleDraft.cover?.preview_url)URL.revokeObjectURL(state.articleDraft.cover.preview_url);state.articleDraft.cover=null;renderModal({preserve:true});return;}
@@ -566,8 +625,9 @@
   }
   async function handleSubmit(event) {
     const id=event.target.id;
-    if(!['profileForm','recoverForm','composeForm','commentForm','reportForm'].includes(id))return;
+    if(!['profileForm','recoverForm','composeForm','commentForm','reportForm','posterEditForm'].includes(id))return;
     event.preventDefault();
+    if(id==='posterEditForm'){const edit=state.posterEdit;const result=await api(`/api/posts/${edit.id}/text`,{method:'PATCH',body:{text:$('#posterEditText').value,change_summary:$('#posterEditSummary').value,base_version:edit.base_version,request_key:crypto.randomUUID()}});closeModal();await loadPosts();await openDetail(result.post_id);toast(t('e21.saved'));return;}
     if(id==='profileForm') {
       const result=await api('/api/session',{method:'POST',body:{name:$('#nicknameInput').value.trim()}});
       state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');if(localStorage.getItem('hereme_language'))await window.HeremeI18n.setLanguage(window.HeremeI18n.getLanguage());state.recoveryKey=result.recovery_key;state.modal='recovery-key';renderModal();
@@ -588,10 +648,10 @@
     if(input.dataset.notificationSetting){const settings={...state.notificationData.settings,[input.dataset.notificationSetting]:input.checked};state.notificationData.settings=(await api('/api/notification-settings',{method:'PUT',body:settings})).settings;renderModal();}
     if(input.id==='textPosition'){state.textPosition=input.value;updatePreview();}
     if(input.id==='postArea'){state.postArea=input.value;}
-    if(input.name==='postCategory'){state.category=input.value;updatePreview();}
+    if(input.name==='postCategory'){state.category=input.value;invalidateArticlePublish();updatePreview();}
     if(input.id==='articleCoverInput'||input.dataset.articleFile!==undefined){
       const file=input.files?.[0];if(!file)return;if(state.articleUploading)throw new Error(t('design.uploading'));
-      saveDraft();const cover=input.id==='articleCoverInput',chapter=cover?null:state.articleDraft.chapters[Number(input.dataset.articleFile)];
+      invalidateArticlePublish();saveDraft();const cover=input.id==='articleCoverInput',chapter=cover?null:state.articleDraft.chapters[Number(input.dataset.articleFile)];
       const previous=cover?state.articleDraft.cover:chapter.media,preview_url=URL.createObjectURL(file);
       const pending={kind:file.type.startsWith('video/')?'video':'image',name:file.name,preview_url,pending:true};
       if(cover)state.articleDraft.cover=pending;else chapter.media=pending;
@@ -610,6 +670,7 @@
     if(['postVideoInput','postVideoCameraInput'].includes(input.id))await loadVideo(input.files?.[0]);
   }
   async function init() {
+    window.addEventListener('beforeunload',event=>{if(state.modal==='compose'&&state.postMode==='article'&&state.articleDirty){event.preventDefault();event.returnValue='';}});
     renderPreferences();
     renderFilters();
     for(const el of document.querySelectorAll('[data-icon]'))el.innerHTML=HeremeIcons.icon(el.dataset.icon);
@@ -628,7 +689,7 @@
     document.addEventListener('change',event=>handleChange(event).catch(error=>toast(error.message)));
     document.addEventListener('input',event=>{
       if(event.target.id==='postBody')updatePreview();
-      if(event.target.id==='articleTitle'||event.target.id==='articleAbstract'||event.target.dataset.chapterField){saveDraft();updateArticlePreview();}
+      if(event.target.id==='articleTitle'||event.target.id==='articleAbstract'||event.target.dataset.chapterField){invalidateArticlePublish();saveDraft();updateArticlePreview();}
       if(event.target.id==='searchInput'){clearTimeout(state.searchTimer);state.searchTimer=setTimeout(()=>{state.query=event.target.value.trim();loadPosts();},220);}
       if(['editorZoom','editorX','editorY'].includes(event.target.id)){state[event.target.id]=Number(event.target.value);updatePreview();}
     });

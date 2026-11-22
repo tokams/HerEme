@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {fail}=require('./errors');
 const V=require('./validation');
+const {insertRevision}=require('./content-revisions');
 
 function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
   const postStatuses=['draft','processing','published','review','hidden','rejected'];
@@ -40,19 +41,30 @@ function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
 
   function updatePost(actor,postId,input){
     requireAdmin(actor);postId=V.integer(postId,{name:'Innleggs-ID'});const why=reason(input.reason);
-    const previous=db.prepare('SELECT id,title,body,status,base_score FROM posts WHERE id=?').get(postId);if(!previous)fail('POST_NOT_FOUND','Innlegget finnes ikke.',404);
+    const previous=db.prepare('SELECT p.id,p.title,p.body,p.status,p.base_score,d.category FROM posts p LEFT JOIN post_design d ON d.post_id=p.id WHERE p.id=?').get(postId);if(!previous)fail('POST_NOT_FOUND','Innlegget finnes ikke.',404);
     const title=V.text(input.title,{name:'Overskrift',min:3,max:160});
-    const body=V.optionalText(input.body,{name:'Innlegg',max:3000});
+    const isArticle=Boolean(db.prepare('SELECT 1 FROM articles WHERE post_id=?').get(postId));
+    const body=isArticle?V.text(input.body,{name:'Sammendrag',min:10,max:500}):V.optionalText(input.body,{name:'Innlegg',max:3000});
     const status=V.enumValue(input.status,postStatuses,'Status');
     const category=V.enumValue(input.category,postCategories,'Kategori');
     const score=V.integer(input.score,{name:'Poengsum'});if(score < -1000000||score > 1000000)fail('INVALID_SCORE','Poengsum må være mellom -1000000 og 1000000.');
     const voteSum=db.prepare('SELECT COALESCE(sum(value),0) value FROM votes WHERE post_id=?').get(postId).value;
     db.exec('BEGIN IMMEDIATE');try{
+      const contentChanged=title!==previous.title||body!==previous.body||category!==previous.category;
+      if(status==='published'&&!contentChanged&&db.prepare('SELECT visibility FROM content_revisions WHERE post_id=? ORDER BY version DESC LIMIT 1').get(postId)?.visibility!=='public')fail('HIDDEN_CURRENT_REVISION','Skriv en trygg ny versjon før innlegget publiseres.',409);
       db.prepare('UPDATE posts SET title=?,body=?,status=?,base_score=? WHERE id=?').run(title,body,status,score-voteSum,postId);
       const article=db.prepare('SELECT chapters_json FROM articles WHERE post_id=?').get(postId);
       if(article){const source=require('./article-markdown').source({title,abstract:body,category,chapters:JSON.parse(article.chapters_json)});db.prepare("UPDATE articles SET abstract=?,markdown_source=?,updated_at=datetime('now') WHERE post_id=?").run(body,source,postId);}
       else db.prepare('UPDATE poster_content SET text=? WHERE post_id=?').run(body?`${title}\n\n${body}`:title,postId);
       db.prepare('UPDATE post_design SET category=? WHERE post_id=?').run(category,postId);
+      if(contentChanged){
+        const current=db.prepare('SELECT MAX(version) version FROM content_revisions WHERE post_id=?').get(postId).version||0;
+        const details=db.prepare('SELECT title,body,type,link_url,image_url FROM posts WHERE id=?').get(postId);
+        const articleRow=db.prepare('SELECT abstract,markdown_source,chapters_json,cover_media_id FROM articles WHERE post_id=?').get(postId);
+        const snapshot=articleRow?{format:'article',title:details.title,abstract:articleRow.abstract,category,chapters:JSON.parse(articleRow.chapters_json),cover_media_id:articleRow.cover_media_id,markdown_source:articleRow.markdown_source}:{format:'poster',text:db.prepare('SELECT text FROM poster_content WHERE post_id=?').get(postId)?.text||details.title,title:details.title,body:details.body,category,type:details.type,link_url:details.link_url,image_url:details.image_url};
+        const mediaIds=articleRow?[articleRow.cover_media_id,...JSON.parse(articleRow.chapters_json).map(chapter=>chapter.media_id)].filter(Boolean):db.prepare('SELECT media_id FROM post_media WHERE post_id=?').all(postId).map(r=>r.media_id);
+        insertRevision(db,{id:postId,format:articleRow?'article':'poster',editor:actor.id,snapshot,summary:why,expected:current,mediaIds,visibility:status==='published'?'public':'hidden'});
+      }
       audit.record({actorId:actor.id,action:'admin.post.updated',subjectType:'post',subjectId:postId,previous,next:{title,body,status,score,category},reason:why});
       db.exec('COMMIT');return {ok:true};
     }catch(error){db.exec('ROLLBACK');throw error;}
@@ -82,6 +94,7 @@ function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
     const mediaIds=[...new Set([...db.prepare(`SELECT media_id FROM post_media WHERE post_id IN (${placeholders})`).all(...ids),...db.prepare(`SELECT media_id FROM article_assets WHERE post_id IN (${placeholders})`).all(...ids)].map(row=>row.media_id))],staged=stagePostFiles(ids);
     db.exec('BEGIN IMMEDIATE');try{
       for(const post of existing)audit.record({actorId:actor.id,action,subjectType:'post',subjectId:post.id,previous:post,reason:why});
+      for(const post of existing)db.prepare('INSERT INTO content_git_purges(post_id) VALUES(?) ON CONFLICT(post_id) DO UPDATE SET requested_at=datetime(\'now\'),completed_at=NULL').run(post.id);
       db.prepare(`DELETE FROM posts WHERE id IN (${placeholders})`).run(...ids);
       if(mediaIds.length)db.prepare(`DELETE FROM media WHERE id IN (${mediaIds.map(()=>'?').join(',')})`).run(...mediaIds);
       db.exec('COMMIT');staged.commit();return ids.length;
@@ -110,7 +123,8 @@ function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
     if(isAdmin&&db.prepare("SELECT count(DISTINCT user_id) n FROM user_roles WHERE role IN ('admin','operator')").get().n<=1)fail('LAST_ADMIN','Den siste administratorkontoen kan ikke slettes.',409);
     const postIds=withPosts?db.prepare('SELECT id FROM posts WHERE author_id=?').all(userId).map(row=>row.id):[],staged=stagePostFiles(postIds);
     db.exec('BEGIN IMMEDIATE');try{
-      if(withPosts&&postIds.length){const placeholders=postIds.map(()=>'?').join(','),mediaIds=[...new Set([...db.prepare(`SELECT media_id FROM post_media WHERE post_id IN (${placeholders})`).all(...postIds),...db.prepare(`SELECT media_id FROM article_assets WHERE post_id IN (${placeholders})`).all(...postIds)].map(row=>row.media_id))];db.prepare(`DELETE FROM posts WHERE id IN (${placeholders})`).run(...postIds);if(mediaIds.length)db.prepare(`DELETE FROM media WHERE id IN (${mediaIds.map(()=>'?').join(',')})`).run(...mediaIds);}
+      for(const row of db.prepare('SELECT DISTINCT post_id FROM content_revisions WHERE editor_user_id=?').all(userId))db.prepare('INSERT INTO content_git_purges(post_id) VALUES(?) ON CONFLICT(post_id) DO UPDATE SET requested_at=datetime(\'now\'),completed_at=NULL').run(row.post_id);
+      if(withPosts&&postIds.length){const placeholders=postIds.map(()=>'?').join(','),mediaIds=[...new Set([...db.prepare(`SELECT media_id FROM post_media WHERE post_id IN (${placeholders})`).all(...postIds),...db.prepare(`SELECT media_id FROM article_assets WHERE post_id IN (${placeholders})`).all(...postIds)].map(row=>row.media_id))];for(const postId of postIds)db.prepare('INSERT INTO content_git_purges(post_id) VALUES(?) ON CONFLICT(post_id) DO UPDATE SET requested_at=datetime(\'now\'),completed_at=NULL').run(postId);db.prepare(`DELETE FROM posts WHERE id IN (${placeholders})`).run(...postIds);if(mediaIds.length)db.prepare(`DELETE FROM media WHERE id IN (${mediaIds.map(()=>'?').join(',')})`).run(...mediaIds);}
       else db.prepare("UPDATE posts SET author_id=NULL,demo_author='slettet bruker' WHERE author_id=?").run(userId);
       db.prepare("UPDATE comments SET author_id=NULL,demo_author='slettet bruker' WHERE author_id=?").run(userId);
       db.prepare('UPDATE rooms SET created_by=NULL WHERE created_by=?').run(userId);db.prepare('UPDATE media SET owner_id=NULL WHERE owner_id=?').run(userId);db.prepare('DELETE FROM reports WHERE user_id=?').run(userId);

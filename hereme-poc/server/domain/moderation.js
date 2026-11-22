@@ -18,7 +18,7 @@ function createModerationService(db,{audit,identity}={}){
     reason=String(reason||'').trim();if(reason.length<3||reason.length>300)fail('REASON_REQUIRED','Oppgi en kort begrunnelse.');
     const next=action==='dismiss'?post.status:action==='publish'?'published':'hidden';
     db.exec('BEGIN IMMEDIATE');
-    try{if(action!=='dismiss')db.prepare('UPDATE posts SET status=? WHERE id=?').run(next,postId);db.prepare('UPDATE reports SET resolved=1 WHERE post_id=?').run(postId);audit.record({actorId:actor.id,action:`moderation.${action}`,subjectType:'post',subjectId:postId,previous:{status:post.status},next:{status:next,reportsResolved:true},reason});db.exec('COMMIT');}
+    try{if(action==='publish'&&db.prepare('SELECT visibility FROM content_revisions WHERE post_id=? ORDER BY version DESC LIMIT 1').get(postId)?.visibility!=='public')fail('HIDDEN_CURRENT_REVISION','Skriv en trygg ny versjon før innlegget publiseres.',409);if(action!=='dismiss')db.prepare('UPDATE posts SET status=? WHERE id=?').run(next,postId);db.prepare('UPDATE reports SET resolved=1 WHERE post_id=?').run(postId);audit.record({actorId:actor.id,action:`moderation.${action}`,subjectType:'post',subjectId:postId,previous:{status:post.status},next:{status:next,reportsResolved:true},reason});db.exec('COMMIT');}
     catch(error){db.exec('ROLLBACK');throw error;}
     return {ok:true,status:next};
   }

@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {DatabaseSync}=require('node:sqlite'),{applyMigrations}=require('../server/migrations');
+const {DatabaseSync}=require('node:sqlite'),{applyMigrations,backfillContentRevisions}=require('../server/migrations');
 test('schema 21 posts, comments and votes survive the additive content-format migration',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-comment-migration-')),db=new DatabaseSync(path.join(root,'data.sqlite'));
   t.after(()=>{db.close();fs.rmSync(root,{recursive:true,force:true});});
@@ -9,10 +9,14 @@ test('schema 21 posts, comments and votes survive the additive content-format mi
   db.prepare("INSERT INTO posts(id,author_id,title,body,type,status) VALUES(99,'kept','Existing','Old body','text','published')").run();
   db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(99,?,1)').run('kept');
   db.prepare("INSERT INTO comments(id,post_id,author_id,body,depth) VALUES(88,99,'kept','Existing reply',0)").run();
-  db.exec('DROP TABLE articles; DROP TABLE article_assets; DROP TABLE poster_content; DELETE FROM schema_migrations WHERE version=22');
+  db.exec('DROP TABLE content_media_purges; DROP TABLE content_git_purges; DROP TABLE content_publish_requests; DROP TABLE content_git_outbox; DROP TABLE content_media_references; DROP TABLE content_revisions; DROP TABLE article_working_copies; DELETE FROM schema_migrations WHERE version=23; DROP TABLE articles; DROP TABLE article_assets; DROP TABLE poster_content; DELETE FROM schema_migrations WHERE version=22');
   applyMigrations(db);
-  assert.equal(db.prepare('SELECT max(version) version FROM schema_migrations').get().version,22);
+  assert.equal(db.prepare('SELECT max(version) version FROM schema_migrations').get().version,23);
   assert.equal(db.prepare('SELECT text FROM poster_content WHERE post_id=99').get().text,'Existing\n\nOld body');
+  const baseline=db.prepare('SELECT version,origin,created_at,revision_captured_at,snapshot FROM content_revisions WHERE post_id=99').get();
+  assert.equal(baseline.version,1);assert.equal(baseline.origin,'legacy_snapshot');assert.equal(JSON.parse(baseline.snapshot).text,'Existing\n\nOld body');
+  assert.ok(baseline.revision_captured_at);assert.equal(backfillContentRevisions(db),0);
+  assert.throws(()=>db.prepare("INSERT INTO content_revisions(post_id,version,format,snapshot,content_hash,origin) VALUES(99,3,'poster','{}','hash','edit')").run(),/sequential/);
   assert.deepEqual({...db.prepare('SELECT title,body FROM posts WHERE id=99').get()},{title:'Existing',body:'Old body'});
   assert.equal(db.prepare('SELECT body FROM comments WHERE id=88').get().body,'Existing reply');
   assert.equal(db.prepare('SELECT value FROM votes WHERE post_id=99 AND user_id=?').get('kept').value,1);

@@ -1,0 +1,21 @@
+# ADR 0014: Article drafts and published content revisions
+
+Status: accepted for the local E21 implementation (2026-11-22). Production rollout is separate.
+
+## Decision
+
+SQLite is authoritative for post identity, authorship, interactions, private drafts, published version sequence, visibility and the current wall projection. `posts.id` never changes when content changes. Schema 23 adds `content_revisions`, `article_working_copies`, per-version media references, publish idempotency keys, and a durable Git outbox. New public content receives v1 in the same transaction as publication. An idempotent backfill records one `legacy_snapshot` for each existing published, reviewed or hidden post; it preserves original creation time and records the separate capture time. It cannot reconstruct edits made before E21.
+
+Only articles have private server drafts. A new draft has no public post ID. A published article edit has a private working copy with a `base_version` and an edit counter. Draft saves use compare-and-swap; publish uses `BEGIN IMMEDIATE`, checks the current version, updates the existing post projection, inserts exactly one immutable revision and outbox job, then removes the working copy. A request key maps retries to the same result. Posters accept only text, expected version, optional summary and request key. Server validation rejects changes to media, category, author and link in the poster edit endpoint. Staff edits use the same revision ledger and audit actor identity.
+
+Snapshots are deterministic JSON containing the complete public content state, including media IDs and article Markdown source. The article source uses controlled YAML front matter and the established safe Markdown renderer. SHA-256 covers the canonical snapshot. The database trigger rejects skipped version numbers. SQLite keeps old media references while a readable revision needs them. Draft media stays owner-only; `/media` checks current post visibility and public revision references before serving attached article bytes.
+
+The private Git repository mirrors published snapshots in a worker container with a separate volume that is not mounted into the HTTP container. Git is an archive and can lag without blocking SQL publication. The worker uses argument arrays, fixed service identity and controlled paths. A commit trailer records post ID/version, snapshot hash and editor ID. Reconciliation finds or rebuilds missing mappings. Post deletion, user deletion or legal erasure queues an archive rebuild that discards the old object store, rather than merely committing a deletion. Binary media is never committed to Git.
+
+Public history reads only `published` posts and `public` revisions. A hidden version returns a placeholder in the list and cannot be loaded or diffed. Staff inspection requires moderation capability, a reason and an audit event. Hiding or erasing the currently visible version requires hiding the whole post first. Legal erasure replaces the SQL snapshot with `{}`, clears media references, cancels its outbox job and queues Git purge. Media used only by the erased version is queued for physical deletion. Media still used by another revision, the current article/poster or a private working copy is retained until those references are addressed. Normal edits never overwrite revision snapshots.
+
+## Consequences and limits
+
+The current `posts` and `articles` rows are a transactionally updated projection of the latest published revision. Existing votes, comments, score, URL and author ID stay attached to `posts.id`. Article drafts are excluded from all public projections because they have no post row. A Git outage is visible in the staff status endpoint and worker logs; it does not undo a public SQL revision. Backup and restore must treat SQLite, public media and the private Git volume as one recovery set and reconcile afterward.
+
+Ordinary moderation hiding keeps the private Git copy for investigation. Legal erasure needs an operator review of copied backups and any media still shared with other versions. The API removes public access and queues Git object and exclusive media purge, but backups cannot be silently rewritten. Production release requires a verified backup/restore rehearsal and privacy review before deployment.

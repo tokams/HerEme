@@ -614,6 +614,26 @@ body,input,button,textarea,select{font-family:var(--font-reading)}
 .article-media-pending{display:grid;place-items:center;color:var(--muted)}
 .article-summary b{display:inline-flex;align-items:center;gap:5px}
 .article-summary b .icon,.video-tile-badge .icon{width:14px;height:14px}
+.revision-list{list-style:none;padding:0;margin:0 0 18px}
+.revision-list li{padding:12px 0;border-bottom:1px solid var(--line);line-height:1.7}
+.revision-list .btn{margin:3px 4px;min-height:40px}
+.history-compare-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin-bottom:18px}
+.history-compare-controls label{display:grid;gap:4px}
+.history-compare-controls select{min-height:44px;min-width:90px;padding:7px;background:var(--panel2);border:1px solid var(--muted)}
+.history-compare-controls .btn{min-height:44px}
+.revision-diff{max-width:100%;overflow:auto;border:1px solid var(--line);background:var(--panel2);margin-top:18px}
+.revision-diff h3,.revision-diff .notice{margin:0;padding:10px 12px}
+.revision-diff>div{padding:2px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-family:var(--font);font-size:12px;line-height:1.5}
+.revision-diff>div>span{display:inline-block;width:18px;font-weight:800}
+.diff-added{background:#173d28;color:#e4ffe9}
+.diff-removed{background:#4b2225;color:#ffe9e9}
+.historical-version{border:1px solid var(--line);padding:16px;margin-top:20px;max-width:100%;overflow:hidden}
+.historical-version pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+.historical-version>img,.historical-version>video,.historical-version .article-chapter img,.historical-version .article-chapter video{display:block;max-width:100%;max-height:65vh;margin:16px auto}
+.profile-posts:last-child .profile-post-row{grid-template-columns:minmax(0,1fr) 100px 170px}
+.profile-posts:last-child li>.btn{margin:6px 14px}
+.detail-toolbar,.compose-modal .modal-footer{flex-wrap:wrap}
+.detail-toolbar>.btn,.compose-modal .modal-footer>.btn{min-height:44px}
 @media(max-width:760px){
   .compose-modal .modal-content{padding:12px 14px 20px}
   .design-composer .compose-fields{gap:12px}
@@ -622,4 +642,10 @@ body,input,button,textarea,select{font-family:var(--font-reading)}
   .article-chapter-editor{padding:10px}
   .article-preview-reader .article-reader{padding:12px}
   .article-preview-reader .article-hero{min-height:180px}
+  .profile-posts:last-child .profile-post-row{grid-template-columns:minmax(0,1fr);gap:4px}
+  .history-compare-controls{display:grid;grid-template-columns:1fr 1fr}
+  .history-compare-controls .btn{grid-column:1/-1}
+  .detail-toolbar{gap:5px}
+  .detail-toolbar>.btn{padding:7px;font-size:11px}
+  .compose-modal .modal-footer>.btn{flex:1 1 auto}
 }

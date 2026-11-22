@@ -6,10 +6,11 @@ const V=require('./validation');
 const {parseDesign,insertDesign}=require('../post-design');
 const {nextId}=require('../migrations');
 const markdown=require('./article-markdown');
+const {insertRevision}=require('./content-revisions');
 
 function createArticleService(db,dataDir,{media,audit,config}={}){
   function cleanup(){
-    const stale=db.prepare("SELECT a.media_id,m.original_path,m.display_path,m.thumbnail_path FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.post_id IS NULL AND a.created_at<datetime('now','-1 day')").all();
+    const stale=db.prepare("SELECT a.media_id,m.original_path,m.display_path,m.thumbnail_path FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.post_id IS NULL AND a.created_at<datetime('now','-1 day') AND NOT EXISTS(SELECT 1 FROM article_working_copies w WHERE w.owner_id=a.owner_id AND w.content_json LIKE '%'||a.media_id||'%')").all();
     for(const row of stale){db.prepare('DELETE FROM media WHERE id=?').run(row.media_id);for(const relative of [row.original_path,row.display_path,row.thumbnail_path].filter(Boolean))fs.rmSync(media.resolve(relative),{force:true});fs.rmSync(path.join(dataDir,'media',row.media_id),{recursive:true,force:true});}
   }
   async function uploadImage(file,user){
@@ -18,11 +19,11 @@ function createArticleService(db,dataDir,{media,audit,config}={}){
     catch(error){stored.cleanup();throw error;}
   }
   function asset(id,user){
-    const row=db.prepare('SELECT m.id,m.kind,m.status,m.display_path,m.thumbnail_path FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.media_id=? AND a.owner_id=? AND a.post_id IS NULL').get(id,user.id);
+    const row=db.prepare('SELECT m.id,m.kind,m.status,m.display_path,m.thumbnail_path FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.media_id=? AND (a.owner_id=? OR (a.post_id IS NOT NULL AND ?=1))').get(id,user.id,user.capabilities?.includes('content:manage')?1:0);
     if(!row)fail('ARTICLE_MEDIA_NOT_READY','Vedlegget er ikke klart eller tilhører en annen bruker.',404);
     return {media_id:row.id,kind:row.kind,status:row.status,url:row.display_path?'/'+row.display_path.replaceAll('\\','/'):null,thumbnail_url:row.thumbnail_path?'/'+row.thumbnail_path.replaceAll('\\','/'):null};
   }
-  function validate(input,user){
+  function validate(input,user,postId=null){
     const title=V.text(input.title,{name:'Artikkeltittel',min:3,max:160}),abstract=V.text(input.abstract,{name:'Sammendrag',min:10,max:500});
     const design=parseDesign(input,input.category);
     if(!Array.isArray(input.chapters)||input.chapters.length<1||input.chapters.length>24)fail('INVALID_CHAPTERS','Artikkelen må ha 1–24 kapitler.',400);
@@ -33,7 +34,7 @@ function createArticleService(db,dataDir,{media,audit,config}={}){
     const coverId=input.cover_media_id?String(input.cover_media_id):null,ids=[coverId,...chapters.map(chapter=>chapter.media_id)].filter(Boolean);
     if(new Set(ids).size!==ids.length)fail('DUPLICATE_ARTICLE_MEDIA','Hvert medievedlegg kan bare brukes én gang.',400);
     const assets=new Map();
-    for(const id of ids){const row=db.prepare('SELECT m.* FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.media_id=? AND a.owner_id=? AND a.post_id IS NULL').get(id,user.id);if(!row||row.status!=='ready')fail('ARTICLE_MEDIA_NOT_READY','Vedlegget er ikke klart eller tilhører en annen bruker.',409);assets.set(id,row);}
+    for(const id of ids){const row=db.prepare('SELECT m.* FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.media_id=? AND ((a.owner_id=? AND a.post_id IS NULL) OR a.post_id=?)').get(id,user.id,postId);if(!row||row.status!=='ready')fail('ARTICLE_MEDIA_NOT_READY','Vedlegget er ikke klart eller tilhører en annen bruker.',409);assets.set(id,row);}
     const allowed=new Set([...assets.values()].flatMap(row=>[row.display_path,row.thumbnail_path].filter(Boolean).map(relative=>'/'+relative.replaceAll('\\','/'))));
     for(const chapter of chapters)markdown.render(chapter.markdown,allowed);
     return {title,abstract,design,chapters,coverId,ids,assets,markdown_source:markdown.source({title,abstract,category:design.category,chapters})};
@@ -47,6 +48,7 @@ function createArticleService(db,dataDir,{media,audit,config}={}){
       db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(?,?,1)').run(id,user.id);
       db.prepare('INSERT INTO articles(post_id,abstract,markdown_source,chapters_json,cover_media_id) VALUES(?,?,?,?,?)').run(id,article.abstract,article.markdown_source,JSON.stringify(article.chapters),article.coverId);
       for(const mediaId of article.ids)db.prepare('UPDATE article_assets SET post_id=? WHERE media_id=? AND owner_id=? AND post_id IS NULL').run(id,mediaId,user.id);
+      insertRevision(db,{id,format:'article',editor:user.id,origin:'publish',snapshot:{format:'article',title:article.title,abstract:article.abstract,category:article.design.category,cover_media_id:article.coverId,chapters:article.chapters,markdown_source:article.markdown_source},mediaIds:article.ids});
       if(input.area_id){if(!config.enableLocations)fail('LOCATIONS_DISABLED','Områder er ikke aktivert.',404);if(!db.prepare('SELECT id FROM areas WHERE id=? AND active=1').get(input.area_id))fail('INVALID_AREAS','Ugyldig område.');db.prepare('INSERT INTO post_areas(post_id,area_id) VALUES(?,?)').run(id,input.area_id);}
       audit?.record({actorId:user.id,action:'article.created',subjectType:'post',subjectId:id,next:{status:'published',category:article.design.category,chapters:article.chapters.length}});
       db.exec('COMMIT');return {id};
@@ -59,6 +61,6 @@ function createArticleService(db,dataDir,{media,audit,config}={}){
     const allowed=new Set([...assets.values()].flatMap(asset=>[asset.url,asset.thumbnail_url,asset.original_url].filter(Boolean)));
     return {abstract:row.abstract,markdown_source:row.markdown_source,cover:assets.get(row.cover_media_id)||null,updated_at:row.updated_at,chapters:JSON.parse(row.chapters_json).map(chapter=>({...chapter,body_html:markdown.render(chapter.markdown,allowed),media:assets.get(chapter.media_id)||null}))};
   }
-  return {cleanup,uploadImage,asset,create,detail};
+  return {cleanup,uploadImage,asset,create,detail,validate};
 }
 module.exports={createArticleService};

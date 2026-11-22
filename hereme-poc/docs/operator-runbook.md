@@ -225,3 +225,46 @@ live data. For suspected compromise: stop Caddy, preserve logs/backups, revoke a
 sessions, rotate secrets, inspect audit/security events, then restore a verified
 snapshot. For failed media processing inspect durable job state; do not mark a
 derivative ready by hand.
+
+## E21 content revisions and private archive (local release candidate)
+
+Schema 23 is additive and backfills one truthful baseline revision per existing
+published/reviewed/hidden post. Confirm the production checkout and database schema
+before deployment. Take a verified WAL-safe data backup, preserve all media, and
+rehearse restoration into a new directory. Earlier application code rejects schema
+23, so a code-only rollback after migration is not safe. Never restore a pre-E21
+snapshot over edits made after migration.
+
+The Docker `content-git-worker` owns the private `docker_hereme-content-git` volume;
+the HTTP and proxy services do not mount it. It commits only published snapshots,
+not drafts or media bytes. `GET /api/admin/content-git/status` shows pending/failed
+sync jobs and Git/media purges to a staff session. The worker logs
+`content_git_sync`, `content_git_error` and reconciliation events. A Git outage
+does not block SQL publication; investigate failed jobs promptly and confirm the
+pending count returns to zero. The online deployment script archives the existing
+Git volume as `content-git.tar.gz` beside its verified SQLite/media snapshot and
+stores its SHA-256 file. The initial deployment has no old Git volume to archive.
+
+To inspect or repair a restored archive, stop its content-Git worker, restore the
+SQLite/media snapshot and archive into **new** volumes, then run
+`node server/content-git-worker.js --reconcile` in an isolated worker container
+with `HEREME_CONTENT_GIT_DIR` pointing at the restored private volume. Reconcile
+checks commit trailers, hashes and file contents, and rebuilds from non-erased SQL
+snapshots if necessary. `--rebuild` forcibly replaces the archive object store;
+use it only after verifying SQL and the retained-backup policy. Start the worker
+after the check and confirm the staff status endpoint reports no failed jobs or
+pending purges. Do not publish or expose the archive volume through Caddy/GitHub.
+
+For a sensitive historical version, hide it with
+`POST /api/admin/posts/:id/revisions/:version/hide` and a reason. Hide the entire
+post first if its current visible version is affected. Authorized staff may
+inspect a hidden version only through the audited
+`POST /api/admin/posts/:id/revisions/:version/inspect` endpoint with a reason
+and CSRF token. For legal erasure, verify scope, then call
+`POST /api/admin/posts/:id/revisions/:version/erase` with an administrator session
+and reason. Confirm the public revision/diff/media endpoints return 404, SQL
+snapshot is `{}`, Git purge completes and exclusive historical media bytes are
+deleted. Shared media stays until every referencing revision/working copy and
+the current post are addressed. Review share preview derivatives and all retained
+local/off-host backups under the applicable retention decision; restoring an old
+backup can resurrect erased material unless it is quarantined or re-erased.

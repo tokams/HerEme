@@ -22,7 +22,7 @@ function account(name){
 
 test('schema 22 is additive and retains account, recovery and session identity',()=>{
   const {created}=account('Migreringsvenn'),id=created.user.id;
-  assert.equal(S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version,22);
+  assert.equal(S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version,23);
   assert.equal(S.db.prepare('SELECT id FROM users WHERE id=?').get(id).id,id);
   assert.ok(S.db.prepare('SELECT secret_hash FROM recovery_credentials WHERE user_id=?').get(id));
   assert.ok(S.db.prepare('SELECT user_id FROM sessions WHERE user_id=?').get(id));

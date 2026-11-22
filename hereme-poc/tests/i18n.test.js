@@ -29,7 +29,7 @@ test('literal translation keys used by browser scripts exist',()=>{
       ||source.match(/t=\(key,params\)=>root\.HeremeI18n\?\.t\(`([^$]+)\$\{key\}`/)?.[1]
       ||'';
     if(!namespace)continue;
-    for(const match of source.matchAll(/\bt\(['"]([a-z][a-z0-9_.]+)['"]/g)){
+    for(const match of source.matchAll(/(?<!\.)\bt\(['"]([a-z][a-z0-9_.]+)['"]/g)){
       const key=namespace+match[1];
       assert.ok(keys.has(key),`${file}: ${key}`);
     }

@@ -44,7 +44,10 @@ async function settleWall(page) {
 }
 async function publish(page,title) {
   await page.locator('#publishButton').click();
-  await page.locator('.modal-panel').waitFor({state:'hidden'});
+  await page.waitForTimeout(600);
+  if(await page.locator('.modal-panel').isVisible()&&await page.locator('#toastRoot').innerText())throw new Error('Publish failed: '+await page.locator('#toastRoot').innerText());
+  try{await page.locator('.modal-panel').waitFor({state:'hidden',timeout:12000});}
+  catch(error){throw new Error(`Publish did not close: ${JSON.stringify(await page.evaluate(()=>({toast:document.querySelector('#toastRoot')?.innerText,disabled:document.querySelector('#publishButton')?.disabled,inert:document.querySelector('#composeForm')?.inert,body:document.querySelector('#postBody')?.value,mode:document.querySelector('[data-action=format-poster]')?.getAttribute('aria-pressed')})))} (${error.message})`);}
   const post=page.locator('.post-card').filter({has:page.getByRole('button',{name:'Åpne '+title,exact:true})});
   await post.waitFor();return post;
 }
@@ -183,6 +186,8 @@ async function publish(page,title) {
   await page.locator('#articleCoverInput').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('.media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
   await page.locator('#articlePreview .article-hero-image').waitFor();
+  const draftCover=await page.locator('#articlePreview .article-hero-image').getAttribute('src');
+  assert.equal((await fetch(base+draftCover)).status,404);
   assert.match(await page.locator('#articlePreview .article-markdown').last().innerHTML(),/<strong>fin<\/strong>/);
   await page.locator('[data-chapter="0"] [data-article-file="0"]').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('[data-chapter="0"] .media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
@@ -192,10 +197,11 @@ async function publish(page,title) {
   await page.locator('[data-chapter="0"] [data-article-file="0"]').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
   await page.locator('[data-chapter="0"] .media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
-  await page.locator('.modal-close').click();await page.locator('.create-button').click();await page.locator('[data-action=format-article]').click();
+  page.once('dialog',dialog=>dialog.accept());await page.locator('.modal-close').click();await page.locator('.create-button').click();await page.locator('[data-action=format-article]').click();
   await page.locator('#articlePreview .article-hero-image').waitFor();await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
   if(refinementScreenshots){await page.locator('#toastRoot .toast').waitFor({state:'hidden'});await page.locator('#articlePreview').scrollIntoViewIfNeeded();await page.locator('.compose-modal').screenshot({path:path.join(refinementScreenshots,'article-preview-desktop.png')});}
   await page.locator('#publishButton').click();await page.locator('.modal-panel').waitFor({state:'hidden'});
+  assert.equal((await fetch(base+draftCover)).status,200);
   const articleCard=page.locator('.article-card').filter({hasText:'Turer i Rogaland'});await articleCard.waitFor();
   assert.equal(await articleCard.evaluate(el=>getComputedStyle(el).gridColumnStart),'span 2');
   await articleCard.locator('.tile-open').click();
@@ -204,7 +210,37 @@ async function publish(page,title) {
   await page.locator('.article-chapter .article-media').first().click();
   await page.locator('.article-media-viewer[open] img').waitFor();
   await page.locator('[data-action=article-media-close]').click();
+  const articleId=await articleCard.getAttribute('data-post-id');
+  await page.locator('[data-action=article-edit]').click();
+  await page.locator('#articleTitle').fill('Oppdaterte turer i Rogaland');
+  await page.locator('[data-action=article-save-draft]').click();
+  assert.equal((await (await fetch(`${base}/api/posts/${articleId}`)).json()).post.title,'Turer i Rogaland');
+  await page.locator('#changeSummary').fill('Rettet overskrift');
+  await page.locator('#publishButton').click();await page.locator('.compose-modal').waitFor({state:'hidden'});
+  const updatedArticle=page.locator('.article-card').filter({hasText:'Oppdaterte turer i Rogaland'});await updatedArticle.waitFor();
+  await updatedArticle.locator('.tile-open').click();await page.locator('[data-action=history]').click();
+  await page.locator('.revision-list li').first().waitFor();
+  await page.locator('[data-action=history-compare]').first().click();
+  await page.locator('.revision-diff .diff-added').first().waitFor();
+  assert.match(page.url(),/history=1&from=1&to=2/);
+  await page.goBack();await page.locator('.revision-diff').waitFor({state:'detached'});
+  await page.goForward();await page.locator('.revision-diff .diff-added').first().waitFor();
+  await page.reload();await page.locator('.revision-diff .diff-added').first().waitFor();
+  await page.locator('[data-action=history-view][data-version="1"]').click();
+  assert.equal(await page.locator('.historical-version h1').textContent(),'Turer i Rogaland');
+  assert.match(page.url(),/version=1/);
+  await page.goBack();await page.locator('.revision-diff .diff-added').first().waitFor();
+  await page.locator('[data-action=history-current]').click();await page.locator('.detail-article h1').filter({hasText:'Oppdaterte turer'}).waitFor();
+  await page.locator('[data-action=history]').click();
   await page.locator('.modal-close').click();
+  await page.locator('.create-button').click();await page.locator('[data-action=format-article]').click();
+  await page.locator('#articleTitle').fill('Unfinished article');
+  await page.locator('[data-action=article-save-draft]').click();await page.locator('.modal-close').click();
+  await page.locator('.profile-chip').click();
+  await page.locator('[data-action=draft-open]').filter({hasText:'Unfinished article'}).click();
+  assert.equal(await page.locator('#articleTitle').inputValue(),'Unfinished article');
+  page.once('dialog',dialog=>dialog.accept());await page.locator('[data-action=article-delete-draft]').click();
+  await page.locator('[data-action=profile-wall]').click();
   // Demo posters use their preserved source to apply v3, while linking the untouched original.
   const seeded=page.locator('.post-card').filter({hasText:'Ka skjer i helgå?'}).first();
   await seeded.locator('.tile-open').click();
@@ -226,6 +262,10 @@ async function publish(page,title) {
   const phone=await mobile.newPage();phone.on('pageerror',error=>errors.push(error.message));
   phone.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await phone.goto(base);await ready(phone);await fits(phone);
+  await phone.goto(`${base}/?post=${articleId}&history=1&from=1&to=2`);
+  await phone.locator('.revision-diff .diff-added').first().waitFor();
+  assert.ok(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await phone.locator('.modal-close').click();await phone.locator('.post-card').first().waitFor();
   await phone.screenshot({path:path.join(screenshots,'mobile-wall.png')});
   await phone.screenshot({path:path.join(screenshots,'mobile-wall-full.png'),fullPage:true});
   assert.equal(await phone.locator('#leftPanel').isVisible(),false);
@@ -247,7 +287,7 @@ async function publish(page,title) {
   assert.equal(await phone.locator('#categoryFilters input[value=tip]').isChecked(),false);
   await phone.locator('[data-post-id="'+imageId+'"] .tile-open').click();
   await phone.locator('.detail-toolbar [data-action=report]').waitFor();
-  await phone.locator('.detail-modal').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)));
+  await phone.waitForFunction(()=>{const r=document.querySelector('.detail-modal')?.getBoundingClientRect();return r&&r.x<=0&&r.y<=8&&r.x+r.width>=390&&r.y+r.height>=844;});
   const bounds=await phone.locator('.detail-modal').boundingBox();
   assert.ok(bounds.x<=0&&bounds.y<=8&&bounds.x+bounds.width>=390&&bounds.y+bounds.height>=844);
   await phone.waitForFunction(id=>location.search==='?post='+id,imageId);

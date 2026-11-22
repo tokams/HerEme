@@ -4,7 +4,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg \
+  && apt-get install -y --no-install-recommends ffmpeg git \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
@@ -15,7 +15,7 @@ COPY seed ./seed
 COPY server ./server
 COPY scripts ./scripts
 
-RUN install -d -o node -g node /var/lib/hereme
+RUN install -d -o node -g node /var/lib/hereme /var/lib/hereme-git
 
 USER node
 EXPOSE 3000

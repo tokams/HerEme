@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
-const { applyMigrations } = require('./migrations');
+const { applyMigrations, backfillContentRevisions } = require('./migrations');
 const { runtimeConfig } = require('./config');
 
 const { dataDir } = runtimeConfig();
@@ -76,4 +76,6 @@ db.exec(`
 applyMigrations(db);
 require('./domain/media').backfillLegacyMedia(db,dataDir);
 if (freshDatabase) require('./seed').seedDemo(db);
+db.exec('BEGIN IMMEDIATE');
+try{backfillContentRevisions(db);db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}
 module.exports = { db, dataDir, databasePath };

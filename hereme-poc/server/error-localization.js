@@ -1,6 +1,7 @@
 'use strict';
 
 const english={
+  DIFF_TOO_LARGE:'The comparison is too large.',DRAFT_NOT_FOUND:'The draft was not found.',ERASE_CURRENT_POST:'Hide the current post before erasing its latest version.',HIDE_CURRENT_POST:'Hide the post before hiding its current revision.',HIDDEN_CURRENT_REVISION:'Publish a safe new version before restoring this post.',INVALID_DRAFT:'The draft is invalid.',POSTER_TEXT_ONLY:'Only poster text can be changed.',REVISION_NOT_FOUND:'This revision is unavailable.',STALE_DRAFT:'The draft changed in another tab.',STALE_VERSION:'This post has changed since you opened it.',
   ARTICLE_MEDIA_NOT_READY:'The article media is not ready or does not belong to this account.',DUPLICATE_ARTICLE_MEDIA:'Each article attachment can be used once.',INVALID_CHAPTERS:'An article needs 1–24 valid chapters.',
   SELF_VOTE:'You cannot vote on your own comment.',
   AVATAR_CROP:'The profile image crop is invalid.',AVATAR_DECODE_FAILED:'The profile image could not be decoded.',AVATAR_DIMENSIONS:'The profile image has too many pixels.',AVATAR_NOT_FOUND:'The profile image was not found.',AVATAR_REQUIRED:'Select a profile image.',AVATAR_TOO_LARGE:'The profile image exceeds 5 MiB.',AVATAR_UNSUPPORTED:'Use a JPEG, PNG, or WebP image.',

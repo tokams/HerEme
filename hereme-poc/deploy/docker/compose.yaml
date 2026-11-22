@@ -81,6 +81,20 @@ services:
     volumes:
       - hereme-data:/var/lib/hereme
 
+  content-git-worker:
+    image: hereme-local-forum:latest
+    restart: unless-stopped
+    command: ["node", "server/content-git-worker.js"]
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      <<: *hereme-environment
+      HEREME_CONTENT_GIT_DIR: /var/lib/hereme-git
+    volumes:
+      - hereme-data:/var/lib/hereme
+      - hereme-content-git:/var/lib/hereme-git
+
   proxy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -101,3 +115,4 @@ volumes:
   hereme-data:
   caddy-data:
   caddy-config:
+  hereme-content-git:

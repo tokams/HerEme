@@ -68,6 +68,9 @@ docker image tag "$live_image" "$rollback_image"
 docker run --rm --user 0 -v docker_hereme-data:/var/lib/hereme:ro -v "$backup_root":/backup "$rollback_image" node scripts/snapshot-data.js /var/lib/hereme "/backup/$stamp"
 # SQLite may need to create a transient -shm file even with a read-only connection.
 docker run --rm --user 0 -v "$backup_root":/backup "$rollback_image" node scripts/verify-backup.js "/backup/$stamp"
+if docker volume inspect docker_hereme-content-git >/dev/null 2>&1; then
+  docker run --rm --user 0 -v docker_hereme-content-git:/archive:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'tar -C /archive -czf /backup/'"$stamp"'/content-git.tar.gz . && sha256sum /backup/'"$stamp"'/content-git.tar.gz > /backup/'"$stamp"'/content-git.tar.gz.sha256'
+fi
 docker run --rm --user 0 -v docker_hereme-data:/data:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'if [ -d /data/chat ]; then find /data/chat -maxdepth 1 -type f -printf "%f\n"; fi > /backup/'"$stamp"'/chat-files.txt'
 (cd "$staged" && docker compose -p docker -f "$compose" build app)
 docker run --rm --user "$(id -u):$(id -g)" -v "$staged/deploy/docker:/config" hereme-local-forum:latest node scripts/configure-domain.js /config/.env "$domain" "$expected"

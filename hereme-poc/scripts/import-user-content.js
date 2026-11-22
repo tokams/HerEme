@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {DatabaseSync}=require('node:sqlite');
 const {snapshotData}=require('./snapshot-data');
-const {applyMigrations}=require('../server/migrations');
+const {applyMigrations,backfillContentRevisions}=require('../server/migrations');
 const {backfillDesigns}=require('../server/post-design');
 const {backfillLegacyMedia}=require('../server/domain/media');
 
@@ -70,7 +70,7 @@ async function importUserContent(sourceDirectory,targetDirectory,{snapshotRoot=n
         const postId=postMap.get(report.post_id),userId=userMap.get(report.user_id);if(to.prepare('SELECT id FROM reports WHERE post_id=? AND user_id=?').get(postId,userId))continue;
         const id=to.prepare('SELECT id FROM reports WHERE id=?').get(report.id)?allocateId(to,'reports'):report.id;insertRow(to,'reports',{...report,id,post_id:postId,user_id:userId});imported.reports++;
       }
-      backfillDesigns(to);backfillLegacyMedia(to,target);
+      backfillDesigns(to);backfillLegacyMedia(to,target);backfillContentRevisions(to);
       if(to.prepare('PRAGMA foreign_key_check').all().length)throw new Error('Selective import would break foreign keys.');
       to.exec('COMMIT');return {imported,source_posts:sourcePosts.length,incoming,backup};
     }catch(error){if(to.isTransaction)to.exec('ROLLBACK');for(const file of copiedFiles)fs.rmSync(file,{force:true});throw error;}
