@@ -14,6 +14,7 @@
 .bundle-arrow,.chapter-collapse .icon,.details-button img{transition:transform var(--motion-expand) var(--ease-ui)}
 .bundle-items:not([hidden]){animation:motion-panel-in var(--motion-expand) var(--ease-ui) both;transform-origin:top center}
 .modal-overlay.motion-backdrop-enter>.modal-panel{animation:motion-dialog-in var(--motion-modal) var(--ease-ui) both}
+.modal-overlay:has(>.detail-modal),.modal-overlay:has(>.compose-modal),.modal-overlay:has(>.detail-modal)>.modal-panel,.modal-overlay:has(>.compose-modal)>.modal-panel{animation:none}
 .modal-overlay.motion-backdrop-exit{animation:motion-backdrop-out var(--motion-modal-exit) ease both}.modal-overlay.motion-backdrop-exit>.modal-panel{pointer-events:none;animation:motion-dialog-out var(--motion-modal-exit) var(--ease-ui) both}@keyframes motion-backdrop-out{to{opacity:0}}@keyframes motion-dialog-out{to{opacity:0;transform:translateY(-4px) scale(.98)}}
 dialog[open]::backdrop{animation:motion-backdrop-in var(--motion-modal) ease both}
 dialog[open]{animation:motion-dialog-in var(--motion-modal) var(--ease-ui) both}

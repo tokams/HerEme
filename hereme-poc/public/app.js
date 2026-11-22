@@ -10,7 +10,7 @@
     category:'story',postMode:'poster',composeStep:'edit',draft:{title:'',body:'',link:''},articleDraft:{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]},articleDraftRecord:null,articleDrafts:[],articleDraftCreateId:null,articlePublishKey:null,articlePublishPrepared:false,articleDirty:false,historyData:null,historyComparison:null,historyVersion:null,articleUploading:false,editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,loadedFeedKey:null,feedRendered:false,routeRequest:0,profileRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
+    loadRequest:0,loadedFeedKey:null,feedRendered:false,renderedPostSignatures:new Map(),routeRequest:0,profileRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={};
@@ -58,17 +58,53 @@
     text('.category-filters legend','chrome.categories');text('.reset-filters','chrome.all_categories');text('.sidebar-note .eyebrow','chrome.room_for_all');text('.sidebar-note > p:not([class])','chrome.tagline');text('.sidebar-note .muted-note','chrome.demo_notice');text('.sidebar-note button','chrome.about');text('.wall-toolbar h1','chrome.wall');if($('.wall-toolbar > span')?.lastChild)$('.wall-toolbar > span').lastChild.textContent=' '+t('chrome.posts_count_label');attr('#feed','aria-label','chrome.wall_posts');if($('#feed .loading-card'))text('#feed .loading-card','chrome.loading_wall');
   }
   function feedKey(){return JSON.stringify([state.categories,state.sort,state.query,state.selectedAreas]);}
-  function renderWall({preserveFeed=false}={}) {
+  function renderFeedCards(){
+    const feed=$('#feed'),current=new Map([...feed.querySelectorAll(':scope > .post-card')].map(card=>[card.dataset.postId,card]));
+    const signatures=new Map(),created=[];
+    let anchor=feed.firstElementChild;
+    for(const post of state.posts){
+      const id=String(post.id),signature=JSON.stringify(post);
+      let card=current.get(id);
+      if(!card||state.renderedPostSignatures.get(id)!==signature){
+        const template=document.createElement('template');template.innerHTML=HeremeFeed.card(post);
+        const replacement=template.content.firstElementChild;
+        const oldImage=card?.querySelector('.poster-photo,.article-cover img'),newImage=replacement.querySelector('.poster-photo,.article-cover img');
+        if(oldImage&&newImage&&oldImage.matches('.poster-photo')===newImage.matches('.poster-photo')&&oldImage.getAttribute('src')===newImage.getAttribute('src')){
+          for(const name of ['alt','loading','decoding','data-zoom','data-x','data-y']){
+            if(newImage.hasAttribute(name))oldImage.setAttribute(name,newImage.getAttribute(name));else oldImage.removeAttribute(name);
+          }
+          newImage.replaceWith(oldImage);
+        }
+        if(card){if(card===anchor)anchor=card.nextElementSibling;card.remove();}
+        card=replacement;created.push(card);
+      }
+      if(card!==anchor)feed.insertBefore(card,anchor);
+      anchor=card.nextElementSibling;signatures.set(id,signature);
+    }
+    if(state.nextCursor){
+      let more=feed.querySelector(':scope > .load-more');
+      if(!more){more=document.createElement('button');more.className='load-more btn btn-secondary';more.dataset.action='load-more';}
+      more.textContent=t('feed.load_more');
+      if(more!==anchor)feed.insertBefore(more,anchor);
+      anchor=more.nextElementSibling;
+    }
+    while(anchor){const next=anchor.nextElementSibling;anchor.remove();anchor=next;}
+    for(const card of created)HeremePoster.enhance(card);
+    state.renderedPostSignatures=signatures;
+  }
+  function renderWall({preserveFeed=false,force=false}={}) {
     $('#forumShell').hidden=false;$('#profileRoot').hidden=true;
     $('#profileLabel').textContent=state.user?.name||t('profile.join');
     $('#profileMonogram').textContent=state.user?.name[0].toUpperCase()||'○';
     $('#feedCounter').textContent=state.loadError?'':state.posts.length;
     if(preserveFeed&&state.feedRendered)return;
-    $('#feed').innerHTML=state.loadError?
-      `<div class="empty-state"><h2>${E(t('feed.load_error_title'))}</h2><p>${E(state.loadError)}</p><button class="btn btn-secondary" data-action="retry-feed">${E(t('common.retry'))}</button></div>`:
-      state.posts.length?state.posts.map(HeremeFeed.card).join('')+(state.nextCursor?`<button class="load-more btn btn-secondary" data-action="load-more">${E(t('feed.load_more'))}</button>`:''):
-      `<div class="empty-state"><h2>${E(t(state.categories.length?'feed.empty':'feed.no_categories'))}</h2><p>${E(t(state.categories.length?'feed.empty_help':'feed.no_categories_help'))}</p><button class="btn btn-secondary" data-action="${state.categories.length?'compose':'home'}">${E(t(state.categories.length?'feed.create':'feed.show_all_categories'))}</button></div>`;
-    HeremePoster.enhance($('#feed'));
+    if(force)state.renderedPostSignatures.clear();
+    if(state.loadError||!state.posts.length){
+      $('#feed').innerHTML=state.loadError?
+        `<div class="empty-state"><h2>${E(t('feed.load_error_title'))}</h2><p>${E(state.loadError)}</p><button class="btn btn-secondary" data-action="retry-feed">${E(t('common.retry'))}</button></div>`:
+        `<div class="empty-state"><h2>${E(t(state.categories.length?'feed.empty':'feed.no_categories'))}</h2><p>${E(t(state.categories.length?'feed.empty_help':'feed.no_categories_help'))}</p><button class="btn btn-secondary" data-action="${state.categories.length?'compose':'home'}">${E(t(state.categories.length?'feed.create':'feed.show_all_categories'))}</button></div>`;
+      state.renderedPostSignatures.clear();
+    }else renderFeedCards();
     $('#activityPanel').innerHTML=HeremeShell.activity(state.activity,state.loadError);
     state.feedRendered=true;
   }
@@ -172,12 +208,12 @@
     if(state.publishing)return;
     if(state.modal==='compose'&&state.articleUploading){toast(t('design.uploading'));return;}
     if(state.modal==='compose'&&state.postMode==='article'&&state.articleDirty&&!confirm(t('e21.unsaved_confirm')))return;
-    const closingHistory=state.modal==='history';resetPhoto();state.detailRequest++;state.modal=null;state.replyTo=null;state.pending=null;
+    const closingType=state.modal,closingHistory=closingType==='history';resetPhoto();state.detailRequest++;state.modal=null;state.replyTo=null;state.pending=null;
     lockBackground(false);
     const returnTarget=state.returnFocus?.isConnected?state.returnFocus:
       document.querySelector(`[data-post-id="${state.detailPost?.id}"] .tile-open`)||$('.logo');
     returnTarget.focus({preventScroll:true});
-    removeModalVisual({immediate:fromRoute||closingHistory||location.search.includes('post=')});
+    removeModalVisual({immediate:fromRoute||closingHistory||closingType==='compose'||closingType==='detail'||location.search.includes('post=')});
     if(closingHistory){history.replaceState(history.state,'','/');renderWall();return;}
     if(location.search.includes('post=')&&!fromRoute){history.back();return;}
   }
@@ -280,7 +316,7 @@
     if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
-    if(firstOpen)window.HeremeMotion?.enter($('#modalRoot .modal-overlay'),'motion-backdrop-enter');
+    if(firstOpen&&!['detail','compose'].includes(state.modal))window.HeremeMotion?.enter($('#modalRoot .modal-overlay'),'motion-backdrop-enter');
     if(state.modal==='history'&&state.historyVersion)$('.modal-content')?.insertAdjacentHTML('beforeend',HeremeDetail.revision(state.historyVersion));
     if(state.modal==='history')$('.modal-content')?.insertAdjacentHTML('afterbegin',`<button class="btn btn-secondary" data-action="history-current">${t('e21.current_version')}</button>`);
     if(state.modal==='history'&&state.historyComparison?.from===state.historyComparison?.to)$('.revision-diff')?.insertAdjacentHTML('afterbegin',`<p class="notice">${t('e21.older_version')}</p>`);
@@ -731,7 +767,7 @@
       if(state.modal==='compose')saveDraft();
       const y=scrollY;
       localizeChrome();renderPreferences();renderFilters();
-      if(location.pathname==='/me')profileView();else renderWall();
+      if(location.pathname==='/me')profileView();else renderWall({force:true});
       if(state.modal)renderModal({preserve:true});
       requestAnimationFrame(()=>scrollTo(0,y));
     });

@@ -41,11 +41,13 @@
       img.style.objectPosition=`${x}% ${y}%`;
       img.style.transformOrigin=`${x}% ${y}%`;
       img.style.transform=`scale(${zoom})`;
-      const surface=img.closest('.poster-surface'),status=surface.querySelector('.poster-media-status'),error=surface.querySelector('.poster-media-error');
-      const loaded=()=>{surface.dataset.mediaState='ready';status.hidden=true;error.hidden=true;};
-      const failed=()=>{surface.dataset.mediaState='error';status.hidden=true;error.hidden=false;if(!loggedMediaErrors.has(img.src)){loggedMediaErrors.add(img.src);console.error('Poster media failed to load:',img.src);}};
-      img.addEventListener('load',loaded,{once:true});
-      img.addEventListener('error',failed,{once:true});
+      const loaded=()=>{const surface=img.closest('.poster-surface');if(!surface)return;surface.dataset.mediaState='ready';surface.querySelector('.poster-media-status').hidden=true;surface.querySelector('.poster-media-error').hidden=true;};
+      const failed=()=>{const surface=img.closest('.poster-surface');if(!surface)return;surface.dataset.mediaState='error';surface.querySelector('.poster-media-status').hidden=true;surface.querySelector('.poster-media-error').hidden=false;if(!loggedMediaErrors.has(img.src)){loggedMediaErrors.add(img.src);console.error('Poster media failed to load:',img.src);}};
+      if(img.dataset.posterEnhanced!=='true'){
+        img.dataset.posterEnhanced='true';
+        img.addEventListener('load',loaded,{once:true});
+        img.addEventListener('error',failed,{once:true});
+      }
       if(img.complete)(img.naturalWidth>0?loaded:failed)();
     }
     fitTitles(container);

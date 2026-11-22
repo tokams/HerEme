@@ -160,8 +160,13 @@ async function publish(page,title) {
   const scores=await page.locator('#feed .vote-number').allTextContents();
   assert.deepEqual(scores.map(Number),scores.map(Number).sort((a,b)=>b-a));
   await page.locator('.logo').click();await settleWall(page);
+  await page.locator('.post-card img').first().evaluate(image=>window.__sortWallImage=image);
   await page.locator('#sortSelect').selectOption('new');await settleWall(page);
+  const sortMedia=await page.evaluate(()=>{const image=window.__sortWallImage,id=image.closest('.post-card')?.dataset.postId,card=document.querySelector(`[data-post-id="${id}"]`),surface=image.closest('.poster-surface');return {mounted:document.contains(image),ready:surface?.dataset.mediaState==='ready'&&surface.querySelector('.poster-media-status').hidden,id,matchingCard:!!card,matchingImage:card?.querySelector('img')?.getAttribute('src'),originalImage:image.getAttribute('src'),postCount:document.querySelectorAll('.post-card').length};});
+  assert.equal(sortMedia.mounted,true,'Sorting keeps unchanged media mounted: '+JSON.stringify(sortMedia));
+  assert.equal(sortMedia.ready,true,'Preserved media remains visible without a loading overlay: '+JSON.stringify(sortMedia));
   // A new poster has text, category and optional media, without a separate title.
+  await page.locator('.post-card img').first().evaluate(image=>window.__composeWallImage=image);
   await page.locator('.create-button').click();
   assert.equal(await page.locator('[data-auth-form=login] input[name=name]').getAttribute('autocomplete'),'username');
   await page.locator('[data-auth-mode=register]').click();
@@ -171,6 +176,9 @@ async function publish(page,title) {
   page.once('dialog',dialog=>dialog.accept());await page.locator('.auth-recovery [data-auth-close]').click();
   await page.locator('.auth-overlay').waitFor({state:'detached'});assert.equal(await page.locator('#profileLabel').textContent(),'VeggTester');
   await page.locator('.modal-panel').waitFor();
+  assert.equal(await page.locator('.compose-modal').evaluate(panel=>getComputedStyle(panel).animationName),'none','Composer opens without a second panel animation.');
+  assert.equal(await page.locator('.modal-overlay').evaluate(overlay=>getComputedStyle(overlay).animationName),'none','Composer does not fade the wall to black.');
+  assert.equal(await page.evaluate(()=>window.__composeWallImage===document.querySelector('.post-card img')),true,'Opening composer keeps wall media mounted.');
   assert.equal(await page.locator('[data-action=format-poster]').getAttribute('aria-pressed'),'true');
   assert.equal(await page.locator('#postTitle').count(),0);
   await page.screenshot({path:path.join(screenshots,'desktop-create-choose.png')});
@@ -179,6 +187,7 @@ async function publish(page,title) {
   await page.screenshot({path:path.join(screenshots,'desktop-create-text.png')});
   const textPost=await publish(page,'Kor e bussen? Et spørsmål fra en isolert test.');
   assert.equal(await textPost.getAttribute('data-category'),'question');
+  assert.equal(await page.evaluate(()=>window.__composeWallImage===document.querySelector('.post-card img')),true,'Publishing a post keeps unchanged wall media mounted.');
   const textId=await textPost.getAttribute('data-post-id');
   await page.locator('.post-card img').first().evaluate(node=>window.__routeMedia=node);
   let releaseProfile,requestProfile;const profileGate=new Promise(resolve=>releaseProfile=resolve),profileRequested=new Promise(resolve=>requestProfile=resolve);
@@ -314,6 +323,8 @@ async function publish(page,title) {
   assert.equal(await page.locator('#forumShell').isVisible(),true);
   releasePost();await page.locator('.detail-modal .poster-copy').waitFor();await page.unroute(`**/api/posts/${seededId}`,holdPost);
   assert.equal(await page.locator('.detail-modal.modal-refresh').count(),0,'Post detail renders once.');
+  assert.equal(await page.locator('.detail-modal').evaluate(panel=>getComputedStyle(panel).animationName),'none','Post detail opens without a second panel animation.');
+  assert.equal(await page.locator('.modal-overlay').evaluate(overlay=>getComputedStyle(overlay).animationName),'none','Post detail does not fade the wall to black.');
   assert.equal(await page.locator('.detail-modal .poster-photo').evaluate(image=>image.complete&&image.naturalWidth>0),true,'Primary post image is decoded when detail opens.');
   assert.match(await page.locator('.detail-modal .poster-photo').getAttribute('src'),/\/sources\//);
   await page.getByRole('link',{name:'Original plakat'}).waitFor();

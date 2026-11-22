@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-23 — Full-screen navigation flicker
+
+- Open and close the post detail and composer without layered backdrop/panel fades that made page-sized views appear to open twice.
+- Reconcile feed cards by post identity after publishing, sorting and refreshes; when a card changes but its media URL does not, retain the decoded image element while updating the surrounding content.
+- Added browser checks for immediate full-screen panels and image-node identity across composer opening and publishing.
+
 ## 2026-11-22 — Route responsiveness follow-up
 
 - Removed the whole-screen 480 ms entry animation after reports of flicker and lag.
