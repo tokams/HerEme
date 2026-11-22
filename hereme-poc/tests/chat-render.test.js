@@ -12,8 +12,10 @@ test('sender runs restart on author and day while retaining every message identi
   const rendered=descriptors(rows,{me:'Kari',t});
   assert.deepEqual(rendered.map(item=>item.key),['day:2026-11-22','message:1','message:2','message:3','day:2026-11-23','message:4']);
   assert.match(rendered[1].html,/run-start/);
+  assert.doesNotMatch(rendered[1].html,/run-end/);
   assert.match(rendered[1].html,/<time datetime="2026-11-22 10:20:00"[^>]*>10:20<\/time>/);
   assert.match(rendered[2].html,/run-continuation/);
+  assert.match(rendered[2].html,/run-end/);
   assert.match(rendered[2].html,/message-meta sr-only/);
   assert.match(rendered[2].html,/data-message-id="2"/);
   assert.match(rendered[3].html,/run-start/);
@@ -24,6 +26,11 @@ test('sender runs restart after five minutes but remain grouped at the threshold
   const first=message(1,'Kari'),within={...message(2,'Kari'),created_at:'2026-11-22 10:25:00'},after={...message(3,'Kari'),created_at:'2026-11-22 10:30:01'};
   const rendered=descriptors([first,within,after],{me:'Kari',t}).filter(item=>item.key.startsWith('message:'));
   assert.deepEqual(rendered.map(item=>item.runStart),[true,false,true]);
+});
+
+test('message times use the supplied locale formatter while retaining the full semantic timestamp',()=>{
+  const rendered=descriptors([message(1,'Kari')],{me:'Ola',t,formatTime:()=> '19:25',formatFullTime:()=> '22. nov. 2026, 19:25'}).at(-1).html;
+  assert.match(rendered,/<time datetime="2026-11-22 10:20:00" title="22\. nov\. 2026, 19:25">19:25<\/time>/);
 });
 
 test('three consecutive messages remain separate bubbles with one visible sender header',()=>{
@@ -53,7 +60,7 @@ test('bundles show at most four preview cells and 5+ opens the complete ordered 
     const realCells=(rendered.match(/class="bundle-item"/g)||[]).length;
     assert.equal(realCells,count<=4?count:3);
     assert.equal((rendered.match(/data-view-message=/g)||[]).length,Math.min(count,4));
-    if(count>4){assert.match(rendered,/class="bundle-item bundle-overflow"/);assert.match(rendered,new RegExp(`data-file-id="${files[3].id}"`));assert.ok(rendered.includes(`<b>+${count-3}</b>`));assert.doesNotMatch(rendered,new RegExp(`data-file-id="${files[4].id}"`));}
+    if(count>4){assert.match(rendered,/class="bundle-item bundle-overflow"/);assert.ok(rendered.includes(`<b>+${count-3}</b>`));assert.doesNotMatch(rendered,new RegExp(`data-file-id="${files[3].id}"`));assert.doesNotMatch(rendered,new RegExp(`data-file-id="${files[4].id}"`));}
     else for(const file of files)assert.match(rendered,new RegExp(`data-file-id="${file.id}"`));
   }
 });

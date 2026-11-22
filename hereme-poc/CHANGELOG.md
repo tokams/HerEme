@@ -5,6 +5,7 @@
 - Replaced unbounded attachment grids with compact 2/4/5/8-file bundle presentation and a four-cell maximum inline expansion.
 - Rebuilt the authorized attachment viewer as a single-item safe-area gallery with exact-index, keyboard, swipe, browser-Back, download, loading/error and focus/scroll restoration behavior.
 - Preserved chat authorization, message consent, APIs and permanent seven-day file deletion; added bilingual labels, semantic timestamps, WebSocket-stable expansion and responsive browser evidence.
+- Corrected the visual implementation against the approved interactive chat demo: sender-run headers now sit above softly framed bubbles, bundles use its stacked-photo/count/chevron language below the old footprint, single media reserves layout space, and approved-target plus post-change screenshots and automated visual baselines document the result.
 
 ## 2026-11-22 — E22 targeted chat, detail and editor polish
 
