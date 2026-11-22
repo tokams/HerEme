@@ -13,6 +13,8 @@ const screenshots=path.join(root,'docs/screenshots/wall-v3');
 fs.mkdirSync(screenshots,{recursive:true});
 const refinementScreenshots=process.env.HEREME_E20_EVIDENCE?path.join(root,'docs/screenshots/e20-refinement'):null;
 if(refinementScreenshots)fs.mkdirSync(refinementScreenshots,{recursive:true});
+const e22Screenshots=process.env.HEREME_E22_EVIDENCE?path.join(root,'docs/screenshots/e22'):null,regressionWidths=[320,375,390,430,768,1280,1700];
+if(e22Screenshots)fs.mkdirSync(e22Screenshots,{recursive:true});
 let child,browser;
 async function start(){
   child=spawn(process.execPath,['server/index.js'],{cwd:root,env:{...process.env,HEREME_DATA_DIR:data,PORT:'3300',HEREME_ENABLE_VIDEO:'1'},stdio:['ignore','pipe','pipe'],windowsHide:true});
@@ -45,7 +47,6 @@ async function settleWall(page) {
 async function publish(page,title) {
   await page.locator('#publishButton').click();
   await page.waitForTimeout(600);
-  if(await page.locator('.modal-panel').isVisible()&&await page.locator('#toastRoot').innerText())throw new Error('Publish failed: '+await page.locator('#toastRoot').innerText());
   try{await page.locator('.modal-panel').waitFor({state:'hidden',timeout:12000});}
   catch(error){throw new Error(`Publish did not close: ${JSON.stringify(await page.evaluate(()=>({toast:document.querySelector('#toastRoot')?.innerText,disabled:document.querySelector('#publishButton')?.disabled,inert:document.querySelector('#composeForm')?.inert,body:document.querySelector('#postBody')?.value,mode:document.querySelector('[data-action=format-poster]')?.getAttribute('aria-pressed')})))} (${error.message})`);}
   const post=page.locator('.post-card').filter({has:page.getByRole('button',{name:'Åpne '+title,exact:true})});
@@ -85,7 +86,7 @@ async function publish(page,title) {
   await page.locator('.modal-close').click();
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:path.join(screenshots,'desktop-simple-dark.png'),fullPage:true});
-  for(const width of [350,390,700,900,1280,1700]){
+  for(const width of regressionWidths){
     await page.setViewportSize({width,height:844});await fits(page);
     assert.equal(await page.locator('#simpleCategories button:visible').count(),width>=900?5:0);
   }
@@ -119,7 +120,7 @@ async function publish(page,title) {
   await page.locator('#discussion').waitFor();
   await page.screenshot({path:path.join(screenshots,'desktop-detail.png')});
   await page.locator('.modal-close').click();
-  for(const width of [350,390,700,900,1280,1700]){
+  for(const width of regressionWidths){
     await page.setViewportSize({width,height:844});await fits(page);
     assert.equal(await page.locator('#rightPanel').isVisible(),width>=1280);
     assert.equal(await page.locator('#leftPanel').isVisible(),width>=900);
@@ -183,6 +184,8 @@ async function publish(page,title) {
   await page.locator('[data-chapter="1"] [data-chapter-field=markdown]').fill('Gå langs sjøen.');
   await page.locator('[data-action=chapter-up][data-index="1"]').click();
   assert.equal(await page.locator('[data-chapter="0"] [data-chapter-field=heading]').inputValue(),'Neste tur');
+  await page.locator('[data-action=chapter-collapse][data-index="0"]').click();assert.equal(await page.locator('[data-chapter="0"] .chapter-fields').isHidden(),true);
+  await page.locator('[data-action=chapter-collapse][data-index="0"]').click();assert.equal(await page.locator('[data-chapter="0"] [data-chapter-field=heading]').inputValue(),'Neste tur');
   await page.locator('#articleCoverInput').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('.media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
   await page.locator('#articlePreview .article-hero-image').waitFor();
@@ -206,6 +209,9 @@ async function publish(page,title) {
   assert.equal(await articleCard.evaluate(el=>getComputedStyle(el).gridColumnStart),'span 2');
   await articleCard.locator('.tile-open').click();
   await page.locator('.article-chapter').first().waitFor();
+  assert.equal(await page.locator('.detail-toolbar .action-icon-button').count(),5);assert.equal(await page.locator('.detail-toolbar [data-action=article-edit]').getAttribute('aria-label'),'Rediger artikkel');
+  if(e22Screenshots)await page.locator('.detail-modal').screenshot({path:path.join(e22Screenshots,'article-toolbar-desktop.png')});
+  await page.setViewportSize({width:320,height:700});const toolbarGeometry=await page.locator('.detail-toolbar').evaluate(toolbar=>({left:toolbar.getBoundingClientRect().left,right:toolbar.getBoundingClientRect().right,viewport:innerWidth,buttons:[...toolbar.querySelectorAll('button')].map(button=>[button.getBoundingClientRect().width,button.getBoundingClientRect().height])}));assert.ok(toolbarGeometry.left>=0&&toolbarGeometry.right<=toolbarGeometry.viewport);assert.ok(toolbarGeometry.buttons.every(([width,height])=>width>=42&&height>=44),JSON.stringify(toolbarGeometry));if(e22Screenshots)await page.locator('.detail-toolbar').screenshot({path:path.join(e22Screenshots,'article-toolbar-320.png')});await page.setViewportSize({width:1440,height:1000});
   assert.equal(await page.locator('.article-chapter h2').first().textContent(),'1. Neste tur');
   await page.locator('.article-chapter .article-media').first().click();
   await page.locator('.article-media-viewer[open] img').waitFor();
@@ -300,6 +306,8 @@ async function publish(page,title) {
   await phone.keyboard.press('Tab');
   assert.equal(await phone.evaluate(()=>document.activeElement.dataset.action),'close-modal');
   assert.equal(await phone.locator('#forumShell').evaluate(el=>el.inert),true);
+  if(e22Screenshots)await phone.locator('.detail-modal').screenshot({path:path.join(e22Screenshots,'detail-toolbar-mobile.png')});
+  await phone.locator('[data-action=poster-media]').click();await phone.locator('.poster-media-viewer[open] img').waitFor();await phone.locator('[data-action=poster-media-close]').click();
   await phone.locator('.detail-toolbar [data-action=share]').click();
   assert.equal(await phone.evaluate(()=>navigator.clipboard.readText()),'https://hereme.no/?post='+imageId);
   await phone.screenshot({path:path.join(screenshots,'mobile-detail.png')});
@@ -365,7 +373,7 @@ async function publish(page,title) {
   assert.equal(await phone.locator('.modal-panel').count(),0);
   assert.deepEqual(errors,[],'Browser errors');
   await mobile.close();
-  console.log(JSON.stringify({desktop:'1440x1000',mobile:'390x844',widths:[350,390,700,900,1280,1700],themes:5,seedPosts:13,createdPosts:3,filters:true,fullScreenDetail:true,reporting:true,persistence:true,screenshots}));
+  console.log(JSON.stringify({desktop:'1440x1000',mobile:'390x844',widths:regressionWidths,themes:5,seedPosts:13,createdPosts:3,filters:true,fullScreenDetail:true,reporting:true,persistence:true,screenshots}));
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
   if(browser)await browser.close();await stop();fs.rmSync(data,{recursive:true});
 });

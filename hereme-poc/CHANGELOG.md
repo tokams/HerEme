@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-22 — E22 targeted chat, detail and editor polish
+
+- Grouped consecutive chat messages by sender, day and five-minute continuity; added stable inline expansion for mixed attachment bundles while preserving secure individual viewing and seven-day expiry behavior.
+- Added compact accessible SVG detail actions, bounded poster/video stages with full-size photo viewing, and collapsible article chapters that retain editor state.
+- Kept the existing poster wall, category themes, two-column mobile grid, vote controls, routes and content contracts unchanged. Expanded responsive browser checks and added E22 review screenshots.
+
 ## 2026-11-22 — Article edit access from profile
 
 - Added a direct Edit article action to each published article in My posts. The action opens the owner's existing private working copy. Browser smoke covers this path on the profile page.

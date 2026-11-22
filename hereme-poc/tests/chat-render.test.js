@@ -19,13 +19,19 @@ test('sender runs restart on author and day while retaining every message identi
   assert.match(rendered[5].html,/run-start/);
 });
 
+test('sender runs restart after five minutes but remain grouped at the threshold',()=>{
+  const first=message(1,'Kari'),within={...message(2,'Kari'),created_at:'2026-11-22 10:25:00'},after={...message(3,'Kari'),created_at:'2026-11-22 10:30:01'};
+  const rendered=descriptors([first,within,after],{me:'Kari',t}).filter(item=>item.key.startsWith('message:'));
+  assert.deepEqual(rendered.map(item=>item.runStart),[true,false,true]);
+});
+
 test('single private media is bare, bundles retain order and escaped names',()=>{
   const expires_at='2026-11-30T00:00:00.000Z';
   const files=[{id:'first',name:'<photo>.jpg',status:'ready',expires_at,media_kind:'image'},{id:'second',name:'clip.mov',status:'ready',expires_at,media_kind:'video'},{id:'third',name:'notes.txt',status:'ready',expires_at,media_kind:'file'}];
   const single=descriptors([{...message(1,'Kari'),body:'',attachments:[files[0]]}],{me:'Kari',t,now:'2026-11-22T00:00:00.000Z'}).at(-1).html;
   assert.match(single,/bare-media/);assert.match(single,/attachment-preview/);assert.doesNotMatch(single,/<photo>/);
   const bundle=descriptors([{...message(2,'Kari'),body:'',attachments:files}],{me:'Kari',t,now:'2026-11-22T00:00:00.000Z'}).at(-1).html;
-  assert.match(bundle,/bundle-stack/);assert.ok(bundle.indexOf('first')<bundle.indexOf('second'));assert.equal((bundle.match(/stack-layer-\d/g)||[]).length,3);
+  assert.match(bundle,/bundle-stack/);assert.match(bundle,/aria-expanded="false"/);assert.match(bundle,/bundle-items/);assert.ok(bundle.indexOf('first')<bundle.indexOf('second'));assert.equal((bundle.match(/stack-layer-\d/g)||[]).length,3);
 });
 
 test('avatar component accepts only canonical URLs and keeps deterministic initials',()=>{
