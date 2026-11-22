@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const {descriptors}=require('../public/chat-render');
 const {html,group,safeUrl}=require('../public/avatar');
 
-const t=(key,{count,name}={})=>key==='attachment.count'?`${count} files`:key==='attachment.bundle'?`View ${count} files`:key==='attachment.view'?`View ${name}`:key==='attachment.play'?`Play ${name}`:key;
+const t=(key,{count,name,index}={})=>key==='attachment.count'?`${count} files`:key==='attachment.bundle'?`View ${count} files`:key==='attachment.view_all'?`View all ${count}`:key==='attachment.viewer_count'?`${index} / ${count}`:key==='attachment.view'?`View ${name}`:key==='attachment.play'?`Play ${name}`:key;
 const message=(id,sender,day='2026-11-22',attachments=[])=>({id,kind:'text',sender_id:sender,sender,created_at:`${day} 10:20:00`,body:'Hi',attachments});
 
 test('sender runs restart on author and day while retaining every message identity',()=>{
@@ -12,6 +12,7 @@ test('sender runs restart on author and day while retaining every message identi
   const rendered=descriptors(rows,{me:'Kari',t});
   assert.deepEqual(rendered.map(item=>item.key),['day:2026-11-22','message:1','message:2','message:3','day:2026-11-23','message:4']);
   assert.match(rendered[1].html,/run-start/);
+  assert.match(rendered[1].html,/<time datetime="2026-11-22 10:20:00"[^>]*>10:20<\/time>/);
   assert.match(rendered[2].html,/run-continuation/);
   assert.match(rendered[2].html,/message-meta sr-only/);
   assert.match(rendered[2].html,/data-message-id="2"/);
@@ -43,14 +44,17 @@ test('single private media is bare, bundles retain order and escaped names',()=>
   assert.match(video,/data-video-duration/,'A single video exposes a duration slot populated from media metadata.');
 });
 
-test('collapsed bundles preserve every authorized item at 2, 8 and 12 attachments',()=>{
+test('bundles show at most four preview cells and 5+ opens the complete ordered gallery',()=>{
   const expires_at='2026-11-30T00:00:00.000Z';
-  for(const count of [2,8,12]){
+  for(const count of [2,4,5,8]){
     const files=Array.from({length:count},(_,index)=>({id:`file-${count}-${index}`,name:`item-${index}.${index%3===0?'jpg':index%3===1?'mp4':'txt'}`,status:'ready',expires_at,media_kind:index%3===0?'image':index%3===1?'video':'file'}));
     const rendered=descriptors([{...message(count,'Kari'),body:'Bundle',attachments:files}],{me:'Kari',t,now:'2026-11-22T00:00:00.000Z'}).at(-1).html;
     assert.match(rendered,new RegExp(`>${count} files<`));
-    assert.equal((rendered.match(/class="bundle-item"/g)||[]).length,count);
-    for(const file of files)assert.match(rendered,new RegExp(`data-file-id="${file.id}"`));
+    const realCells=(rendered.match(/class="bundle-item"/g)||[]).length;
+    assert.equal(realCells,count<=4?count:3);
+    assert.equal((rendered.match(/data-view-message=/g)||[]).length,Math.min(count,4));
+    if(count>4){assert.match(rendered,/class="bundle-item bundle-overflow"/);assert.match(rendered,new RegExp(`data-file-id="${files[3].id}"`));assert.ok(rendered.includes(`<b>+${count-3}</b>`));assert.doesNotMatch(rendered,new RegExp(`data-file-id="${files[4].id}"`));}
+    else for(const file of files)assert.match(rendered,new RegExp(`data-file-id="${file.id}"`));
   }
 });
 

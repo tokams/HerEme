@@ -77,6 +77,19 @@
   </main>
   <div id="chatError" class="chat-error" role="alert" hidden></div>
   <div id="connectionStatus" class="connection-status" role="status" hidden>Kobler til chat…</div>
-  <dialog id="attachmentViewer" aria-label="Vedlegg"><header><strong id="viewerTitle">Vedlegg</strong><button id="closeViewer" type="button">Lukk</button></header><div id="viewerBody"></div></dialog>
+  <dialog id="attachmentViewer" aria-labelledby="viewerTitle">
+    <div class="viewer-shell">
+      <header>
+        <button id="closeViewer" class="viewer-icon-button" type="button"><span class="sr-only">Lukk</span></button>
+        <div class="viewer-heading"><strong id="viewerTitle">Vedlegg</strong><span id="viewerCount"></span></div>
+        <a id="viewerDownload" class="viewer-icon-button" download><span class="sr-only">Last ned</span></a>
+      </header>
+      <div id="viewerStage" class="viewer-stage" tabindex="-1">
+        <button id="viewerPrevious" class="viewer-nav viewer-previous" type="button"><span class="sr-only">Forrige</span></button>
+        <div id="viewerBody" aria-live="polite"></div>
+        <button id="viewerNext" class="viewer-nav viewer-next" type="button"><span class="sr-only">Neste</span></button>
+      </div>
+    </div>
+  </dialog>
 </body>
 </html>
