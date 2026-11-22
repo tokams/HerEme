@@ -35,5 +35,5 @@ test('stored media paths render while arbitrary and traversal paths remain rejec
 });
 test('video duration badge is rendered inside the card media button',()=>{
   const html=card({id:7,type:'video',duration_ms:125000,category:'story',title:'Local video',created_at:'2026-11-20 12:00:00',score:0,my_vote:0,comment_count:0});
-  assert.match(html,/<button class="tile-open"[^>]*>[\s\S]*<span class="video-tile-badge">[^<]*2:05<\/span><\/button>/);
+  assert.match(html,/<button class="tile-open"[^>]*>[\s\S]*<span class="video-tile-badge"><svg[^>]*>[\s\S]*<\/svg> 2:05<\/span><\/button>/);
 });

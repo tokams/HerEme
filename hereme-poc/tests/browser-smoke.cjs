@@ -11,6 +11,8 @@ const root=path.resolve(__dirname,'..');
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-wall-browser-'));
 const screenshots=path.join(root,'docs/screenshots/wall-v3');
 fs.mkdirSync(screenshots,{recursive:true});
+const refinementScreenshots=process.env.HEREME_E20_EVIDENCE?path.join(root,'docs/screenshots/e20-refinement'):null;
+if(refinementScreenshots)fs.mkdirSync(refinementScreenshots,{recursive:true});
 let child,browser;
 async function start(){
   child=spawn(process.execPath,['server/index.js'],{cwd:root,env:{...process.env,HEREME_DATA_DIR:data,PORT:'3300',HEREME_ENABLE_VIDEO:'1'},stdio:['ignore','pipe','pipe'],windowsHide:true});
@@ -58,10 +60,10 @@ async function publish(page,title) {
     host.innerHTML=HeremeFeed.card({id:987,type:'video',duration_ms:125000,category:'story',title:'Video boundary check',created_at:'2026-11-20 12:00:00',score:0,my_vote:0,comment_count:0});
     document.body.append(host);
     const card=host.querySelector('.post-card').getBoundingClientRect(),button=host.querySelector('.tile-open').getBoundingClientRect(),badge=host.querySelector('.video-tile-badge').getBoundingClientRect();
-    const result={label:host.querySelector('.video-tile-badge').textContent.trim(),position:getComputedStyle(host.querySelector('.tile-open')).position,insideCard:badge.left>=card.left&&badge.top>=card.top&&badge.right<=card.right&&badge.bottom<=card.bottom,insideButton:badge.left>=button.left&&badge.top>=button.top&&badge.right<=button.right&&badge.bottom<=button.bottom};
+    const result={label:host.querySelector('.video-tile-badge').textContent.trim(),icon:!!host.querySelector('.video-tile-badge svg'),position:getComputedStyle(host.querySelector('.tile-open')).position,insideCard:badge.left>=card.left&&badge.top>=card.top&&badge.right<=card.right&&badge.bottom<=card.bottom,insideButton:badge.left>=button.left&&badge.top>=button.top&&badge.right<=button.right&&badge.bottom<=button.bottom};
     host.remove();return result;
   });
-  assert.deepEqual(videoBadgeBounds,{label:'▶ 2:05',position:'relative',insideCard:true,insideButton:true});
+  assert.deepEqual(videoBadgeBounds,{label:'2:05',icon:true,position:'relative',insideCard:true,insideButton:true});
   assert.equal(await page.locator('.post-card').count(),13);
   assert.equal(await page.locator('#categoryFilters input:checked').count(),5);
   assert.equal(await page.locator('#feed [data-action="report"],[data-action="room"],[data-action="browse-rooms"]').count(),0);
@@ -107,6 +109,7 @@ async function publish(page,title) {
   assert.equal(await page.locator('#fontSelect').count(),0);
   const appearance=await page.locator('.post-card').first().evaluate(el=>({radius:getComputedStyle(el).borderRadius,gap:getComputedStyle(el.parentElement).columnGap,font:getComputedStyle(el).fontFamily,order:[...el.querySelector('.tile-actions').children].map(c=>c.className)}));
   assert.equal(appearance.radius,'0px');assert.match(appearance.font,/Source Sans 3/);
+  assert.ok(await page.evaluate(async()=>{await document.fonts.load('400 18px "Source Sans 3"');return document.fonts.check('400 18px "Source Sans 3"');}));
   assert.match(appearance.order.join(','),/^vote-btn vote-up,vote-btn vote-down,vote-number/);
   assert.ok(await page.locator('#feed .post-card').count()>0);
   await page.locator('.activity-item').first().click();
@@ -179,8 +182,19 @@ async function publish(page,title) {
   assert.equal(await page.locator('[data-chapter="0"] [data-chapter-field=heading]').inputValue(),'Neste tur');
   await page.locator('#articleCoverInput').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('.media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
+  await page.locator('#articlePreview .article-hero-image').waitFor();
+  assert.match(await page.locator('#articlePreview .article-markdown').last().innerHTML(),/<strong>fin<\/strong>/);
   await page.locator('[data-chapter="0"] [data-article-file="0"]').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('[data-chapter="0"] .media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
+  await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
+  await page.locator('#articlePreview .article-media').last().click();await page.locator('#articlePreview .article-media-viewer[open] img').waitFor();await page.locator('#articlePreview [data-action=article-media-close]').click();
+  await page.locator('[data-action=article-media-remove][data-index="0"]').click();assert.equal(await page.locator('#articlePreview .article-chapter .article-media').count(),0);
+  await page.locator('[data-chapter="0"] [data-article-file="0"]').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
+  await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
+  await page.locator('[data-chapter="0"] .media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
+  await page.locator('.modal-close').click();await page.locator('.create-button').click();await page.locator('[data-action=format-article]').click();
+  await page.locator('#articlePreview .article-hero-image').waitFor();await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
+  if(refinementScreenshots){await page.locator('#toastRoot .toast').waitFor({state:'hidden'});await page.locator('#articlePreview').scrollIntoViewIfNeeded();await page.locator('.compose-modal').screenshot({path:path.join(refinementScreenshots,'article-preview-desktop.png')});}
   await page.locator('#publishButton').click();await page.locator('.modal-panel').waitFor({state:'hidden'});
   const articleCard=page.locator('.article-card').filter({hasText:'Turer i Rogaland'});await articleCard.waitFor();
   assert.equal(await articleCard.evaluate(el=>getComputedStyle(el).gridColumnStart),'span 2');
@@ -196,7 +210,7 @@ async function publish(page,title) {
   await seeded.locator('.tile-open').click();
   await page.locator('.detail-modal .poster-copy').waitFor();
   assert.match(await page.locator('.detail-modal .poster-photo').getAttribute('src'),/\/sources\//);
-  await page.getByRole('link',{name:'Original plakat ↗'}).waitFor();
+  await page.getByRole('link',{name:'Original plakat'}).waitFor();
   await page.locator('.modal-close').click();
   const staffDb=new DatabaseSync(path.join(data,'hereme.sqlite'));
   const staffUser=staffDb.prepare("SELECT id FROM users WHERE normalized_name='veggtester'").get();
@@ -261,6 +275,18 @@ async function publish(page,title) {
   await phone.screenshot({path:path.join(screenshots,'mobile-comments.png')});
   await phone.locator('.modal-close').click();
   await phone.locator('.create-button').click();
+  await phone.locator('.compose-modal').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)));
+  if(refinementScreenshots)await phone.locator('#toastRoot .toast').waitFor({state:'hidden'});
+  for(const width of [375,390,430]){
+    await phone.setViewportSize({width,height:844});
+    const geometry=await phone.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth+1,format:[...document.querySelectorAll('.design-format-tabs button')].map(el=>el.getBoundingClientRect().height),category:[...document.querySelectorAll('.category-choice span')].map(el=>el.getBoundingClientRect().height),media:[...document.querySelectorAll('.design-media-actions .media-action')].map(el=>el.getBoundingClientRect().height),publish:document.querySelector('#publishButton').getBoundingClientRect().height}));
+    assert.equal(geometry.overflow,false);assert.ok([...geometry.format,...geometry.category,...geometry.media,geometry.publish].every(height=>height>=44),JSON.stringify(geometry));
+    if(refinementScreenshots)await phone.locator('.compose-modal').screenshot({path:path.join(refinementScreenshots,`poster-composer-${width}.png`)});
+  }
+  await phone.setViewportSize({width:390,height:844});
+  await phone.locator('[data-action=format-article]').click();assert.ok(await phone.locator('#articlePreview').isVisible());
+  if(refinementScreenshots)await phone.locator('.compose-modal').screenshot({path:path.join(refinementScreenshots,'article-composer-390.png')});
+  await phone.locator('[data-action=format-poster]').click();
   await phone.locator('input[name=postCategory][value=opinion]').check();
   const longTitle='EtVeldigLangtSammenhengendeOrd'.repeat(5);
   await phone.locator('#postBody').fill(longTitle);

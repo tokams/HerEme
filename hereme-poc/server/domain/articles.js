@@ -17,6 +17,11 @@ function createArticleService(db,dataDir,{media,audit,config}={}){
     try{db.prepare('INSERT INTO article_assets(media_id,owner_id) VALUES(?,?)').run(stored.id,user.id);return {media_id:stored.id,status:'ready',kind:'image',url:stored.url};}
     catch(error){stored.cleanup();throw error;}
   }
+  function asset(id,user){
+    const row=db.prepare('SELECT m.id,m.kind,m.status,m.display_path,m.thumbnail_path FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.media_id=? AND a.owner_id=? AND a.post_id IS NULL').get(id,user.id);
+    if(!row)fail('ARTICLE_MEDIA_NOT_READY','Vedlegget er ikke klart eller tilhører en annen bruker.',404);
+    return {media_id:row.id,kind:row.kind,status:row.status,url:row.display_path?'/'+row.display_path.replaceAll('\\','/'):null,thumbnail_url:row.thumbnail_path?'/'+row.thumbnail_path.replaceAll('\\','/'):null};
+  }
   function validate(input,user){
     const title=V.text(input.title,{name:'Artikkeltittel',min:3,max:160}),abstract=V.text(input.abstract,{name:'Sammendrag',min:10,max:500});
     const design=parseDesign(input,input.category);
@@ -54,6 +59,6 @@ function createArticleService(db,dataDir,{media,audit,config}={}){
     const allowed=new Set([...assets.values()].flatMap(asset=>[asset.url,asset.thumbnail_url,asset.original_url].filter(Boolean)));
     return {abstract:row.abstract,markdown_source:row.markdown_source,cover:assets.get(row.cover_media_id)||null,updated_at:row.updated_at,chapters:JSON.parse(row.chapters_json).map(chapter=>({...chapter,body_html:markdown.render(chapter.markdown,allowed),media:assets.get(chapter.media_id)||null}))};
   }
-  return {cleanup,uploadImage,create,detail};
+  return {cleanup,uploadImage,asset,create,detail};
 }
 module.exports={createArticleService};

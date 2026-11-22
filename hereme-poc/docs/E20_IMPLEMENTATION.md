@@ -8,4 +8,4 @@ The editor keeps text and article fields in a local draft per signed in account.
 
 Local checks: `npm run check`, `npm test`, and `npm run test:browser` cover syntax, schema migration, old content import, poster/article API, Markdown safety, article card/reader, and mobile/desktop flows. Physical iPhone/PWA behavior and a migration against a production snapshot remain to be checked before deployment.
 
-Source Sans 3 is specified by the design and selected in CSS, but its WOFF2 and OFL files still need to be added before release. This workspace cannot reach the official Adobe font repository from the command line. Until those files are present and `@font-face` is declared, the app uses its Arial fallback. This is an open E20 acceptance gap.
+Source Sans 3 is self-hosted from the owner-provided WOFF2 in `public/assets/fonts`, with its OFL notice beside it. The static server serves WOFF2 as `font/woff2`; the browser check loads the actual face. The only supplied file is Regular, so heavier weights are browser-synthesized until matching font weights are provided.

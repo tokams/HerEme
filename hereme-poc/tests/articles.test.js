@@ -10,6 +10,8 @@ test('articles preserve canonical post interactions and sanitize chapter Markdow
   const owner=await account('ArticleOwner'),other=await account('ArticleOther');
   const image=await sharp({create:{width:24,height:16,channels:3,background:'#4b694e'}}).png().toBuffer(),form=new FormData();form.set('image',new Blob([image],{type:'image/png'}),'cover.png');
   const uploaded=await request('/api/article-assets/images',{method:'POST',user:owner,form});assert.equal(uploaded.status,201);
+  assert.equal((await request('/api/article-assets/'+uploaded.data.media_id,{user:owner})).data.url,uploaded.data.url);
+  assert.equal((await request('/api/article-assets/'+uploaded.data.media_id,{user:other})).status,404);
   assert.equal((await fetch(base+uploaded.data.url)).status,404);
   assert.equal((await fetch(base+uploaded.data.url,{headers:{cookie:owner.cookie}})).status,200);
   const mediaId=uploaded.data.media_id,chapter={heading:'The first trail',markdown:'A **good** walk with [directions](https://example.test) and <script>alert(1)</script>.',media_id:null};

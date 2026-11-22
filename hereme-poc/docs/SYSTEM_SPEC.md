@@ -9,8 +9,8 @@ See [ADR 0011](adr/0011-passkeys.md) and `PASSKEYS_PROGRESS.md`.
 temporary www/legacy redirects are prepared. Live cutover is BLOCKED pending DNS
 resolution and a reviewed clean release. See [execution ledger](domain-migration.md).
 
-**Snapshot:** 2026-11-22, E20 content formats and typography in the local worktree
-**Code baseline:** `master` at `14cd0c7` plus uncommitted E20 changes. See `docs/E20_IMPLEMENTATION.md` for local evidence.
+**Snapshot:** 2026-11-22, E20 UI refinement in the local worktree
+**Code baseline:** `master` at `f4da9c0` plus uncommitted E20 refinement changes. See `docs/E20_IMPLEMENTATION.md` and `docs/E20_REFINEMENT.md` for local evidence.
 **Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 

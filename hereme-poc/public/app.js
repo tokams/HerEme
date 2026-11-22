@@ -78,7 +78,7 @@
   function publicProfileView(profile){
     $('#forumShell').hidden=true;const root=$('#profileRoot');root.hidden=false;
     const score=value=>`${value>0?'+':''}${value}`;
-    root.innerHTML=`<section class="public-profile"><button class="btn btn-secondary" data-action="public-profile-back">← ${E(t('profile.back'))}</button><p class="eyebrow">${E(t('profile.public_heading'))}</p><div class="public-profile-identity">${HeremeAvatar.html({id:profile.public_id,name:profile.username,avatar_url:profile.avatar_url})}<div><h1>@${E(profile.username)}</h1><p>${E(t('profile.member_since',{date:String(profile.joined_at).slice(0,10)}))}</p></div></div><div class="public-reputation"><div><span>${E(t('profile.post_reputation'))}</span><strong>${score(profile.reputation.posts)}</strong></div><div><span>${E(t('profile.comment_reputation'))}</span><strong>${score(profile.reputation.comments)}</strong></div><div class="total"><span>${E(t('profile.total_reputation'))}</span><strong>${score(profile.reputation.total)}</strong></div></div></section>`;
+    root.innerHTML=`<section class="public-profile"><button class="btn btn-secondary" data-action="public-profile-back">${HeremeIcons.icon('back')} ${E(t('profile.back'))}</button><p class="eyebrow">${E(t('profile.public_heading'))}</p><div class="public-profile-identity">${HeremeAvatar.html({id:profile.public_id,name:profile.username,avatar_url:profile.avatar_url})}<div><h1>@${E(profile.username)}</h1><p>${E(t('profile.member_since',{date:String(profile.joined_at).slice(0,10)}))}</p></div></div><div class="public-reputation"><div><span>${E(t('profile.post_reputation'))}</span><strong>${score(profile.reputation.posts)}</strong></div><div><span>${E(t('profile.comment_reputation'))}</span><strong>${score(profile.reputation.comments)}</strong></div><div class="total"><span>${E(t('profile.total_reputation'))}</span><strong>${score(profile.reputation.total)}</strong></div></div></section>`;
     document.title=`${profile.username} · HerEme`;
   }
   const avatarEditor=HeremeAvatarEditor.setup({api,t,onSaved:result=>{Object.assign(state.profile.profile,result);Object.assign(state.user,result);profileView();toast(t('profile.avatar_saved'));}});
@@ -115,7 +115,7 @@
   addEventListener('hereme:passkey-invite',()=>toast(t('account.passkey_invite')));
   function wrapper(title,body,footer='',kind='') {
     return `<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel ${kind}" role="dialog" aria-modal="true" aria-label="${E(title)}">
-      <header class="modal-header"><h2>${E(title)}</h2><button class="modal-close" data-action="close-modal" aria-label="${E(t('common.close'))}">× <span>${E(t('common.close'))}</span></button></header>
+      <header class="modal-header"><h2>${E(title)}</h2><button class="modal-close" data-action="close-modal" aria-label="${E(t('common.close'))}">${HeremeIcons.icon('close')} <span>${E(t('common.close'))}</span></button></header>
       <div class="modal-content">${body}</div>${footer?`<footer class="modal-footer">${footer}</footer>`:''}</section></div>`;
   }
   function resetPhoto() {
@@ -129,9 +129,17 @@
     state.modal=type;lockBackground(true);
     if(type==='compose'){resetPhoto();state.postMode='poster';state.composeStep='edit';state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';const saved=JSON.parse(localStorage.getItem('hereme_design_draft:'+state.user.id)||'null');state.draft={title:'',body:saved?.body||'',link:''};state.articleDraft=saved?.article||{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]};}
     renderModal();
+    if(type==='compose')hydrateArticleMedia().catch(error=>toast(error.message));
+  }
+  async function hydrateArticleMedia(){
+    const article=state.articleDraft,entries=[...article.chapters.filter(chapter=>chapter.media_id&&!chapter.media?.url).map(chapter=>({chapter,id:chapter.media_id}))];
+    if(article.cover?.media_id&&!article.cover.url)entries.push({cover:true,id:article.cover.media_id});
+    for(const entry of entries){const media=await api('/api/article-assets/'+encodeURIComponent(entry.id));if(state.modal!=='compose'||state.articleDraft!==article)return;if(entry.cover&&article.cover?.media_id===entry.id)article.cover={...article.cover,...media};if(entry.chapter?.media_id===entry.id)entry.chapter.media={...media,name:entry.chapter.media_name||''};}
+    if(entries.length&&state.modal==='compose'){saveDraft();updateArticlePreview();}
   }
   function closeModal({fromRoute=false}={}) {
     if(state.publishing)return;
+    if(state.modal==='compose'&&state.articleUploading){toast(t('design.uploading'));return;}
     resetPhoto();state.detailRequest++;state.modal=null;state.replyTo=null;state.pending=null;
     $('#modalRoot').innerHTML='';lockBackground(false);
     const returnTarget=state.returnFocus?.isConnected?state.returnFocus:
@@ -141,13 +149,13 @@
   }
   function profileModal() {
     if(state.user)return wrapper(t('account.your_profile'),`<h3>${E(t('account.greeting',{name:state.user.name}))}</h3><p>${E(t('account.pseudonym_help'))}</p><button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-secondary" data-action="logout">${E(t('account.logout'))}</button><p><a href="/privacy.html">${E(t('account.privacy'))}</a> · <a href="/rules.html">${E(t('account.rules'))}</a></p>`);
-    return wrapper(t('account.join'),`<p>${E(t('account.join_help'))}</p><form id="profileForm" class="form-stack" autocomplete="on"><label class="field" for="nicknameInput"><span>${E(t('account.pseudonym'))}</span><input id="nicknameInput" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><button class="btn btn-primary" type="submit">${E(t('account.create_pseudonym'))} →</button></form><details><summary>${E(t('account.have_key'))}</summary>${loginForm()}</details>`);
+    return wrapper(t('account.join'),`<p>${E(t('account.join_help'))}</p><form id="profileForm" class="form-stack" autocomplete="on"><label class="field" for="nicknameInput"><span>${E(t('account.pseudonym'))}</span><input id="nicknameInput" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><button class="btn btn-primary" type="submit">${E(t('account.create_pseudonym'))} ${HeremeIcons.icon('arrow-right')}</button></form><details><summary>${E(t('account.have_key'))}</summary>${loginForm()}</details>`);
   }
-  function loginForm(){return `<form id="recoverForm" class="form-stack account-login" autocomplete="on"><label class="field" for="recoverName"><span>${E(t('account.pseudonym'))}</span><input id="recoverName" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><label class="field" for="recoverKey"><span>${E(t('account.recovery_key'))}</span><input id="recoverKey" name="password" type="password" autocomplete="current-password" required></label><button class="btn btn-primary" type="submit">${E(t('account.login'))} →</button></form>`;}
+  function loginForm(){return `<form id="recoverForm" class="form-stack account-login" autocomplete="on"><label class="field" for="recoverName"><span>${E(t('account.pseudonym'))}</span><input id="recoverName" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><label class="field" for="recoverKey"><span>${E(t('account.recovery_key'))}</span><input id="recoverKey" name="password" type="password" autocomplete="current-password" required></label><button class="btn btn-primary" type="submit">${E(t('account.login'))} ${HeremeIcons.icon('arrow-right')}</button></form>`;}
   function accountMenu(){
     const links=`<p class="account-links"><a href="/rules.html">${E(t('account.rules'))}</a> · <a href="/privacy.html">${E(t('account.privacy'))}</a></p>`;
     const connection=state.meta?.addresses?`<details class="connection-details"><summary>${t('connection.open_mobile')}</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="${t('connection.qr_alt')}"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">${t('connection.copy')}</button></details>`:'';
-    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?`<button class="btn btn-primary" data-action="staff-panel">${E(t('account.staff'))}</button>`:'';return wrapper(t('account.your_profile'),`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">${E(t('account.logged_in_as'))}</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} → ${E(t('account.my_profile'))}</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="notifications">${E(t('account.notifications'))}</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-danger" data-action="logout">${E(t('account.logout'))}</button></div>${connection}${links}`);}
+    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?`<button class="btn btn-primary" data-action="staff-panel">${E(t('account.staff'))}</button>`:'';return wrapper(t('account.your_profile'),`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">${E(t('account.logged_in_as'))}</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} ${HeremeIcons.icon('arrow-right')} ${E(t('account.my_profile'))}</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="notifications">${E(t('account.notifications'))}</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-danger" data-action="logout">${E(t('account.logout'))}</button></div>${connection}${links}`);}
     return wrapper(t('account.account'),`<p>${E(t('account.login_or_create'))}</p><button class="btn btn-primary" data-action="auth-login">${E(t('account.login'))}</button><button class="btn btn-secondary" data-action="auth-register">${E(t('account.create'))}</button>${connection}${links}`);
   }
   const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error(t('staff.reason_required'));state.staffReason=value;return value;};
@@ -215,16 +223,16 @@
     const comment=preserve?$('#commentText')?.value:undefined;
     let html='';
     if(state.modal==='profile')html=profileModal();
-    if(state.modal==='recovery-key')html=wrapper(t('recovery.title'),`<p>${t('recovery.intro')}</p><form id="recoverySaveForm" class="form-stack recovery-save-form" action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${E(state.csrf)}"><label class="field" for="recoveryUsername"><span>${t('account.pseudonym')}</span><input id="recoveryUsername" name="username" value="${E(state.user?.name||'')}" autocomplete="username" required></label><label class="field" for="recoveryPassword"><span>${t('account.recovery_key')}</span><span class="credential-row"><input id="recoveryPassword" class="recovery-key" name="password" type="password" value="${E(state.recoveryKey)}" autocomplete="new-password" required><button class="btn btn-secondary" type="button" data-action="toggle-recovery">${t('recovery.show')}</button></span></label><div class="recovery-actions"><button class="btn btn-secondary" type="button" data-action="copy-recovery">${t('recovery.copy')}</button><button class="btn btn-primary" type="submit">${t('recovery.save_device')} →</button></div></form><p class="notice">${t('recovery.notice')}</p>`, `<button class="text-button" data-action="recovery-continue">${t('recovery.continue_without')}</button>`);
+    if(state.modal==='recovery-key')html=wrapper(t('recovery.title'),`<p>${t('recovery.intro')}</p><form id="recoverySaveForm" class="form-stack recovery-save-form" action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${E(state.csrf)}"><label class="field" for="recoveryUsername"><span>${t('account.pseudonym')}</span><input id="recoveryUsername" name="username" value="${E(state.user?.name||'')}" autocomplete="username" required></label><label class="field" for="recoveryPassword"><span>${t('account.recovery_key')}</span><span class="credential-row"><input id="recoveryPassword" class="recovery-key" name="password" type="password" value="${E(state.recoveryKey)}" autocomplete="new-password" required><button class="btn btn-secondary" type="button" data-action="toggle-recovery">${t('recovery.show')}</button></span></label><div class="recovery-actions"><button class="btn btn-secondary" type="button" data-action="copy-recovery">${t('recovery.copy')}</button><button class="btn btn-primary" type="submit">${t('recovery.save_device')} ${HeremeIcons.icon('arrow-right')}</button></div></form><p class="notice">${t('recovery.notice')}</p>`, `<button class="text-button" data-action="recovery-continue">${t('recovery.continue_without')}</button>`);
     if(state.modal==='areas')html=wrapper(t('areas.title'),HeremeLocations.body(state.areas,state.areaGeometry,state.draftAreas),`<button class="btn btn-primary" data-action="save-areas">${t('areas.save')}</button>`,'area-modal');
     if(state.modal==='compose'){
-      const footer=`<button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${t(`design.publish_${state.postMode}`)} ↗</button>`;
+      const footer=`<button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${HeremeIcons.icon('publish')} ${t(`design.publish_${state.postMode}`)}</button>`;
       html=wrapper(t('compose.add_to_wall'),HeremeCompose.body(state),footer,'compose-modal');
     }
     if(state.modal==='detail') {
       const p=state.detailPost;
       html=`<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel detail-modal" role="dialog" aria-modal="true" aria-label="${t('detail.post')}">
-        <header class="detail-toolbar"><button class="modal-close" data-action="close-modal">× ${t('common.close')}</button>${p?`<button class="report-button" data-action="report" data-id="${p.id}">${t('detail.report')}</button><button class="btn btn-secondary" data-action="share" data-id="${p.id}">↗ ${t('detail.share')}</button>`:''}</header>
+        <header class="detail-toolbar"><button class="modal-close" data-action="close-modal">${HeremeIcons.icon('close')} ${t('common.close')}</button>${p?`<button class="report-button" data-action="report" data-id="${p.id}">${t('detail.report')}</button><button class="btn btn-secondary" data-action="share" data-id="${p.id}">${HeremeIcons.icon('share')} ${t('detail.share')}</button>`:''}</header>
         <div class="modal-content">${p&&(p.content_format!=='article'||p.article)?HeremeDetail.body(p,state.comments,state.replyTo):`<p class="loading-card">${t('detail.loading')}</p>`}</div></section></div>`;
     }
     if(state.modal==='report')html=wrapper(t('report.title'),`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>${t('report.problem')}</span><select id="reportReason">${['personal','harassment','illegal','spam','other'].map(reason=>`<option value="${reason}">${t(`report.${reason}`)}</option>`).join('')}</select></label><p class="notice">${t('report.notice')}</p><button class="btn btn-primary" type="submit">${t('report.send')}</button></form>`);
@@ -248,9 +256,15 @@
   }
   function saveDraft() {
     state.draft={title:$('#postTitle')?.value??state.draft.title,body:$('#postBody')?.value??state.draft.body,link:$('#postLink')?.value??state.draft.link};
-    if(state.modal==='compose'&&state.user){const article=state.articleDraft;article.title=$('#articleTitle')?.value??article.title;article.abstract=$('#articleAbstract')?.value??article.abstract;for(const field of document.querySelectorAll('[data-chapter-field]'))article.chapters[Number(field.closest('[data-chapter]').dataset.chapter)][field.dataset.chapterField]=field.value;localStorage.setItem('hereme_design_draft:'+state.user.id,JSON.stringify({body:state.draft.body,article}));}
+    if(state.modal==='compose'&&state.user){const article=state.articleDraft;article.title=$('#articleTitle')?.value??article.title;article.abstract=$('#articleAbstract')?.value??article.abstract;for(const field of document.querySelectorAll('[data-chapter-field]'))article.chapters[Number(field.closest('[data-chapter]').dataset.chapter)][field.dataset.chapterField]=field.value;localStorage.setItem('hereme_design_draft:'+state.user.id,JSON.stringify({body:state.draft.body,article},(key,value)=>['preview_url','pending'].includes(key)?undefined:value));}
   }
-  function updateArticlePreview(){const root=$('#articlePreview');if(!root)return;const article=state.articleDraft;root.innerHTML=`<h2>${E(article.title)}</h2><p>${E(article.abstract)}</p>${article.chapters.map((chapter,index)=>`<h3>${index+1}. ${E(chapter.heading)}</h3><p>${E(chapter.markdown)}</p>`).join('')}`;}
+  function updateArticlePreview(){
+    const root=$('#articlePreview');if(!root)return;
+    const article=state.articleDraft,theme=HeremeThemes.get(state.category),cover=article.cover;
+    const allowed=new Set([cover,...article.chapters.map(chapter=>chapter.media)].filter(Boolean).flatMap(media=>[media.url,media.thumbnail_url].filter(Boolean)));
+    const coverImage=cover?.kind==='image'?HeremeArticleView.safeMediaUrl(cover.preview_url||cover.url,{preview:true}):HeremeArticleView.safeMediaUrl(cover?.thumbnail_url,{preview:true});
+    root.innerHTML=`<article class="detail-article article-preview-reader"><header class="article-hero theme-${E(state.category)}">${coverImage?`<img class="article-hero-image" src="${E(coverImage)}" alt="">`:''}<div><p>${E(theme.label)} · ${E(t('article.label'))}</p><h1>${E(article.title||t('design.article_title'))}</h1><p>${E(article.abstract)}</p></div></header><div class="article-reader">${cover?`<section class="article-preview-cover">${HeremeArticleView.mediaButton(cover,article.title,{preview:true})}${cover.pending?`<p role="status">${E(t('design.uploading'))}</p>`:''}</section>`:''}${article.chapters.map((chapter,index)=>`<section class="article-chapter"><h2>${index+1}. ${E(chapter.heading)}</h2><div class="article-markdown">${HeremeArticleMarkdown.render(chapter.markdown,allowed)}</div>${HeremeArticleView.mediaButton(chapter.media,chapter.alt||chapter.heading,{preview:true})}${chapter.media?.pending?`<p role="status">${E(t('design.uploading'))}</p>`:''}</section>`).join('')}</div><dialog class="article-media-viewer" aria-label="${E(t('article.media_viewer'))}"><button type="button" data-action="article-media-close">${HeremeIcons.icon('close')} ${E(t('common.close'))}</button><div></div></dialog></article>`;
+  }
   function updatePreview() {
     saveDraft();
     if($('#posterPreview')){$('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.postMode==='video'?'<span class="video-preview-badge">'+HeremeIcons.icon('video')+' Video</span>':'');HeremePoster.enhance($('#posterPreview'));}
@@ -388,7 +402,7 @@
       if(!file.type.startsWith('video/'))throw new Error(t('validation.video_upload_failed'));
       const started=await api('/api/article-assets/videos',{method:'POST',body:{bytes:file.size,mime_type:file.type}});
       for(let offset=0;offset<file.size;){const end=Math.min(offset+4*1024*1024,file.size);await sendVideoChunk(started.upload_url,file.slice(offset,end),offset,end,file.size);offset=end;}
-      for(let attempt=0;attempt<90;attempt++){const result=await api(started.upload_url);if(result.status==='ready')return {media_id:started.media_id,kind:'video',name:file.name,url:result.media_url};if(['failed','rejected'].includes(result.status))throw new Error(t('validation.video_duration'));await new Promise(resolve=>setTimeout(resolve,2000));}
+      for(let attempt=0;attempt<90;attempt++){const result=await api(started.upload_url);if(result.status==='ready')return {media_id:started.media_id,kind:'video',name:file.name,url:result.media_url,thumbnail_url:result.thumbnail_url};if(['failed','rejected'].includes(result.status))throw new Error(t('validation.video_duration'));await new Promise(resolve=>setTimeout(resolve,2000));}
       throw new Error(t('design.processing'));
     }finally{state.articleUploading=false;if($('#publishButton'))$('#publishButton').disabled=false;}
   }
@@ -408,7 +422,7 @@
     if(state.articleUploading)throw new Error(t('design.uploading'));
     if(state.postMode==='poster'&&state.draft.body.trim().length<3)throw new Error(t('validation.body_required'));
     if(state.postMode==='article'&&(!state.articleDraft.title.trim()||!state.articleDraft.abstract.trim()||state.articleDraft.chapters.some(chapter=>!chapter.heading.trim()||!chapter.markdown.trim())))throw new Error(t('design.missing_content'));
-    const button=$('#publishButton');button.disabled=true;button.textContent='Publiserer …';
+    const button=$('#publishButton');button.disabled=true;button.textContent=t('design.publishing');
     $('#composeForm').inert=true;
     state.publishing=true;
     try {
@@ -436,7 +450,7 @@
       closeModal();renderFilters();await loadPosts();
       document.querySelector(`[data-post-id="${result.id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'});
       toast(t('compose.published'));
-    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.textContent=t(`design.publish_${state.postMode}`)+' ↗';throw error;}
+    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.innerHTML=HeremeIcons.icon('publish')+' '+t(`design.publish_${state.postMode}`);throw error;}
   }
   async function submitComment() {
     const id=state.detailPost.id;
@@ -458,7 +472,11 @@
     const action=target.dataset.action,id=Number(target.dataset.id);
     if(action==='author-menu'){openAuthorMenu(target);return;}
     if(action==='show-public-profile'){const userId=target.dataset.userId;closeAuthorMenu();await navigate(`/u/${encodeURIComponent(userId)}`);return;}
-    if(action==='start-author-chat'){location.assign(`/chat?user=${encodeURIComponent(target.dataset.userId)}`);return;}
+    if(action==='start-author-chat'){
+      const params=new URLSearchParams({user:target.dataset.userId});
+      if(/^\/\?post=\d+$/.test(location.pathname+location.search)||/^\/u\/[A-Za-z0-9_-]{1,100}$/.test(location.pathname))params.set('returnTo',location.pathname+location.search);
+      location.assign(`/chat?${params}`);return;
+    }
     if(action==='public-profile-back'){if(history.state?.wall)history.back();else await navigate('/');return;}
     if(action==='comment-vote'){await voteComment(id,Number(target.dataset.value));return;}
     if(action==='dismiss-modal'){if(event.target===target)closeModal();return;}
@@ -514,15 +532,15 @@
     if(action==='format-poster'||action==='format-article'){saveDraft();state.postMode=action==='format-poster'?'poster':'article';renderModal({preserve:true});return;}
     if(action==='chapter-add'){saveDraft();state.articleDraft.chapters.push({heading:'',markdown:'',alt:'',media_id:null});renderModal({preserve:true});return;}
     if(['chapter-up','chapter-down','chapter-remove'].includes(action)){saveDraft();const chapters=state.articleDraft.chapters,index=Number(target.dataset.index);if(action==='chapter-remove'&&chapters.length>1)chapters.splice(index,1);if(action==='chapter-up'&&index>0)[chapters[index-1],chapters[index]]=[chapters[index],chapters[index-1]];if(action==='chapter-down'&&index<chapters.length-1)[chapters[index+1],chapters[index]]=[chapters[index],chapters[index+1]];renderModal({preserve:true});return;}
-    if(action==='article-cover-remove'){saveDraft();state.articleDraft.cover=null;renderModal({preserve:true});return;}
-    if(action==='article-media-remove'){saveDraft();const chapter=state.articleDraft.chapters[Number(target.dataset.index)];chapter.media_id=null;chapter.media_name='';renderModal({preserve:true});return;}
+    if(action==='article-cover-remove'){saveDraft();if(state.articleDraft.cover?.preview_url)URL.revokeObjectURL(state.articleDraft.cover.preview_url);state.articleDraft.cover=null;renderModal({preserve:true});return;}
+    if(action==='article-media-remove'){saveDraft();const chapter=state.articleDraft.chapters[Number(target.dataset.index)];if(chapter.media?.preview_url)URL.revokeObjectURL(chapter.media.preview_url);chapter.media_id=null;chapter.media_name='';chapter.media=null;renderModal({preserve:true});return;}
     if(action==='remove-photo'){saveDraft();resetPhoto();renderModal({preserve:true});return;}
     if(action==='pause-upload'){state.videoPaused=true;target.dataset.action='resume-upload';target.textContent=t('compose.resume');return;}
     if(action==='resume-upload'){state.videoPaused=false;state.videoResume?.();state.videoResume=null;target.dataset.action='pause-upload';target.textContent='Pause';return;}
     if(action==='cancel-upload'){state.videoCancelled=true;state.videoPaused=false;state.videoResume?.();state.videoXhr?.abort();if(state.videoUpload)await api(state.videoUpload.upload_url,{method:'DELETE'}).catch(()=>{});return;}
     if(action==='detail'){await openDetail(id);return;}
-    if(action==='article-media'){const dialog=$('.article-media-viewer'),body=dialog.querySelector('div'),src=target.dataset.src;if(!/^\/media\/[a-zA-Z0-9-]+\//.test(src))throw new Error('Invalid article media path.');body.replaceChildren();const media=document.createElement(target.dataset.kind==='video'?'video':'img');media.src=src;if(media.tagName==='VIDEO')media.controls=true;else media.alt=target.getAttribute('aria-label')||'';body.append(media);state.articleMediaFocus=target;dialog.showModal();return;}
-    if(action==='article-media-close'){const dialog=$('.article-media-viewer');dialog.close();dialog.querySelector('video')?.pause();state.articleMediaFocus?.focus({preventScroll:true});return;}
+    if(action==='article-media'){const dialog=target.closest('.detail-article').querySelector('.article-media-viewer'),body=dialog.querySelector('div'),src=HeremeArticleView.safeMediaUrl(target.dataset.src,{preview:state.modal==='compose'});if(!src)throw new Error('Invalid article media path.');body.replaceChildren();const media=document.createElement(target.dataset.kind==='video'?'video':'img');media.src=src;if(media.tagName==='VIDEO')media.controls=true;else media.alt=target.getAttribute('aria-label')||'';body.append(media);state.articleMediaFocus=target;dialog.showModal();return;}
+    if(action==='article-media-close'){const dialog=target.closest('.article-media-viewer');dialog.close();dialog.querySelector('video')?.pause();state.articleMediaFocus?.focus({preventScroll:true});return;}
     if(action==='vote'){await vote(id,Number(target.dataset.value));return;}
     if(action==='share'){await share(id);return;}
     if(action==='comments'){$('#discussion').scrollIntoView({behavior:'smooth'});$('#commentText').focus({preventScroll:true});return;}
@@ -571,7 +589,23 @@
     if(input.id==='textPosition'){state.textPosition=input.value;updatePreview();}
     if(input.id==='postArea'){state.postArea=input.value;}
     if(input.name==='postCategory'){state.category=input.value;updatePreview();}
-    if(input.id==='articleCoverInput'||input.dataset.articleFile!==undefined){saveDraft();toast(t('design.uploading'));const uploaded=await uploadArticleAsset(input.files?.[0]);if(input.id==='articleCoverInput')state.articleDraft.cover=uploaded;else{const chapter=state.articleDraft.chapters[Number(input.dataset.articleFile)];chapter.media_id=uploaded.media_id;chapter.media_name=uploaded.name;chapter.media_kind=uploaded.kind;}saveDraft();if(state.modal==='compose')renderModal({preserve:true});return;}
+    if(input.id==='articleCoverInput'||input.dataset.articleFile!==undefined){
+      const file=input.files?.[0];if(!file)return;if(state.articleUploading)throw new Error(t('design.uploading'));
+      saveDraft();const cover=input.id==='articleCoverInput',chapter=cover?null:state.articleDraft.chapters[Number(input.dataset.articleFile)];
+      const previous=cover?state.articleDraft.cover:chapter.media,preview_url=URL.createObjectURL(file);
+      const pending={kind:file.type.startsWith('video/')?'video':'image',name:file.name,preview_url,pending:true};
+      if(cover)state.articleDraft.cover=pending;else chapter.media=pending;
+      input.closest('.design-media-actions')?.nextElementSibling?.replaceChildren(document.createTextNode(t('design.uploading')));
+      updateArticlePreview();
+      try{
+        const uploaded=await uploadArticleAsset(file);
+        if(cover&&state.articleDraft.cover===pending)state.articleDraft.cover=uploaded;
+        if(chapter&&state.articleDraft.chapters.includes(chapter)&&chapter.media===pending){chapter.media=uploaded;chapter.media_id=uploaded.media_id;chapter.media_name=uploaded.name;chapter.media_kind=uploaded.kind;}
+        saveDraft();
+      }catch(error){if(cover&&state.articleDraft.cover===pending)state.articleDraft.cover=previous;if(chapter&&chapter.media===pending)chapter.media=previous;throw error;}
+      finally{URL.revokeObjectURL(preview_url);if(state.modal==='compose')renderModal({preserve:true});}
+      return;
+    }
     if(['postFileInput','postCameraInput'].includes(input.id))await loadPhoto(input.files?.[0]);
     if(['postVideoInput','postVideoCameraInput'].includes(input.id))await loadVideo(input.files?.[0]);
   }

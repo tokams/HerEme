@@ -49,9 +49,11 @@
   }
   function selectedRow(){return state.chats.find(row=>row.id===state.selection?.id);}
   function draftKey(){return state.selection?.type==='draft'?`user:${state.selection.target.id}`:state.selection?.id||'';}
+  function returnRoute(){const value=new URLSearchParams(location.search).get('returnTo');return value&&(/^\/\?post=[1-9]\d*$/.test(value)||/^\/u\/[A-Za-z0-9_-]{1,100}$/.test(value))?value:null;}
+  function canonicalChatRoute(id){const params=new URLSearchParams();const source=returnRoute();if(source)params.set('returnTo',source);return `/chat/${encodeURIComponent(id)}${params.size?'?'+params:''}`;}
   function draft(){const key=draftKey();if(!state.drafts.has(key))state.drafts.set(key,{text:'',files:[]});return state.drafts.get(key);}
   function mediaKind(file){return file.type.startsWith('image/')?'image':file.type.startsWith('video/')?'video':'file';}
-  function renderStage(){const current=draft(),tray=$('#stagedFiles');tray.hidden=!current.files.length;tray.innerHTML=current.files.map((item,index)=>`<div class="staged-item">${item.kind==='image'?`<img src="${item.url}" alt="">`:`<img src="/assets/icons/chat-attach-${item.kind}.svg" alt="">`}<span>${escapeHtml(item.file.name)}</span><small>${escapeHtml(item.status||t('upload.ready'))}</small><button type="button" data-remove-file="${index}" aria-label="${escapeHtml(t('action.remove_file',{name:item.file.name}))}">×</button></div>`).join('');
+  function renderStage(){const current=draft(),tray=$('#stagedFiles');tray.hidden=!current.files.length;tray.innerHTML=current.files.map((item,index)=>`<div class="staged-item">${item.kind==='image'?`<img src="${item.url}" alt="">`:`<img src="/assets/icons/chat-attach-${item.kind}.svg" alt="">`}<span>${escapeHtml(item.file.name)}</span><small>${escapeHtml(item.status||t('upload.ready'))}</small><button type="button" data-remove-file="${index}" aria-label="${escapeHtml(t('action.remove_file',{name:item.file.name}))}">${HeremeIcons.icon('close')}</button></div>`).join('');
     const locked=state.sending||['incoming','invited','declined'].includes(selectedRow()?.state)||state.selection?.declined;
     $('#sendMessage').disabled=locked||!($('#messageInput').value.trim()||current.files.length);
     for(const id of ['pickImage','pickVideo','pickFile'])$('#'+id).disabled=locked;
@@ -84,7 +86,7 @@
     $('#conversationDetails').hidden=true;$('#toggleDetails').setAttribute('aria-expanded','false');state.detailsOpen=false;
     $('#conversationTitle').focus?.();
   }
-  function resetConversation(){attachmentPopover(false);state.selection=null;$('#chatShell').classList.remove('show-conversation');$('#conversationContent').hidden=true;$('#conversationEmpty').hidden=false;renderInbox();}
+  function resetConversation(){if(state.selection)saveDraft();attachmentPopover(false);state.selection=null;$('#chatShell').classList.remove('show-conversation');$('#conversationContent').hidden=true;$('#conversationEmpty').hidden=false;renderInbox();}
   function setNotice(message){$('#conversationNotice').textContent=message;$('#conversationNotice').hidden=!message;}
   function setDecision(row){
     const pending=row?.state==='incoming'||row?.state==='invited';$('#decisionActions').hidden=!pending;
@@ -147,7 +149,7 @@
   async function openChat(row,{route=true,targetMessage=null}={}){
     if(!row)return;saveDraft();state.selection={type:'chat',id:row.id};state.historyLimit=50;$('#uploadStatus').textContent='';$('#uploadProgress').hidden=true;showConversation();restoreDraft();
     await updateConversation(row,targetMessage);if(!targetMessage)$('#messageInput').focus();renderInbox();
-    if(route&&location.pathname!==`/chat/${row.id}`)history.pushState({chat:row.id},'',`/chat/${encodeURIComponent(row.id)}`);
+    if(route&&location.pathname!==`/chat/${row.id}`)history.pushState({chat:row.id,fromInbox:true},'',canonicalChatRoute(row.id));
   }
   async function updateConversation(row,targetMessage=null){
     if(state.selection?.id!==row.id)return;
@@ -175,7 +177,7 @@
     }
   }
   function renderSelected(){
-    $('#selectedPeople').innerHTML=[...state.selected.values()].map(user=>`<span class="person-chip">${escapeHtml(user.name)}<button type="button" data-remove="${escapeHtml(user.id)}" aria-label="${escapeHtml(t('action.remove_person',{name:user.name}))}">×</button></span>`).join('');
+    $('#selectedPeople').innerHTML=[...state.selected.values()].map(user=>`<span class="person-chip">${escapeHtml(user.name)}<button type="button" data-remove="${escapeHtml(user.id)}" aria-label="${escapeHtml(t('action.remove_person',{name:user.name}))}">${HeremeIcons.icon('close')}</button></span>`).join('');
     $('#confirmGroup').disabled=state.selected.size===0;
   }
   function renderSuggestions(users){
@@ -194,12 +196,12 @@
     if([...query].length<2){state.suggestions=[];$('#searchResults').hidden=true;$('#usernameSearch').setAttribute('aria-expanded','false');$('#searchStatus').textContent=query?t('search.minimum'):'';return;}
     $('#searchStatus').textContent=t('search.searching');state.searchTimer=setTimeout(()=>lookup(query,sequence),250);
   }
-  async function chooseUser(user){
+  async function chooseUser(user,{fromRoute=false}={}){
     $('#searchResults').hidden=true;$('#usernameSearch').setAttribute('aria-expanded','false');
     if(state.mode==='group'){state.selected.set(user.id,user);renderSelected();$('#usernameSearch').value='';searchChanged();$('#usernameSearch').focus();return;}
     saveDraft();const result=await api(`/api/chat/direct/${encodeURIComponent(user.id)}`);
-    if(result.chat_id){await refresh();const row=state.chats.find(item=>item.id===result.chat_id);if(row)await openChat(row);else throw Error(t('error.unavailable'));}
-    else if(result.state==='incoming'){await refresh();const row=state.chats.find(item=>item.state==='incoming'&&item.name===user.name);if(row)await openChat(row);else throw Error(t('error.open_request'));}
+    if(result.chat_id){await refresh();const row=state.chats.find(item=>item.id===result.chat_id);if(row){await openChat(row,{route:!fromRoute});if(fromRoute)history.replaceState({chat:row.id},'',canonicalChatRoute(row.id));}else throw Error(t('error.unavailable'));}
+    else if(result.state==='incoming'){await refresh();const row=state.chats.find(item=>item.state==='incoming'&&item.name===user.name);if(row){await openChat(row,{route:!fromRoute});if(fromRoute)history.replaceState({chat:row.id},'',canonicalChatRoute(row.id));}else throw Error(t('error.open_request'));}
     else renderDraft(user,result.state==='declined');
   }
   async function sendMessage(event){
@@ -211,7 +213,7 @@
       const payload={body,client_key:key,attachment_ids:files.map(item=>item.id)};
       if(selected.type==='draft'){
         const result=await api('/api/chats/direct',{method:'POST',body:{...payload,target_user_id:selected.target.id}});
-        state.drafts.delete(draftId);if(draftKey()===draftId)$('#messageInput').value='';releaseFiles(files);await refresh();const row=state.chats.find(item=>item.id===result.chat_id);if(row&&state.selection===selected)await openChat(row);
+        state.drafts.delete(draftId);if(draftKey()===draftId)$('#messageInput').value='';releaseFiles(files);await refresh();const row=state.chats.find(item=>item.id===result.chat_id);if(row&&state.selection===selected){await openChat(row,{route:false});history.replaceState({chat:row.id},'',canonicalChatRoute(row.id));}
       }else{
         await api(`/api/chats/${encodeURIComponent(selected.id)}/messages`,{method:'POST',body:payload});
         state.drafts.delete(draftId);if(draftKey()===draftId)$('#messageInput').value='';releaseFiles(files);await refresh();
@@ -259,7 +261,7 @@
   $('#cancelGroup').addEventListener('click',()=>{state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;searchChanged();renderInbox();});
   $('#selectedPeople').addEventListener('click',event=>{const button=event.target.closest('[data-remove]');if(!button)return;state.selected.delete(button.dataset.remove);renderSelected();searchChanged();});
   $('#confirmGroup').addEventListener('click',run(async()=>{if(!state.selected.size)return;const result=await api('/api/chats',{method:'POST',body:{name:$('#groupName').value,recipients:[...state.selected.keys()]}});state.mode='inbox';state.selected.clear();$('#groupBuilder').hidden=true;$('#groupName').value='';await refresh();const row=state.chats.find(item=>item.id===result.id);if(row)await openChat(row);}));
-  $('#backToInbox').addEventListener('click',()=>{if(location.pathname.startsWith('/chat/')&&history.state?.chat){history.back();return;}if(location.pathname.startsWith('/chat/'))history.replaceState({},'', '/chat');resetConversation();$('#usernameSearch').focus();});
+  $('#backToInbox').addEventListener('click',()=>{const source=returnRoute();if(source){location.replace(source);return;}if(location.pathname.startsWith('/chat/')&&history.state?.fromInbox){history.back();return;}if(location.pathname!=='/chat'||location.search)history.replaceState({},'', '/chat');resetConversation();$('#usernameSearch').focus();});
   $('#messageForm').addEventListener('submit',run(sendMessage));
   $('#messageInput').addEventListener('input',()=>{saveDraft();renderStage();});
   $('#messageInput').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();$('#messageForm').requestSubmit();}});
@@ -289,7 +291,7 @@
     socket.onclose=()=>{if(state.socket!==socket)return;status.hidden=false;status.textContent=t('connection.reconnecting');const delay=Math.min(30000,1000*2**Math.min(state.reconnect++,5));setTimeout(connectSocket,delay);};
     socket.onerror=()=>socket.close();
   }
-  async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();const userId=location.pathname==='/chat'?new URLSearchParams(location.search).get('user'):null;if(userId&&/^[A-Za-z0-9_-]{1,100}$/.test(userId)){const person=await api(`/api/users/${encodeURIComponent(userId)}/public`);await chooseUser({id:person.public_id,name:person.username,avatar_url:person.avatar_url});}return;}const value=new URLSearchParams(location.search).get('message'),targetMessage=value&&/^\d+$/.test(value)?Number(value):null,row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false,targetMessage:Number.isSafeInteger(targetMessage)?targetMessage:null});else{resetConversation();setNotice(t('error.no_access'));}}
+  async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();const userId=location.pathname==='/chat'?new URLSearchParams(location.search).get('user'):null;if(userId){if(!/^[A-Za-z0-9_-]{1,100}$/.test(userId)){history.replaceState({},'', '/chat');return;}try{const person=await api(`/api/users/${encodeURIComponent(userId)}/public`);await chooseUser({id:person.public_id,name:person.username,avatar_url:person.avatar_url},{fromRoute:true});}catch(error){if(error.status!==404)throw error;history.replaceState({},'', '/chat');setNotice(t('error.user_not_found'));}}return;}const value=new URLSearchParams(location.search).get('message'),targetMessage=value&&/^\d+$/.test(value)?Number(value):null,row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false,targetMessage:Number.isSafeInteger(targetMessage)?targetMessage:null});else{resetConversation();setNotice(t('error.no_access'));}}
   async function init(){try{translateStatic();window.addEventListener('hereme:language',()=>run(languageChanged)());const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();await resolveRoute();connectSocket();window.addEventListener('popstate',()=>run(resolveRoute)());setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}catch(error){if(error.status===401||/aktiv sesjon/i.test(error.message)){window.HeremeAuth.open({message:t('auth.required'),onSuccess:()=>location.reload(),onCancel:()=>location.assign('/')});return;}throw error;}}
   i18n().ready.then(()=>run(init)());
 })();

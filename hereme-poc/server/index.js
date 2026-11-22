@@ -193,6 +193,7 @@ app.get('/api/activity',(req,res)=>{const current=S.identity.readSession(req,res
 app.get('/api/posts/:id',(req,res)=>{const current=S.identity.readSession(req,res),post=S.posts.visible(Number(req.params.id),current?.id);if(!post)return errors(res,404,'POST_NOT_FOUND','Innlegget finnes ikke.');res.json({post});});
 app.post('/api/posts',write('post:create',12),imageUpload.single('image'),async(req,res)=>{const result=await S.posts.create(req.body||{},req.auth,req.file),post=S.posts.visible(result.id);if(post)await S.sharePreviews.queue(post);res.status(201).json(result);});
 app.post('/api/article-assets/images',write('post:create',24),imageUpload.single('image'),async(req,res)=>res.status(201).json(await S.articles.uploadImage(req.file,req.auth)));
+app.get('/api/article-assets/:id',(req,res)=>{const user=S.identity.readSession(req,res);if(!user)return errors(res,401,'AUTH_REQUIRED','Innlogging kreves.');res.json(S.articles.asset(req.params.id,user));});
 app.post('/api/articles',write('post:create',12),async(req,res)=>{const result=S.articles.create(req.body||{},req.auth),post=S.posts.visible(result.id);if(post)await S.sharePreviews.queue(post);res.status(201).json(result);});
 app.post('/api/posts/:id/vote',write('vote',180),(req,res)=>res.json(S.interactions.vote(req.params.id,req.auth,req.body?.value)));
 app.get('/api/posts/:id/comments',(req,res)=>{const current=S.identity.readSession(req,res);res.json(S.interactions.comments(req.params.id,{...req.query,userId:current?.id}));});

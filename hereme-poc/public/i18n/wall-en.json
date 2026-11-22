@@ -360,6 +360,7 @@
   "wall.design.add_chapter": "Add chapter",
   "wall.design.publish_poster": "Publish poster",
   "wall.design.publish_article": "Publish article",
+  "wall.design.publishing": "Publishing…",
   "wall.design.uploading": "Uploading media…",
   "wall.design.processing": "Video is processing. Wait until it is ready before publishing.",
   "wall.design.missing_content": "Complete the title, summary and each chapter before publishing."

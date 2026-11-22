@@ -360,6 +360,7 @@
   "wall.design.add_chapter": "Legg til kapittel",
   "wall.design.publish_poster": "Publiser plakat",
   "wall.design.publish_article": "Publiser artikkel",
+  "wall.design.publishing": "Publiserer…",
   "wall.design.uploading": "Laster opp medie…",
   "wall.design.processing": "Videoen behandles. Vent til den er klar før publisering.",
   "wall.design.missing_content": "Fyll ut tittel, sammendrag og hvert kapittel før publisering."

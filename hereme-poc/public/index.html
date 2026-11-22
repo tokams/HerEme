@@ -23,6 +23,8 @@
   <script src="/feed.js" defer></script>
   <script src="/shell.js" defer></script>
   <script src="/compose.js" defer></script>
+  <script src="/article-markdown.js" defer></script>
+  <script src="/article-view.js" defer></script>
   <script src="/detail.js" defer></script>
   <script src="/locations.js" defer></script>
   <script src="/passkeys.js" defer></script>
@@ -57,8 +59,8 @@
     <aside class="left-panel" id="leftPanel" aria-label="Navigasjon og kategorier">
       <nav class="desktop-navigation" aria-label="Utforsk"><p class="eyebrow">Nabolaget</p><button class="nav-link" data-action="home"><span data-icon="grid"></span> Hele veggen</button><button class="nav-link" data-action="compose"><span data-icon="plus"></span> Legg ut</button></nav>
       <fieldset class="category-filters"><legend>Kategorier</legend><div id="categoryFilters"></div></fieldset>
-      <button class="text-button reset-filters" data-action="reset-filters">Vis alle kategorier ↗</button>
-      <div class="desktop-navigation sidebar-note"><p class="eyebrow">Plass til alle</p><p>Et spørsmål. Et øyeblikk. En god drøs.</p><p class="muted-note">Demobilder og fiktive innlegg er merket. Rapporter innhold inne i innlegget.</p><button class="text-button" data-action="menu">Om HerEme / mobiladresse ↗</button></div>
+      <button class="text-button reset-filters" data-action="reset-filters">Vis alle kategorier <span data-icon="arrow-right"></span></button>
+      <div class="desktop-navigation sidebar-note"><p class="eyebrow">Plass til alle</p><p>Et spørsmål. Et øyeblikk. En god drøs.</p><p class="muted-note">Demobilder og fiktive innlegg er merket. Rapporter innhold inne i innlegget.</p><button class="text-button" data-action="menu">Om HerEme / mobiladresse <span data-icon="arrow-right"></span></button></div>
     </aside>
     <main id="mainContent" tabindex="-1">
       <nav id="simpleCategories" class="simple-categories" aria-label="Kategorier"></nav>
@@ -68,7 +70,7 @@
     <aside class="right-panel" id="rightPanel" aria-label="Samtaler og aktivitet"><div id="activityPanel"></div></aside>
   </div>
   <main id="profileRoot" class="profile-root" tabindex="-1" hidden></main>
-  <dialog id="avatarDialog" class="avatar-dialog" aria-labelledby="avatarDialogTitle"><form method="dialog"><header><h2 id="avatarDialogTitle"></h2><button type="button" id="avatarClose" aria-label="Close">×</button></header><p id="avatarPrivacy"></p><input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp"><canvas id="avatarPreview" width="256" height="256" hidden></canvas><div id="avatarCrop" hidden><label><span id="avatarZoomLabel"></span><input id="avatarZoom" type="range" min="1" max="3" step="0.05" value="1"></label><label><span id="avatarXLabel"></span><input id="avatarX" type="range" min="0" max="100" value="50"></label><label><span id="avatarYLabel"></span><input id="avatarY" type="range" min="0" max="100" value="50"></label></div><p id="avatarError" role="alert" hidden></p><footer><button type="button" id="avatarSave" class="btn btn-primary" disabled></button><button type="button" id="avatarRemove" class="btn btn-secondary"></button><button type="button" id="avatarCancel" class="btn btn-secondary"></button></footer></form></dialog>
+  <dialog id="avatarDialog" class="avatar-dialog" aria-labelledby="avatarDialogTitle"><form method="dialog"><header><h2 id="avatarDialogTitle"></h2><button type="button" id="avatarClose" aria-label="Close"><span data-icon="close"></span></button></header><p id="avatarPrivacy"></p><input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp"><canvas id="avatarPreview" width="256" height="256" hidden></canvas><div id="avatarCrop" hidden><label><span id="avatarZoomLabel"></span><input id="avatarZoom" type="range" min="1" max="3" step="0.05" value="1"></label><label><span id="avatarXLabel"></span><input id="avatarX" type="range" min="0" max="100" value="50"></label><label><span id="avatarYLabel"></span><input id="avatarY" type="range" min="0" max="100" value="50"></label></div><p id="avatarError" role="alert" hidden></p><footer><button type="button" id="avatarSave" class="btn btn-primary" disabled></button><button type="button" id="avatarRemove" class="btn btn-secondary"></button><button type="button" id="avatarCancel" class="btn btn-secondary"></button></footer></form></dialog>
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-container" aria-live="polite"></div>
 </body>

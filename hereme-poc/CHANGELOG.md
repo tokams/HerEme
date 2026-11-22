@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22 — E20 UI refinement (local worktree)
+
+- Installed the supplied Source Sans 3 WOFF2 with OFL notice and static server MIME support.
+- Restored article-to-chat return routing for drafts, pending requests and accepted conversations; a direct chat link without a source returns to inbox.
+- Shared safe Markdown and media rendering between published articles and their editor preview. Added cover/chapter media preview, draft media hydration, SVG controls and compact mobile composer layout.
+- Expanded browser checks for navigation, media preview, font loading and 375/390/430px composer controls. Physical iPhone/PWA and real article video processing remain open verification gates.
+
 ## 2026-11-22 — Poster and article formats (E20, local worktree)
 
 - Added additive schema 22 content projections. Existing posts are reshaped into full poster text while retaining their original records, relationships, votes, comments, and media.
