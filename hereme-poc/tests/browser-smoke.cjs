@@ -237,6 +237,9 @@ async function publish(page,title) {
   await page.locator('#articleTitle').fill('Unfinished article');
   await page.locator('[data-action=article-save-draft]').click();await page.locator('.modal-close').click();
   await page.locator('.profile-chip').click();
+  await page.locator(`.profile-post-edit[data-id="${articleId}"]`).click();
+  assert.equal(await page.locator('#articleTitle').inputValue(),'Oppdaterte turer i Rogaland');
+  await page.locator('.modal-close').click();
   await page.locator('[data-action=draft-open]').filter({hasText:'Unfinished article'}).click();
   assert.equal(await page.locator('#articleTitle').inputValue(),'Unfinished article');
   page.once('dialog',dialog=>dialog.accept());await page.locator('[data-action=article-delete-draft]').click();

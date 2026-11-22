@@ -18,10 +18,10 @@ function createProfileService(db,{posts,avatars}){
     const order=sort==='new'?'p.created_at DESC,abs(p.id) DESC':`${score} DESC,p.created_at DESC,abs(p.id) DESC`;
     const where=['p.author_id=?'],params=[user.id];
     if(cursor){const point=decode(cursor);if(point.sort!==sort)fail('INVALID_CURSOR','Sidepekeren tilhører en annen sortering.');if(sort==='new'){where.push('(p.created_at<? OR (p.created_at=? AND abs(p.id)<?))');params.push(point.created_at,point.created_at,point.id);}else{where.push(`(${score}<? OR (${score}=? AND (p.created_at<? OR (p.created_at=? AND abs(p.id)<?))))`);params.push(point.score,point.score,point.created_at,point.created_at,point.id);}}
-    const rows=db.prepare(`SELECT p.id,p.title,p.status,p.created_at,d.category,${score} score,
+    const rows=db.prepare(`SELECT p.id,p.title,p.status,p.created_at,d.category,CASE WHEN a.post_id IS NULL THEN 'poster' ELSE 'article' END content_format,${score} score,
       (SELECT count(*) FROM votes v WHERE v.post_id=p.id AND v.value=1 AND v.user_id<>p.author_id) upvotes_received,
       (SELECT count(*) FROM comments c WHERE c.post_id=p.id) comment_count
-      FROM posts p LEFT JOIN post_design d ON d.post_id=p.id WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`).all(...params,limit+1);
+      FROM posts p LEFT JOIN post_design d ON d.post_id=p.id LEFT JOIN articles a ON a.post_id=p.id WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`).all(...params,limit+1);
     const hasMore=rows.length>limit;if(hasMore)rows.pop();const last=rows.at(-1);
     const next_cursor=hasMore?encode({sort,created_at:last.created_at,id:Math.abs(last.id),score:last.score}):null;
     return {profile:{name:author.name,created_at:author.created_at,...avatars.urls(user.id)},metrics,posts:rows,next_cursor,has_more:hasMore};

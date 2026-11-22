@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-22 — Article edit access from profile
+
+- Added a direct Edit article action to each published article in My posts. The action opens the owner's existing private working copy. Browser smoke covers this path on the profile page.
+
 ## 2026-11-22 — E21 drafts and revision history (local worktree)
 
 - Added additive schema 23 with idempotent legacy v1 capture, owner-only article drafts, conflict-safe publishing and poster text edits. Existing post IDs, votes, comments and media remain attached.

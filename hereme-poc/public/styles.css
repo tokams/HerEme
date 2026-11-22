@@ -632,6 +632,7 @@ body,input,button,textarea,select{font-family:var(--font-reading)}
 .historical-version>img,.historical-version>video,.historical-version .article-chapter img,.historical-version .article-chapter video{display:block;max-width:100%;max-height:65vh;margin:16px auto}
 .profile-posts:last-child .profile-post-row{grid-template-columns:minmax(0,1fr) 100px 170px}
 .profile-posts:last-child li>.btn{margin:6px 14px}
+.profile-post-edit{margin:8px 13px 12px;min-height:44px}
 .detail-toolbar,.compose-modal .modal-footer{flex-wrap:wrap}
 .detail-toolbar>.btn,.compose-modal .modal-footer>.btn{min-height:44px}
 @media(max-width:760px){
