@@ -21,6 +21,17 @@
       <button class="comment-count" data-action="${detail?'comments':'detail'}" data-id="${p.id}" aria-label="${E(t('post.comment_count',{count:p.comment_count}))}">${icon('comment')}<span>${p.comment_count}</span></button>
     </div>`;
   }
+  function updateVotes(root,id,p) {
+    if(!root)return;
+    for(const controls of root.querySelectorAll(`[data-action="vote"][data-id="${id}"]`)) {
+      controls.setAttribute('aria-pressed',String(p.my_vote===Number(controls.dataset.value)));
+    }
+    for(const score of root.querySelectorAll(`[data-post-id="${id}"] .vote-number, .detail-modal [data-action="vote"][data-id="${id}"] ~ .vote-number`)) {
+      score.textContent=(p.score>0?'+':'')+p.score;
+      score.classList.toggle('negative',p.score<0);
+      score.setAttribute('aria-label',t('post.net_score',{score:p.score}));
+    }
+  }
   function header(p) {
     const t=Themes.get(p.category);
     return `<div class="tile-header"><span class="category-name">${icon(t.id)}${E(t.label)}</span><time datetime="${E(p.created_at.replace(' ','T'))}Z">${ago(p.created_at)}</time></div>`;
@@ -36,6 +47,6 @@
   function categoryButtons(selected) {
     return Themes.themes.map(theme=>{const localized=Themes.get(theme.id);return `<button class="category-button theme-${theme.id}" data-action="category" data-category="${theme.id}" aria-pressed="${selected.includes(theme.id)}" title="${E(localized.description)}">${icon(theme.id)}<span>${E(localized.label)}</span></button>`;}).join('');
   }
-  const api={card,header,controls,filters,categoryButtons,ago,demo,escape:E,image:Poster.image};
+  const api={card,header,controls,updateVotes,filters,categoryButtons,ago,demo,escape:E,image:Poster.image};
   if(node)module.exports=api;else root.HeremeFeed=api;
 })(globalThis);

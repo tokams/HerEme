@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22 — Mobile UI stabilization (E16-01)
+
+- Update vote controls and score in place, keeping poster media mounted and the wall stable during rapid votes and request failures. Distinguish failed images from intentional text-only posters.
+- Fit mobile chat navigation, attachments and composer to narrow screens with square controls and truncating titles.
+- Compact the mobile wall header, retain 44 px targets, and paint the standalone iOS status inset while scrolling.
+- Add focused responsive browser checks and diagnosis notes; installed iOS Safari/PWA checks remain manual.
+
 ## 2026-11-22 — Notification icon and quick logout
 
 - Render the notification bell inline in the header and inbox so it does not

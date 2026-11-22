@@ -10,7 +10,7 @@
     category:'story',postMode:null,composeStep:'select',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
+    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={};
@@ -255,21 +255,38 @@
     } catch(error) {if(request!==state.detailRequest)return;closeModal({fromRoute:true});if(new URLSearchParams(location.search).has('post'))history.replaceState(history.state,'','/');renderWall();toast('Dette innholdet er ikke lenger tilgjengelig.');}
   }
   async function vote(id,value) {
-    if(!requireUser(()=>vote(id,value))||state.voting.has(id))return;
-    state.voting.add(id);
-    try {
-      const result=await api(`/api/posts/${id}/vote`,{method:'POST',body:{value}});
-      const focused=document.activeElement;
-      const restoreFocus=focused?.dataset.action==='vote'&&Number(focused.dataset.id)===id;
-      const focusRoot=focused?.closest('.detail-modal')?'.detail-modal':'#feed';
-      const p=state.posts.find(post=>post.id===id);if(p)Object.assign(p,result);
-      renderWall();
-      if(state.detailPost?.id===id) {
-        Object.assign(state.detailPost,result);
-        if(state.modal==='detail')renderModal({preserve:true});
-      }
-      if(restoreFocus)document.querySelector(`${focusRoot} [data-action="vote"][data-id="${id}"][data-value="${value}"]`)?.focus({preventScroll:true});
-    } finally {state.voting.delete(id);}
+    if(!requireUser(()=>vote(id,value)))return;
+    const post=state.posts.find(item=>item.id===id)||state.detailPost;
+    if(!post)return;
+    let operation=state.voting.get(id);
+    if(!operation){operation={queue:[],confirmed:{score:post.score,my_vote:post.my_vote},running:null};state.voting.set(id,operation);}
+    operation.queue.push(value);
+    const nextVote=post.my_vote===value?0:value;
+    post.score+=nextVote-post.my_vote;post.my_vote=nextVote;
+    if(state.detailPost?.id===id&&state.detailPost!==post)Object.assign(state.detailPost,{score:post.score,my_vote:post.my_vote});
+    HeremeFeed.updateVotes(document,id,post);
+    if(operation.running)return operation.running;
+    operation.running=(async()=>{
+      try {
+        while(operation.queue.length) {
+          const requested=operation.queue[0];
+          const result=await api(`/api/posts/${id}/vote`,{method:'POST',body:{value:requested}});
+          operation.queue.shift();operation.confirmed=result;
+          let projected={...result};
+          for(const queued of operation.queue){const my_vote=projected.my_vote===queued?0:queued;projected={score:projected.score+my_vote-projected.my_vote,my_vote};}
+          const wallPost=state.posts.find(item=>item.id===id);if(wallPost)Object.assign(wallPost,projected);
+          if(state.detailPost?.id===id)Object.assign(state.detailPost,projected);
+          HeremeFeed.updateVotes(document,id,projected);
+        }
+      } catch(error) {
+        operation.queue.length=0;
+        const wallPost=state.posts.find(item=>item.id===id);if(wallPost)Object.assign(wallPost,operation.confirmed);
+        if(state.detailPost?.id===id)Object.assign(state.detailPost,operation.confirmed);
+        HeremeFeed.updateVotes(document,id,operation.confirmed);
+        throw error;
+      } finally {state.voting.delete(id);}
+    })();
+    return operation.running;
   }
   async function share(id) {
     const url=new URL('/',location.origin);url.searchParams.set('post',id);

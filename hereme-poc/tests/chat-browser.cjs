@@ -18,6 +18,17 @@ const app=require('../server/index'),S=require('../server/services');
     for(const page of [alice,bob])page.on('pageerror',error=>errors.push(error.message));
     await alice.goto(base+'/chat.html');await alice.locator('#inboxEmpty').waitFor({state:'visible'});
     assert.equal(await alice.locator('.chat-shell').evaluate(element=>getComputedStyle(element).gridTemplateColumns.split(' ').length),2);
+    const widths=[320,359,375,390,430];
+    for(const width of widths){
+      await alice.setViewportSize({width,height:700});
+      const geometry=await alice.evaluate(()=>{const search=document.querySelector('#usernameSearch').getBoundingClientRect(),group=document.querySelector('#createGroup').getBoundingClientRect();scrollTo(1000,0);return{scrollLeft:document.scrollingElement.scrollLeft,viewport:innerWidth,searchRight:search.right,groupRight:group.right,groupWidth:group.width,gap:group.left-search.right};});
+      assert.equal(await alice.locator('#createGroup img').count(),1,'Translation must preserve the new-group SVG.');
+      assert.equal(geometry.scrollLeft,0,`inbox scrolled sideways at ${width}px`);
+      assert.ok(geometry.searchRight<=geometry.viewport&&geometry.groupRight<=geometry.viewport,`inbox controls clipped at ${width}px`);
+      assert.ok(geometry.groupWidth>=44,`new-group target was too small at ${width}px`);
+      assert.ok(geometry.gap>=0,`inbox controls overlapped at ${width}px`);
+    }
+    await alice.setViewportSize({width:1280,height:850});
     await alice.locator('#usernameSearch').fill('BrowserBob');
     await alice.getByRole('option',{name:'BrowserBob'}).click();
     await alice.locator('#conversationNotice').getByText('Denne brukeren må godta meldingsforespørselen. De blir varslet.').waitFor();
@@ -29,7 +40,26 @@ const app=require('../server/index'),S=require('../server/services');
     assert.equal(await bob.locator('#messages').textContent(),'');
     await bob.locator('#acceptInvite').click();await bob.locator('#messages').getByText('Hei fra nettleseren').waitFor();
     assert.equal(await bob.locator('[data-language]').count(),0);
+    assert.equal(await bob.locator('#backToInbox').getAttribute('aria-label'),'Tilbake til samtaler');
+    assert.equal(await bob.locator('#toggleDetails').getAttribute('aria-controls'),'conversationDetails');
     assert.ok(await bob.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    for(const language of ['nb','en']){
+      await bob.evaluate(value=>window.HeremeI18n.setLanguage(value),language);
+      assert.equal(await bob.locator('#createGroup img').count(),1,`${language} translation must preserve the new-group SVG.`);
+      assert.equal(await bob.locator('#backToInbox').getAttribute('aria-label'),language==='en'?'Back to conversations':'Tilbake til samtaler');
+      assert.equal(await bob.locator('#toggleDetails').getAttribute('aria-label'),language==='en'?'Details':'Detaljer');
+      for(const width of widths){
+        await bob.setViewportSize({width,height:700});
+        const geometry=await bob.evaluate(()=>{const back=document.querySelector('#backToInbox').getBoundingClientRect(),details=document.querySelector('#toggleDetails').getBoundingClientRect(),composer=document.querySelector('.composer-wrap').getBoundingClientRect(),title=document.querySelector('#conversationTitle');title.textContent='A very long group conversation name that must truncate without moving controls';const titleBox=title.getBoundingClientRect();return{scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth,backWidth:back.width,backHeight:back.height,detailsWidth:details.width,detailsHeight:details.height,titleRight:titleBox.right,detailsLeft:details.left,composerLeft:composer.left,composerRight:composer.right};});
+        assert.ok(geometry.scrollWidth<=geometry.viewport,`${language} conversation overflowed at ${width}px`);
+        assert.deepEqual([geometry.backWidth,geometry.backHeight],[44,44],`${language} back control was not square at ${width}px`);
+        assert.deepEqual([geometry.detailsWidth,geometry.detailsHeight],[44,44],`${language} details control was not square at ${width}px`);
+        assert.ok(geometry.titleRight<=geometry.detailsLeft,`${language} title overlapped Details at ${width}px`);
+        assert.ok(geometry.composerLeft>=0&&geometry.composerRight<=geometry.viewport,`${language} composer clipped at ${width}px`);
+      }
+    }
+    await bob.setViewportSize({width:390,height:844});
+    await bob.evaluate(()=>window.HeremeI18n.setLanguage('nb'));
     if(process.env.HEREME_CHAT_SCREENSHOT)await bob.screenshot({path:process.env.HEREME_CHAT_SCREENSHOT+'-conversation.png'});
     const family='👨‍👩‍👧‍👦',longMessage='a'.repeat(14)+family+'Z';
     await bob.locator('#messageInput').fill(longMessage);await bob.locator('#sendMessage').click();

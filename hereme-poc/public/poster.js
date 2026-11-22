@@ -2,7 +2,8 @@
 (function(root) {
   const themes=typeof module!=='undefined'&&module.exports?require('./themes'):root.HeremeThemes;
   const {icon}=typeof module!=='undefined'&&module.exports?require('./icons'):root.HeremeIcons;
-  const t=key=>root.HeremeI18n?.t(`misc.poster.${key}`)||({'title_placeholder':'Din overskrift her','demo':'Syntetisk demo'}[key]);
+  const t=key=>root.HeremeI18n?.t(`misc.poster.${key}`)||({'title_placeholder':'Din overskrift her','demo':'Syntetisk demo','media_loading':'Laster bilde','media_error':'Bildet kunne ikke lastes'}[key]);
+  const loggedMediaErrors=new Set();
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const image=url=>typeof url==='string'&&(/^\/uploads\/[a-zA-Z0-9_-]+\.(png|jpg|webp)$/.test(url)||/^\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(display|thumbnail)\.(jpg|webp|png)$/.test(url)||/^\/assets\/[a-z0-9_-]+\.svg$/.test(url)||/^\/assets\/demo\/(posts|sources)\/[a-z0-9_-]+\.(jpg|webp|png)$/.test(url))?url:'';
   function cropRect(iw,ih,w,h,zoom=1,x=50,y=50) {
@@ -23,6 +24,7 @@
     if(!['auto','top','center','bottom'].includes(position))throw new Error('Unknown text position.');
     return `<div class="poster-surface theme-${theme.id} placement-${position} ${src?'with-image':'without-image'} ${baked?'original-poster':''} ${detail?'detail-surface':''}">
       ${src?`<img class="poster-photo" src="${escape(src)}" alt="${baked?escape(title):''}" loading="${detail||previewUrl?'eager':'lazy'}" decoding="async" data-zoom="${baked?1:post.image_zoom??1}" data-x="${baked?50:post.image_x??50}" data-y="${baked?50:post.image_y??50}">`:`<span class="poster-motif" aria-hidden="true">${theme.symbol}</span>`}
+      ${src?`<span class="poster-media-status">${escape(t('media_loading'))}</span><span class="poster-media-error" role="status" hidden>${baked?`${escape(title)} · `:''}${escape(t('media_error'))}</span>`:''}
       ${baked?`<span class="sr-only">${escape(title)}</span>`:`<span class="poster-decor">${icon(theme.id)}</span><span class="poster-text"><span class="poster-title ${density}">${escape(title)}</span></span>`}
       ${post.synthetic_demo?`<span class="demo-tag">${t('demo')}</span>`:''}
     </div>`;
@@ -34,6 +36,12 @@
       img.style.objectPosition=`${x}% ${y}%`;
       img.style.transformOrigin=`${x}% ${y}%`;
       img.style.transform=`scale(${zoom})`;
+      const surface=img.closest('.poster-surface'),status=surface.querySelector('.poster-media-status'),error=surface.querySelector('.poster-media-error');
+      const loaded=()=>{surface.dataset.mediaState='ready';status.hidden=true;error.hidden=true;};
+      const failed=()=>{surface.dataset.mediaState='error';status.hidden=true;error.hidden=false;if(!loggedMediaErrors.has(img.src)){loggedMediaErrors.add(img.src);console.error('Poster media failed to load:',img.src);}};
+      img.addEventListener('load',loaded,{once:true});
+      img.addEventListener('error',failed,{once:true});
+      if(img.complete)(img.naturalWidth>0?loaded:failed)();
     }
     fitTitles(container);
   }
