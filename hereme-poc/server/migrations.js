@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 20) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 21) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -397,6 +397,19 @@ function applyMigrations(db) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
       INSERT INTO schema_migrations(version) VALUES(20); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<21){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE comment_votes (
+      comment_id INTEGER NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      value INTEGER NOT NULL CHECK(value IN (-1,1)),
+      PRIMARY KEY(comment_id,user_id)
+    );
+    CREATE INDEX comment_votes_user ON comment_votes(user_id);
+    CREATE INDEX posts_author_status ON posts(author_id,status);
+    CREATE INDEX comments_author_post ON comments(author_id,post_id);
+    INSERT INTO schema_migrations(version) VALUES(21); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

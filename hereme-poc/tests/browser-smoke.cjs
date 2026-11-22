@@ -251,7 +251,7 @@ async function publish(page,title) {
   assert.equal(await phone.evaluate(()=>document.activeElement.dataset.action),'close-modal');
   assert.equal(await phone.locator('#forumShell').evaluate(el=>el.inert),true);
   await phone.locator('.detail-toolbar [data-action=share]').click();
-  assert.equal(await phone.evaluate(()=>navigator.clipboard.readText()),base+'/?post='+imageId);
+  assert.equal(await phone.evaluate(()=>navigator.clipboard.readText()),'https://hereme.no/?post='+imageId);
   await phone.screenshot({path:path.join(screenshots,'mobile-detail.png')});
   await phone.locator('.detail-modal .vote-down').click();
   await phone.waitForFunction(()=>document.querySelector('.detail-modal .vote-number')?.textContent==='-1');

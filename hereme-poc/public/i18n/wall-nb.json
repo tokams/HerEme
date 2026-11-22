@@ -318,5 +318,17 @@
   "wall.role.member": "Medlem",
   "wall.role.moderator": "Moderator",
   "wall.role.admin": "Administrator",
-  "wall.role.operator": "Operatør"
+  "wall.role.operator": "Operatør",
+  "wall.comment.vote_up": "Stem opp kommentar",
+  "wall.comment.vote_down": "Stem ned kommentar",
+  "wall.comment.net_score": "Kommentarscore {score}",
+  "wall.profile.author_actions": "Forfattervalg",
+  "wall.profile.show_public": "Vis profil",
+  "wall.profile.start_chat": "Start chat",
+  "wall.profile.public_heading": "Profil",
+  "wall.profile.post_reputation": "Innleggsomdømme",
+  "wall.profile.comment_reputation": "Kommentaromdømme",
+  "wall.profile.total_reputation": "Totalt omdømme",
+  "wall.profile.back": "Tilbake",
+  "wall.profile.not_found": "Profilen er ikke tilgjengelig"
 }

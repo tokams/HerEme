@@ -15,12 +15,28 @@ function createInteractionService(db,{audit,notifications}={}){
       db.exec('COMMIT');return {score,my_vote:old===value?0:value};
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
-  function comments(postId,{cursor=null,limit=100}={}){
+  function comments(postId,{cursor=null,limit=100,userId=null}={}){
     postId=V.integer(postId,{name:'Innleggs-ID'});published(postId);limit=Number(limit);if(!Number.isInteger(limit)||limit<1||limit>200)fail('INVALID_LIMIT','Grense må være 1–200.');
     const after=cursor==null?Number.MIN_SAFE_INTEGER:V.integer(cursor,{name:'Sidepeker'});
-    const rows=db.prepare(`SELECT c.id,c.post_id,c.parent_id,c.body,c.depth,c.created_at,COALESCE(u.name,c.demo_author,'anonym') author
-      FROM comments c LEFT JOIN users u ON u.id=c.author_id WHERE c.post_id=? AND c.id>? ORDER BY c.created_at,abs(c.id) LIMIT ?`).all(postId,after,limit+1);
+    const rows=db.prepare(`SELECT c.id,c.post_id,c.parent_id,c.body,c.depth,c.created_at,COALESCE(CASE WHEN u.status='active' THEN u.name END,c.demo_author,'anonym') author,
+      CASE WHEN u.status='active' THEN u.id ELSE NULL END author_public_id,
+      COALESCE((SELECT sum(cv.value) FROM comment_votes cv WHERE cv.comment_id=c.id),0) score,
+      COALESCE((SELECT cv.value FROM comment_votes cv WHERE cv.comment_id=c.id AND cv.user_id=?),0) my_vote
+      FROM comments c LEFT JOIN users u ON u.id=c.author_id WHERE c.post_id=? AND c.id>? ORDER BY c.created_at,abs(c.id) LIMIT ?`).all(userId,postId,after,limit+1);
     const more=rows.length>limit;if(more)rows.pop();return {comments:rows,next_cursor:more?rows.at(-1).id:null,has_more:more};
+  }
+  function voteComment(commentId,user,value){
+    commentId=V.integer(commentId,{name:'Kommentar-ID'});value=Number(value);if(![-1,1].includes(value))fail('INVALID_VOTE','Stem opp eller ned.');
+    db.exec('BEGIN IMMEDIATE');try{
+      const target=db.prepare("SELECT c.author_id FROM comments c JOIN posts p ON p.id=c.post_id WHERE c.id=? AND p.status='published'").get(commentId);
+      if(!target)fail('COMMENT_NOT_FOUND','Kommentaren finnes ikke.',404);
+      if(target.author_id===user.id)fail('SELF_VOTE','Du kan ikke stemme på din egen kommentar.',403);
+      const old=db.prepare('SELECT value FROM comment_votes WHERE comment_id=? AND user_id=?').get(commentId,user.id)?.value||0;
+      if(old===value)db.prepare('DELETE FROM comment_votes WHERE comment_id=? AND user_id=?').run(commentId,user.id);
+      else db.prepare('INSERT INTO comment_votes(comment_id,user_id,value) VALUES(?,?,?) ON CONFLICT(comment_id,user_id) DO UPDATE SET value=excluded.value').run(commentId,user.id,value);
+      const score=db.prepare('SELECT COALESCE(sum(value),0) score FROM comment_votes WHERE comment_id=?').get(commentId).score;
+      db.exec('COMMIT');return {score,my_vote:old===value?0:value};
+    }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
   }
   function comment(postId,user,{body,parent_id=null}){
     postId=V.integer(postId,{name:'Innleggs-ID'});published(postId);body=V.text(body,{name:'Kommentar',min:1,max:1200});
@@ -45,6 +61,6 @@ function createInteractionService(db,{audit,notifications}={}){
       return {reported:true,automatically_held:held};
     }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
   }
-  return {vote,comments,comment,report};
+  return {vote,comments,comment,report,voteComment};
 }
 module.exports={createInteractionService};

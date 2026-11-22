@@ -9,8 +9,8 @@ See [ADR 0011](adr/0011-passkeys.md) and `PASSKEYS_PROGRESS.md`.
 temporary www/legacy redirects are prepared. Live cutover is BLOCKED pending DNS
 resolution and a reviewed clean release. See [execution ledger](domain-migration.md).
 
-**Snapshot:** 2026-11-22, E17 chat redesign and optional avatars in the local worktree
-**Code baseline:** `master` at `951f482` plus uncommitted E17 changes.
+**Snapshot:** 2026-11-22, E18 sharing, comment votes and public profiles in the local worktree
+**Code baseline:** `master` at `340189d` plus uncommitted E18 changes. See `docs/E18_IMPLEMENTATION.md` for local evidence.
 **Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 
@@ -51,6 +51,9 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 | Media | Original images are kept and validated server-side; display and thumbnail derivatives are generated. Post video is at most 180 seconds and uses the media worker when enabled. |
 | Staff | Role-based moderator and administrator surfaces, with audited actions and server-side authorization. |
 | Personal profile | An authenticated member has a private, addressable `/me` profile with their identity, member date, received upvotes, authored-post activity and accepted direct/group-chat counts. They may add, crop, replace or remove an optional public-facing avatar. |
+| Public profile | Visitors may open `/u/<stable-user-id>` for an active user's avatar, pseudonym, join date and post/comment/total reputation only. The public DTO does not reuse `/me`. |
+| Comment votes | Signed-in members can upvote/downvote another user's comment under a published post, repeat to remove or switch. Comment score and caller vote are projected with the discussion. |
+| Post sharing | Published `/?post=<id>` returns raw escaped post-specific Open Graph metadata and a cached category-themed JPEG. Canonical new links use `https://hereme.no`; hidden/missing posts receive no specific metadata or image access. |
 | PWA and notifications | The site exposes an optional installable PWA. Members have one in-app inbox, account category preferences and per-device Web Push opt-in. Production push remains disabled until device verification. |
 
 ## PWA and notification delivery
@@ -79,7 +82,8 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 
 - `/` is the public wall. `/?post=<id>` is an addressable post-detail state. The wall selection, query, sort and scroll position are retained through browser Back/Forward navigation.
 - `/chat` is the authenticated inbox and `/chat/<opaque-chat-id>` is an authenticated conversation route. The server returns the chat application shell for these routes; authorization and conversation membership remain API-enforced, so a URL never grants access to chat content.
-- `/me` is the authenticated member's own profile only. There is no public user lookup or public profile route.
+- `/me` is the authenticated member's own profile only; its private activity and account details do not appear in the public profile DTO.
+- `/u/<stable-user-id>` is a guest-readable minimal public profile for an active account. Public post and comment bylines link by stable ID; Start Chat opens `/chat?user=<id>` as a local draft or existing direct conversation and preserves first-Send consent.
 - One shared responsive dialog provides **Logg inn** and **Opprett konto** everywhere an account is required, including the chat route. It preserves the recovery-key model, displays a newly issued key exactly once and does not auto-submit the action that originally required authentication.
 - A visitor who opens `/chat` is shown the contextual message `Logg inn eller opprett en konto for å bruke chat.`. Closing the gate returns to the public wall; no chat is created merely by authenticating.
 
@@ -88,6 +92,10 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 `GET /api/me/summary` requires the current session and returns only the caller's account projection. It supports `sort=new|top`, a bounded cursor and a page limit of 1–50. Its metrics are canonical database counts: authored posts, comments received, positive votes from other accounts on authored posts, and accepted direct/group conversations. The authored-post rows contain compact moderation status, category, score, received upvotes and comment counts; the browser can page through them without loading all content at once.
 
 The 13 bundled examples are marked synthetic. Existing user-authored content is not replaced by automatic seeding. A prior verified selective import brought 15 historical user posts into the public database, which then held 28 posts on 2026-11-20; those counts are historical evidence, not a current count.
+
+Public reputation is the sum of current votes by other accounts on published, nonsynthetic posts and comments authored by an active account. The automatic author upvote and preserved `base_score` do not count. Comment votes begin at zero because no historical comment-vote data existed. Hidden/review/deleted content stops contributing; restoring a post makes its surviving votes eligible again. Negative reputation is valid. The public profile API returns only `public_id`, `username`, `avatar_url`, `joined_at` and `{posts,comments,total}` reputation.
+
+Post-specific share metadata is inserted server-side into the normal wall HTML for `/?post=<id>` and works without JavaScript. Share JPEGs use local public media and the existing category palette; no remote image URL is fetched. The cache key follows post title, body, category and media revision. The image route rechecks published status and revision, and normal metadata/image responses use `no-store`. A rendering error logs and retries after five minutes, with a safe generic image in the meantime. Cached derivatives are regenerated after restore rather than included in snapshots. See [ADR 0013](adr/0013-public-profiles-reputation-sharing.md).
 
 ## Implemented private chat behavior
 
@@ -123,7 +131,7 @@ The 13 bundled examples are marked synthetic. Existing user-authored content is 
 | `public/` | Plain browser JavaScript/CSS and static assets. UI renders API state and dispatches actions; it does not own durable policy. |
 | `server/index.js` | HTTP routes, authentication/CSRF middleware, limits and response mapping. |
 | `server/domain/` | Identity, posts, interactions, staff actions, chat, avatars, media, video, locations and verification rules. |
-| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, avatars, notifications, push subscriptions/outbox/deliveries, live notification events, passkey credentials/challenges/handles, ownership proofs and audit records. Migrations reach schema 20. WAL mode is used. |
+| SQLite | Canonical users, sessions, roles, posts, post/comment votes, comments, reports, media, chats, attachments, avatars, notifications, push subscriptions/outbox/deliveries, live notification events, passkey credentials/challenges/handles, ownership proofs and audit records. Migrations reach schema 21. WAL mode is used. |
 | Private data directory | SQLite plus public post media, processed avatars, temporary uploads and private chat bytes. Avatar bytes are served only through a versioned route; chat bytes are outside public static paths. |
 | Workers | Durable post-media processing, minute-based chat attachment cleanup and bounded Web Push delivery. |
 | WebSocket channel | Live signals only; persisted messages and notifications remain authoritative. |
@@ -147,7 +155,7 @@ The public PoC target is `https://hereme.46.251.249.110.nip.io/`. At **2026-11-2
 
 `deploy/deploy-online.ps1` packages only a clean committed `hereme-poc` tree. It uploads a release, creates and verifies a backup, builds the Docker image, cuts over, checks public readiness and attempts rollback on failed cutover. `release/v2` is a local frozen code reference at `5d7b72d`; branch creation alone does not deploy or publish it.
 
-Local E17 checks on 2026-11-22: **70 automated Node tests passed**, the chat browser flow and avatar browser flow at 320/390 CSS px passed, **103 JavaScript files** passed syntax checking, and `git diff --check` passed. Browser captures and open device checks are listed in `docs/chat-redesign-progress.md`. These checks do not replace a production smoke test, clone restore or real-device media test.
+Local E18 checks on 2026-11-22: **73 automated Node tests passed**, wall, chat and sharing browser flows passed, **109 JavaScript files** passed syntax checking, and `git diff --check` passed. E17 avatar browser checks at 320/390 CSS px also passed earlier. Browser captures and open device checks are listed in `docs/chat-redesign-progress.md` and `docs/E18_IMPLEMENTATION.md`. These checks do not replace a production smoke test, clone restore or real-device unfurl test.
 
 ## Known gaps and decisions to scope next
 

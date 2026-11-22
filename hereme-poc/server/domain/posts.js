@@ -6,7 +6,7 @@ const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
 const decode=value=>{try{return JSON.parse(Buffer.from(value,'base64url').toString('utf8'));}catch{fail('INVALID_CURSOR','Ugyldig sidepeker.');}};
 function createPostService(db,{media,audit,config={}}={}){
   const projection=`SELECT p.*,r.slug room_slug,r.name room_name,r.emoji room_emoji,
-    COALESCE(u.name,p.demo_author,'anonym') author,COALESCE(pp.synthetic_demo,0) synthetic_demo,pp.poster_json,
+    COALESCE(CASE WHEN u.status='active' THEN u.name END,p.demo_author,'anonym') author,CASE WHEN u.status='active' AND COALESCE(pp.synthetic_demo,0)=0 THEN u.id ELSE NULL END author_public_id,COALESCE(pp.synthetic_demo,0) synthetic_demo,pp.poster_json,
     d.category,d.image_zoom,d.image_x,d.image_y,d.text_position,pa.area_id,pm.media_id,m.kind media_kind,m.status media_status,
     m.display_path media_display_path,m.thumbnail_path media_thumbnail_path,m.duration_ms,
     p.base_score+COALESCE((SELECT sum(v.value) FROM votes v WHERE v.post_id=p.id),0) score,

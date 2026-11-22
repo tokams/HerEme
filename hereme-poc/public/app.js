@@ -10,7 +10,7 @@
     category:'story',postMode:null,composeStep:'select',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
+    loadRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={};
@@ -75,10 +75,18 @@
     [...root.querySelectorAll('.profile-post-row')].forEach((row,index)=>{const post=posts[index],cell=row.querySelectorAll('span')[2];if(post&&cell)cell.textContent=`${statusLabel(post.status)} · ${post.score>=0?'+':''}${post.score}`;});
   }
   async function loadProfile({append=false}={}){const params=new URLSearchParams({sort:state.profileSort,limit:'20'});if(append&&state.profileCursor)params.set('cursor',state.profileCursor);const result=await api('/api/me/summary?'+params);if(append&&state.profile)result.posts=[...state.profile.posts,...result.posts];state.profile=result;state.profileCursor=result.next_cursor;profileView();}
+  function publicProfileView(profile){
+    $('#forumShell').hidden=true;const root=$('#profileRoot');root.hidden=false;
+    const score=value=>`${value>0?'+':''}${value}`;
+    root.innerHTML=`<section class="public-profile"><button class="btn btn-secondary" data-action="public-profile-back">← ${E(t('profile.back'))}</button><p class="eyebrow">${E(t('profile.public_heading'))}</p><div class="public-profile-identity">${HeremeAvatar.html({id:profile.public_id,name:profile.username,avatar_url:profile.avatar_url})}<div><h1>@${E(profile.username)}</h1><p>${E(t('profile.member_since',{date:String(profile.joined_at).slice(0,10)}))}</p></div></div><div class="public-reputation"><div><span>${E(t('profile.post_reputation'))}</span><strong>${score(profile.reputation.posts)}</strong></div><div><span>${E(t('profile.comment_reputation'))}</span><strong>${score(profile.reputation.comments)}</strong></div><div class="total"><span>${E(t('profile.total_reputation'))}</span><strong>${score(profile.reputation.total)}</strong></div></div></section>`;
+    document.title=`${profile.username} · HerEme`;
+  }
   const avatarEditor=HeremeAvatarEditor.setup({api,t,onSaved:result=>{Object.assign(state.profile.profile,result);Object.assign(state.user,result);profileView();toast(t('profile.avatar_saved'));}});
   async function applyRoute({fromPop=false}={}){
     const route=location.pathname,params=new URLSearchParams(location.search);
     window.HeremePwa?.updateInstallUi();
+    const publicMatch=/^\/u\/([A-Za-z0-9_-]{1,100})$/.exec(route);
+    if(publicMatch){if(state.modal)closeModal({fromRoute:true});try{publicProfileView(await api(`/api/users/${publicMatch[1]}/public`));}catch(error){if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
     if(route==='/me'){
       if(!state.user){openAuth(t('account.login_for_profile'),async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
       await loadProfile();return;
@@ -291,8 +299,30 @@
     })();
     return operation.running;
   }
+  function paintCommentVote(comment){
+    const row=document.querySelector(`[data-comment-id="${comment.id}"]`);if(!row)return;
+    for(const button of row.querySelectorAll('[data-action="comment-vote"]'))button.setAttribute('aria-pressed',String(Number(button.dataset.value)===comment.my_vote));
+    const score=row.querySelector('.comment-score');score.textContent=(comment.score>0?'+':'')+comment.score;score.classList.toggle('negative',comment.score<0);score.setAttribute('aria-label',t('comment.net_score',{score:comment.score}));
+  }
+  async function voteComment(id,value){
+    if(!requireUser(()=>voteComment(id,value)))return;
+    if(state.commentVoting.has(id))return;
+    const comment=state.comments.find(item=>item.id===id);if(!comment)return;
+    const previous={score:comment.score,my_vote:comment.my_vote},next=comment.my_vote===value?0:value;
+    comment.score+=next-comment.my_vote;comment.my_vote=next;paintCommentVote(comment);state.commentVoting.add(id);
+    try{Object.assign(comment,await api(`/api/comments/${id}/vote`,{method:'POST',body:{value}}));paintCommentVote(comment);}
+    catch(error){Object.assign(comment,previous);paintCommentVote(comment);throw error;}
+    finally{state.commentVoting.delete(id);}
+  }
+  function closeAuthorMenu({focus=false}={}){const menu=$('.author-popover');if(!menu)return;const trigger=menu._trigger;menu.remove();if(trigger?.isConnected){trigger.setAttribute('aria-expanded','false');if(focus)trigger.focus({preventScroll:true});}}
+  function openAuthorMenu(trigger){
+    closeAuthorMenu();const menu=document.createElement('div');menu.className='author-popover';menu.setAttribute('role','menu');menu._trigger=trigger;
+    const userId=trigger.dataset.userId;menu.innerHTML=`<button type="button" role="menuitem" data-action="show-public-profile" data-user-id="${E(userId)}">${E(t('profile.show_public'))}</button>${userId!==state.user?.id?`<button type="button" role="menuitem" data-action="start-author-chat" data-user-id="${E(userId)}">${E(t('profile.start_chat'))}</button>`:''}`;
+    const bounds=trigger.getBoundingClientRect();menu.style.left=`${Math.max(8,Math.min(bounds.left,innerWidth-190))}px`;menu.style.top=`${Math.min(bounds.bottom+5,innerHeight-104)}px`;
+    ($('.detail-modal')||document.body).append(menu);trigger.setAttribute('aria-expanded','true');menu.querySelector('button').focus({preventScroll:true});
+  }
   async function share(id) {
-    const url=new URL('/',location.origin);url.searchParams.set('post',id);
+    const url=new URL('https://hereme.no/');url.searchParams.set('post',id);
     if(navigator.share) {
       try {await navigator.share({title:t('share.title'),url:url.href});return;}
       catch(error){if(error.name==='AbortError')return;}
@@ -404,8 +434,14 @@
     } finally {if(button.isConnected)button.disabled=false;}
   }
   async function handleClick(event) {
+    if($('.author-popover')&&!event.target.closest('.author-popover,.author-trigger'))closeAuthorMenu();
     const target=event.target.closest('[data-action]');if(!target||(state.publishing&&!['pause-upload','resume-upload','cancel-upload'].includes(target.dataset.action)))return;
     const action=target.dataset.action,id=Number(target.dataset.id);
+    if(action==='author-menu'){openAuthorMenu(target);return;}
+    if(action==='show-public-profile'){const userId=target.dataset.userId;closeAuthorMenu();await navigate(`/u/${encodeURIComponent(userId)}`);return;}
+    if(action==='start-author-chat'){location.assign(`/chat?user=${encodeURIComponent(target.dataset.userId)}`);return;}
+    if(action==='public-profile-back'){if(history.state?.wall)history.back();else await navigate('/');return;}
+    if(action==='comment-vote'){await voteComment(id,Number(target.dataset.value));return;}
     if(action==='dismiss-modal'){if(event.target===target)closeModal();return;}
     if(action==='close-modal'){closeModal();return;}
     if(action==='layout'){document.documentElement.dataset.layout=target.dataset.layout;localStorage.setItem('hereme_layout',target.dataset.layout);renderPreferences();return;}
@@ -547,6 +583,7 @@
     });
     document.addEventListener('keydown',event=>{
       if((event.key==='Enter'||event.key===' ')&&event.target.dataset.action==='area-toggle'){event.preventDefault();event.target.click();return;}
+      if(event.key==='Escape'&&$('.author-popover')){closeAuthorMenu({focus:true});return;}
       if(!state.modal)return;
       if(event.key==='Escape')closeModal();
       if(event.key==='Tab') {

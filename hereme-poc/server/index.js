@@ -10,14 +10,17 @@ const {DomainError}=require('./domain/errors');
 const {localizeError}=require('./error-localization');
 const {themes}=require('../public/themes');
 const S=require('./services');
+if(S.config.environment!=='test')S.sharePreviews.backfill();
 const {listenAvailable}=require('./listen');
 const {attachChatSocket}=require('./chat-socket');
+const shareMeta=require('./share-meta');
 const app=web();
 const httpListen=app.listen;app.listen=(...args)=>{const server=httpListen(...args);attachChatSocket(server,{db:S.db,identity:S.identity,config:S.config});return server;};
 const runtimeMetrics={errors:0,rate_limited:0,started_at:new Date().toISOString()};
 const imageUpload=upload({storage:upload.memoryStorage(),limits:{fileSize:12*1024*1024,files:1}});
 const avatarUpload=upload({storage:upload.memoryStorage(),limits:{fileSize:S.avatars.MAX_BYTES,files:1}});
 const errors=(res,status,code,message,details)=>res.status(status).json({error:{code,message:localizeError(res.request,code,message),details:details||undefined}});
+async function syncSharePreview(id){const post=S.posts.visible(Number(id));if(post)await S.sharePreviews.queue(post);else S.sharePreviews.invalidate(Number(id));}
 const loopback=value=>['127.0.0.1','::1','::ffff:127.0.0.1'].includes(value);
 const ip=req=>S.config.trustProxy&&loopback(req.socket.remoteAddress)?String(req.headers['x-forwarded-for']||req.socket.remoteAddress).split(',')[0].trim():req.socket.remoteAddress;
 const ipKey=req=>crypto.createHash('sha256').update(String(ip(req))).digest('hex').slice(0,20);
@@ -27,12 +30,12 @@ function lanIps(){
   const found=[];for(const [name,entries] of Object.entries(os.networkInterfaces()))for(const entry of entries||[])if(entry.family==='IPv4'&&!entry.internal&&!entry.address.startsWith('169.254.'))found.push({name,ip:entry.address});
   found.sort((a,b)=>{const score=x=>/vpn|virtual|docker|vethernet|veth|tailscale|wsl|hyper-v/i.test(x.name)?2:/wi-?fi|wireless|wlan|ethernet|eth\d/i.test(x.name)?0:1;return score(a)-score(b);});return found;
 }
-function write(capability,limit=60){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);S.identity.requireCsrf(req,req.auth);if(capability)S.identity.requireCapability(req.auth,capability);S.rate.check(`${capability||'write'}:${req.auth.id}`,limit);next();};}
+function write(capability,limit=60,bucket=capability||'write'){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);S.identity.requireCsrf(req,req.auth);if(capability)S.identity.requireCapability(req.auth,capability);S.rate.check(`${bucket}:${req.auth.id}`,limit);next();};}
 function read(capability){return (req,res,next)=>{req.auth=S.identity.requireUser(req,res);if(capability)S.identity.requireCapability(req.auth,capability);next();};}
 function activity(items){
   const selected=new Map(items.map(post=>[post.id,post]));if(!selected.size)return {stats:{posts:0,comments:0},discussions:[],recent_comments:[]};
   const placeholders=[...selected].map(()=>'?').join(',');
-  const comments=S.db.prepare(`SELECT c.id,c.post_id,c.body,c.created_at,COALESCE(u.name,c.demo_author,'anonym') author
+  const comments=S.db.prepare(`SELECT c.id,c.post_id,c.body,c.created_at,COALESCE(CASE WHEN u.status='active' THEN u.name END,c.demo_author,'anonym') author,CASE WHEN u.status='active' THEN u.id ELSE NULL END author_public_id
     FROM comments c LEFT JOIN users u ON u.id=c.author_id WHERE c.post_id IN (${placeholders})
     ORDER BY c.created_at DESC,abs(c.id) DESC LIMIT 25`).all(...selected.keys());
   const latest=new Map();for(const comment of comments)if(!latest.has(comment.post_id))latest.set(comment.post_id,comment.created_at);
@@ -54,6 +57,20 @@ app.use((req,res,next)=>{
   next();
 });
 app.use(web.json({limit:'256kb'}));
+app.use(async(req,res,next)=>{
+  if(req.pathname!=='/'||!['GET','HEAD'].includes(req.method)||!Object.hasOwn(req.query,'post'))return next();
+  const id=Number(req.query.post),post=Number.isSafeInteger(id)&&id>0?S.posts.visible(id):null;
+  if(post)await S.sharePreviews.queue(post);
+  const image=post?S.sharePreviews.image(post):null;
+  const shell=fs.readFileSync(path.resolve(__dirname,'..','public','index.html'),'utf8');
+  res.status(post?200:404).set('Content-Type','text/html; charset=utf-8').set('Cache-Control','no-store').send(shareMeta.render(shell,post,image));
+});
+app.use('/share-previews',(req,res,next)=>{
+  if(!['GET','HEAD'].includes(req.method))return next();
+  const match=/^\/share-previews\/(\d+)\/([0-9a-f]{20})\.jpg$/.exec(req.pathname),file=match&&S.sharePreviews.file(match[1],match[2]);
+  if(!file)return res.status(404).send('Not found.');
+  res.set('Content-Type','image/jpeg').set('Cache-Control','no-store').send(fs.readFileSync(file));
+});
 app.use('/uploads',(req,res,next)=>{const original=req.pathname;req.pathname=req.pathname.slice(8)||'/';web.static(path.join(S.dataDir,'uploads'))(req,res,()=>{req.pathname=original;next();});});
 app.use('/media',(req,res,next)=>{const original=req.pathname;req.pathname=req.pathname.slice(6)||'/';web.static(path.join(S.dataDir,'media'))(req,res,()=>{req.pathname=original;next();});});
 app.use(web.static(path.resolve(__dirname,'..','public'),{extensions:['html']}));
@@ -61,15 +78,16 @@ function appShell(name,res){res.set('Content-Type','text/html; charset=utf-8').s
 app.get('/chat',(req,res)=>appShell('chat.html',res));
 app.get('/chat/:id',(req,res)=>appShell('chat.html',res));
 app.get('/me',(req,res)=>appShell('index.html',res));
+app.get('/u/:id',(req,res)=>appShell('index.html',res));
 
 app.get('/api/live',(req,res)=>res.json({ok:true,name:'HerEme'}));
 app.get('/api/health',(req,res)=>{const worker=S.db.prepare('SELECT last_run FROM push_worker_state WHERE id=1').get();res.json({ok:true,name:'HerEme',storage:'SQLite',runtime:runtimeMetrics,chat_worker:S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get()||null,push:{enabled:S.push.enabled(),worker_fresh:!S.push.enabled()||Boolean(worker&&Date.now()-new Date(worker.last_run+'Z').getTime()<120000)}});});
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=20').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=21').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===20;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===21;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','avatars','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();})&&S.avatars.verify();
@@ -135,6 +153,7 @@ app.get('/api/notifications',read(null),(req,res)=>res.json({notifications:S.not
 app.post('/api/notifications/:id/read',write(null,60),(req,res)=>res.json(S.notifications.read(req.auth,req.params.id)));
 app.get('/api/admin/push/health',read('staff:read'),(req,res)=>res.json({worker:S.db.prepare('SELECT * FROM push_worker_state WHERE id=1').get()||null,subscriptions:S.db.prepare('SELECT count(*) count FROM push_subscriptions WHERE disabled_at IS NULL').get().count,states:S.db.prepare('SELECT state,count(*) count FROM push_deliveries GROUP BY state').all()}));
 app.get('/api/me/summary',read(null),(req,res)=>res.json(S.profile.summary(req.auth,req.query)));
+app.get('/api/users/:id/public',(req,res)=>res.set('Cache-Control','no-store').json(S.publicProfiles.read(req.params.id)));
 app.get('/api/chat/users',read(null),(req,res)=>{S.rate.check(`chat-search:${req.auth.id}`,180);res.json({users:S.chat.search(req.auth,req.query.q)});});
 app.get('/api/chat/direct/:user',read(null),(req,res)=>res.json(S.chat.direct(req.auth,req.params.user)));
 app.post('/api/chats/direct',write(null,30),(req,res)=>res.status(201).json(S.chat.startDirect(req.auth,req.body?.target_user_id,req.body?.body,req.body?.client_key,req.body?.attachment_ids)));
@@ -144,7 +163,7 @@ app.post('/api/chat/blocks',write(null,30),(req,res)=>res.json(S.chat.block(req.
 app.get('/api/chats',read(null),(req,res)=>res.json({chats:S.chat.list(req.auth)}));
 app.get('/api/chat/notifications',read(null),(req,res)=>res.json({notifications:S.chat.notifications(req.auth,req.query.before)}));
 app.post('/api/chats/:id/read',write(null,120),(req,res)=>res.json(S.chat.markRead(req.auth,req.params.id)));
-app.post('/api/chats',write(null,10),(req,res)=>res.status(201).json(S.chat.group(req.auth,req.body?.name,req.body?.recipients,req.body?.opening)));
+app.post('/api/chats',write(null,10,'chat:group:create'),(req,res)=>res.status(201).json(S.chat.group(req.auth,req.body?.name,req.body?.recipients,req.body?.opening)));
 app.get('/api/chats/:id/messages',read(null),(req,res)=>res.json({messages:S.chat.messages(req.auth,req.params.id,req.query.before)}));
 app.post('/api/chats/:id/messages',write(null,120),(req,res)=>res.status(201).json(S.chat.send(req.auth,req.params.id,req.body?.body,req.body?.client_key,req.body?.attachment_ids)));
 app.get('/api/chats/:id/people',read(null),(req,res)=>res.json({people:S.chat.peers(req.auth,req.params.id)}));
@@ -165,11 +184,12 @@ app.get('/api/chat/files/:id/preview',read(null),(req,res)=>S.chat.preview(req.a
 app.get('/api/posts',(req,res)=>{const current=S.identity.readSession(req,res);res.json(S.posts.list({...req.query,userId:current?.id}));});
 app.get('/api/activity',(req,res)=>{const current=S.identity.readSession(req,res);const page=S.posts.list({...req.query,limit:Math.min(Number(req.query.limit)||50,50),userId:current?.id});res.json({...activity(page.posts),next_cursor:page.next_cursor});});
 app.get('/api/posts/:id',(req,res)=>{const current=S.identity.readSession(req,res),post=S.posts.visible(Number(req.params.id),current?.id);if(!post)return errors(res,404,'POST_NOT_FOUND','Innlegget finnes ikke.');res.json({post});});
-app.post('/api/posts',write('post:create',12),imageUpload.single('image'),async(req,res)=>res.status(201).json(await S.posts.create(req.body||{},req.auth,req.file)));
+app.post('/api/posts',write('post:create',12),imageUpload.single('image'),async(req,res)=>{const result=await S.posts.create(req.body||{},req.auth,req.file),post=S.posts.visible(result.id);if(post)await S.sharePreviews.queue(post);res.status(201).json(result);});
 app.post('/api/posts/:id/vote',write('vote',180),(req,res)=>res.json(S.interactions.vote(req.params.id,req.auth,req.body?.value)));
-app.get('/api/posts/:id/comments',(req,res)=>res.json(S.interactions.comments(req.params.id,req.query)));
+app.get('/api/posts/:id/comments',(req,res)=>{const current=S.identity.readSession(req,res);res.json(S.interactions.comments(req.params.id,{...req.query,userId:current?.id}));});
+app.post('/api/comments/:id/vote',write('vote',180),(req,res)=>res.json(S.interactions.voteComment(req.params.id,req.auth,req.body?.value)));
 app.post('/api/posts/:id/comments',write('comment',40),(req,res)=>res.status(201).json(S.interactions.comment(req.params.id,req.auth,req.body||{})));
-app.post('/api/posts/:id/report',write('report',20),(req,res)=>res.status(201).json(S.interactions.report(req.params.id,req.auth,req.body?.reason)));
+app.post('/api/posts/:id/report',write('report',20),(req,res)=>{const result=S.interactions.report(req.params.id,req.auth,req.body?.reason);if(result.automatically_held)S.sharePreviews.invalidate(Number(req.params.id));res.status(201).json(result);});
 app.post('/api/video-uploads',write('post:create',3),(req,res)=>res.status(201).json(S.video.begin(req.body||{},req.auth)));
 app.put('/api/video-uploads/:id',write('post:create',3),async(req,res)=>res.json(await S.video.receive(req.params.id,req.auth,req)));
 app.patch('/api/video-uploads/:id',write('post:create',300),async(req,res)=>res.json(await S.video.receiveChunk(req.params.id,req.auth,req)));
@@ -185,9 +205,9 @@ app.post('/api/rooms',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rom kan ikke op
 app.post('/api/rooms/:id/membership',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rommedlemskap er avviklet.'));
 app.get('/api/admin/overview',read('staff:read'),(req,res)=>res.json(S.administration.overview(req.auth)));
 app.get('/api/admin/queue',read('moderate'),(req,res)=>res.json({posts:S.moderation.queue()}));
-app.post('/api/admin/posts/:id/moderation',write('moderate',60),(req,res)=>res.json(S.moderation.act(req.auth,req.params.id,req.body?.action,req.body?.reason)));
-app.patch('/api/admin/posts/:id',write('content:manage',120),(req,res)=>res.json(S.administration.updatePost(req.auth,req.params.id,req.body||{})));
-app.delete('/api/admin/posts/:id',write('content:manage',30),(req,res)=>res.json(S.administration.deletePost(req.auth,req.params.id,req.body||{})));
+app.post('/api/admin/posts/:id/moderation',write('moderate',60),async(req,res)=>{const result=S.moderation.act(req.auth,req.params.id,req.body?.action,req.body?.reason);await syncSharePreview(req.params.id);res.json(result);});
+app.patch('/api/admin/posts/:id',write('content:manage',120),async(req,res)=>{const result=S.administration.updatePost(req.auth,req.params.id,req.body||{});await syncSharePreview(req.params.id);res.json(result);});
+app.delete('/api/admin/posts/:id',write('content:manage',30),(req,res)=>{const result=S.administration.deletePost(req.auth,req.params.id,req.body||{});S.sharePreviews.invalidate(Number(req.params.id));res.json(result);});
 app.patch('/api/admin/comments/:id',write('content:manage',120),(req,res)=>res.json(S.administration.updateComment(req.auth,req.params.id,req.body||{})));
 app.delete('/api/admin/comments/:id',write('content:manage',30),(req,res)=>res.json(S.administration.deleteComment(req.auth,req.params.id,req.body||{})));
 app.delete('/api/admin/users/:id',write('users:delete',20),(req,res)=>res.json(S.administration.deleteUser(req.auth,req.params.id,req.body||{})));

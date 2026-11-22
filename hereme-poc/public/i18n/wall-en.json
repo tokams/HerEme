@@ -318,5 +318,17 @@
   "wall.role.member": "Member",
   "wall.role.moderator": "Moderator",
   "wall.role.admin": "Administrator",
-  "wall.role.operator": "Operator"
+  "wall.role.operator": "Operator",
+  "wall.comment.vote_up": "Upvote comment",
+  "wall.comment.vote_down": "Downvote comment",
+  "wall.comment.net_score": "Comment score {score}",
+  "wall.profile.author_actions": "Author actions",
+  "wall.profile.show_public": "Show profile",
+  "wall.profile.start_chat": "Start chat",
+  "wall.profile.public_heading": "Profile",
+  "wall.profile.post_reputation": "Post reputation",
+  "wall.profile.comment_reputation": "Comment reputation",
+  "wall.profile.total_reputation": "Total reputation",
+  "wall.profile.back": "Back",
+  "wall.profile.not_found": "This profile is unavailable"
 }

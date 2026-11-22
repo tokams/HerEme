@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-22 — Sharing, public profiles and chat media alignment (E18)
+
+- Size portrait chat images and videos to their visible media rather than a wider letterboxed box, keeping sent and received attachments against their respective transcript edges.
+- Give group creation its own per-user rate bucket so unrelated chat writes cannot exhaust its creation limit.
+- Add schema 21 comment votes and in-place comment controls. Public reputation sums attributable votes on eligible published content without author votes or historical base scores.
+- Add guest-readable minimal public profiles with stable author links and a contextual Show profile / Start chat menu. Starting chat preserves the existing first-Send consent flow.
+- Add server-rendered post link metadata and revision-checked 1200×630 share JPEGs, with canonical `hereme.no` URLs, moderation revocation and bounded fallback/retry behavior.
+
 ## 2026-11-22 — Compact chat and optional avatars (E17-01/E17-02)
 
 - Condensed inbox and conversation headers, moved file choices into a plus-button popover, grouped consecutive sender messages, and added bare single-media cards and fanned multi-file bundles with the existing private gallery.

@@ -1,0 +1,34 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {chromium}=require('playwright');
+const data=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-sharing-browser-'));
+process.env.HEREME_DATA_DIR=data;process.env.HEREME_ENV='test';
+const app=require('../server/index'),S=require('../server/services');
+(async()=>{
+  const server=await new Promise(resolve=>{const running=app.listen(0,'127.0.0.1',()=>resolve(running));});const base=`http://127.0.0.1:${server.address().port}`;let browser;
+  try{
+    browser=await chromium.launch({headless:true});
+    const alice=await browser.newContext({viewport:{width:390,height:844},locale:'en-US'}),bob=await browser.newContext({viewport:{width:390,height:844},locale:'en-US'});
+    const a=await alice.request.post(base+'/api/session',{data:{name:'ShareAlice'}}).then(r=>r.json()),b=await bob.request.post(base+'/api/session',{data:{name:'ShareBob'}}).then(r=>r.json());
+    const post=await alice.request.post(base+'/api/posts',{headers:{'x-csrf-token':a.csrf_token},data:{title:'Sharing browser post',body:'A neighborhood update',type:'text',category:'story'}}).then(r=>r.json());
+    const comment=await alice.request.post(base+`/api/posts/${post.id}/comments`,{headers:{'x-csrf-token':a.csrf_token},data:{body:'An author reply'}}).then(r=>r.json());
+    const page=await bob.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(base+'/');
+    await page.locator(`[data-post-id="${post.id}"] .tile-open`).click();await page.locator('.detail-modal .detail-meta .author-trigger').click();
+    assert.equal(await page.locator('.author-popover button').count(),2);await page.keyboard.press('Escape');assert.equal(await page.locator('.author-popover').count(),0);
+    await page.locator('.comment-unit .author-trigger').click();await page.getByRole('menuitem',{name:'Show profile'}).click();
+    await page.waitForURL(`**/u/${a.user.id}`);await page.getByText('Total reputation').waitFor();assert.equal(await page.locator('.profile-post-list').count(),0);
+    const guest=await browser.newContext({viewport:{width:390,height:844},locale:'nb-NO'}),guestPage=await guest.newPage();await guestPage.goto(base+`/u/${a.user.id}`);await guestPage.getByText('Totalt omdømme').waitFor();
+    const ownerPage=await alice.newPage();await ownerPage.goto(base+`/?post=${post.id}`);await ownerPage.locator('.detail-meta .author-trigger').click();assert.equal(await ownerPage.locator('.author-popover button').count(),1,'Own author menu must not offer chat.');
+    if(process.env.HEREME_SHARING_SCREENSHOT)await page.screenshot({path:process.env.HEREME_SHARING_SCREENSHOT+'-profile.png'});
+    await page.goBack();await page.locator('.detail-modal .detail-meta .author-trigger').waitFor();
+    const before=await bob.request.get(base+'/api/chats').then(r=>r.json());await page.locator('.detail-meta .author-trigger').click();await page.getByRole('menuitem',{name:'Start chat'}).click();
+    await page.waitForURL(`**/chat?user=${a.user.id}`);await page.locator('#conversationTitle').getByText('ShareAlice').waitFor();
+    const after=await bob.request.get(base+'/api/chats').then(r=>r.json());assert.equal(after.chats.length,before.chats.length,'Opening chat must not send a request.');
+    await guestPage.goto(base+`/?post=${post.id}`);await guestPage.locator('.detail-meta .author-trigger').click();await guestPage.locator('[data-action="start-author-chat"]').click();await guestPage.waitForURL(`**/chat?user=${a.user.id}`);await guestPage.locator('.auth-dialog').waitFor();
+    await page.goto(base+`/?post=${post.id}`);await page.locator('.comment-unit').waitFor();
+    const row=page.locator(`[data-comment-id="${comment.id}"]`);await row.locator('.comment-body').evaluate(node=>window.__commentText=node);await row.getByRole('button',{name:'Upvote comment'}).click();assert.equal(await row.locator('.comment-score').textContent(),'+1');assert.equal(await row.locator('.comment-body').evaluate(node=>node===window.__commentText),true,'Voting must keep the comment DOM mounted.');
+    assert.deepEqual(errors,[]);
+    console.log('Sharing browser flow passed: author menu, public profile, draft chat and comment vote.');
+  }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));S.db.close();fs.rmSync(data,{recursive:true,force:true});}
+})().catch(error=>{console.error(error);process.exitCode=1;});
