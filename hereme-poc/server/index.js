@@ -16,6 +16,7 @@ const app=web();
 const httpListen=app.listen;app.listen=(...args)=>{const server=httpListen(...args);attachChatSocket(server,{db:S.db,identity:S.identity,config:S.config});return server;};
 const runtimeMetrics={errors:0,rate_limited:0,started_at:new Date().toISOString()};
 const imageUpload=upload({storage:upload.memoryStorage(),limits:{fileSize:12*1024*1024,files:1}});
+const avatarUpload=upload({storage:upload.memoryStorage(),limits:{fileSize:S.avatars.MAX_BYTES,files:1}});
 const errors=(res,status,code,message,details)=>res.status(status).json({error:{code,message:localizeError(res.request,code,message),details:details||undefined}});
 const loopback=value=>['127.0.0.1','::1','::ffff:127.0.0.1'].includes(value);
 const ip=req=>S.config.trustProxy&&loopback(req.socket.remoteAddress)?String(req.headers['x-forwarded-for']||req.socket.remoteAddress).split(',')[0].trim():req.socket.remoteAddress;
@@ -66,12 +67,12 @@ app.get('/api/health',(req,res)=>{const worker=S.db.prepare('SELECT last_run FRO
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=19').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=20').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===19;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===20;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
-    checks.media=['media','uploads','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();});
+    checks.media=['media','uploads','avatars','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();})&&S.avatars.verify();
     const stat=fs.statfsSync(S.dataDir);checks.disk=stat.bavail*stat.bsize>=S.config.minFreeBytes;
   }catch(error){message=error.message;}
   const ok=Object.values(checks).every(Boolean);res.status(ok?200:503).json({ok,checks,message:message||undefined});
@@ -105,6 +106,9 @@ app.post('/api/recovery/confirm',async(req,res,next)=>{try{
   res.status(303).set('Location','/?recovery-saved=1').send('');
 }catch(error){next(error);}});
 app.get('/api/me',(req,res)=>{const current=S.identity.readSession(req,res);if(!current)return errors(res,401,'AUTH_REQUIRED','Ingen aktiv sesjon.');res.json({user:current,csrf_token:current.csrf||null,legacy_migrated:Boolean(current.legacyMigrated),recovery_key:current.recoveryKey||null,recovery_key_shown_once:Boolean(current.recoveryKey)});});
+app.get('/api/avatars/:id/:version/:size',(req,res)=>{const file=S.avatars.file(req.params.id,req.params.version,req.params.size);res.set('Content-Type','image/webp').set('Cache-Control','private, no-store').send(fs.readFileSync(file));});
+app.post('/api/me/avatar',write(null,10),avatarUpload.single('image'),async(req,res)=>res.status(201).json(await S.avatars.save(req.auth,req.file,req.body)));
+app.delete('/api/me/avatar',write(null,10),(req,res)=>res.json(S.avatars.remove(req.auth)));
 app.post('/api/session/logout',write(null,20),(req,res)=>{S.push.disableDevice(req.auth,{id:req.body?.push_subscription_id,endpoint:req.body?.push_endpoint});S.identity.logout(req.auth,res);res.json({ok:true});});
 app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.push.disableAll(req.auth);S.identity.revokeAll(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>{S.identity.requireFresh(req.auth);res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true});});

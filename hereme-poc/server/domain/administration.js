@@ -5,7 +5,7 @@ const path=require('node:path');
 const {fail}=require('./errors');
 const V=require('./validation');
 
-function createAdministrationService(db,dataDir,{audit,identity}={}){
+function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
   const postStatuses=['draft','processing','published','review','hidden','rejected'];
   const postCategories=['question','opinion','story','alert','tip'];
   const reason=value=>V.text(value,{name:'Begrunnelse',min:3,max:300});
@@ -80,7 +80,7 @@ function createAdministrationService(db,dataDir,{audit,identity}={}){
       db.prepare(`DELETE FROM posts WHERE id IN (${placeholders})`).run(...ids);
       if(mediaIds.length)db.prepare(`DELETE FROM media WHERE id IN (${mediaIds.map(()=>'?').join(',')})`).run(...mediaIds);
       db.exec('COMMIT');staged.commit();return ids.length;
-    }catch(error){if(db.isTransaction)db.exec('ROLLBACK');staged.rollback();throw error;}
+    }catch(error){if(db.isTransaction){db.exec('ROLLBACK');staged.rollback();}throw error;}
   }
 
   function deletePost(actor,postId,input){requireAdmin(actor);return {ok:true,deleted:deletePosts(actor,[postId],reason(input.reason))};}
@@ -110,8 +110,8 @@ function createAdministrationService(db,dataDir,{audit,identity}={}){
       db.prepare("UPDATE comments SET author_id=NULL,demo_author='slettet bruker' WHERE author_id=?").run(userId);
       db.prepare('UPDATE rooms SET created_by=NULL WHERE created_by=?').run(userId);db.prepare('UPDATE media SET owner_id=NULL WHERE owner_id=?').run(userId);db.prepare('DELETE FROM reports WHERE user_id=?').run(userId);
       audit.record({actorId:actor.id,action:'admin.user.deleted',subjectType:'user',subjectId:userId,previous:user,next:{deleted:true,posts_deleted:withPosts,post_count:postIds.length},reason:why});
-      db.prepare('DELETE FROM users WHERE id=?').run(userId);db.exec('COMMIT');staged.commit();return {ok:true,posts_deleted:postIds.length};
-    }catch(error){if(db.isTransaction)db.exec('ROLLBACK');staged.rollback();throw error;}
+      db.prepare('DELETE FROM users WHERE id=?').run(userId);db.exec('COMMIT');staged.commit();avatars.purgeUser(userId);return {ok:true,posts_deleted:postIds.length};
+    }catch(error){if(db.isTransaction){db.exec('ROLLBACK');staged.rollback();}throw error;}
   }
 
   return {overview,updatePost,deletePost,updateComment,deleteComment,deleteUser};

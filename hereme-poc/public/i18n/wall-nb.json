@@ -65,6 +65,7 @@
   "wall.profile.direct_chats": "Direkte chatter",
   "wall.profile.group_chats": "Gruppechatter",
   "wall.profile.account_settings": "Kontoinnstillinger",
+  "wall.profile.avatar_edit": "Endre profilbilde", "wall.profile.avatar_title": "Profilbilde", "wall.profile.avatar_public": "Bildet ditt vises der pseudonymet ditt vises. JPEG, PNG eller WebP, opptil 5 MiB. Velg et kvadratisk utsnitt før du lagrer.", "wall.profile.avatar_zoom": "Zoom", "wall.profile.avatar_horizontal": "Vannrett", "wall.profile.avatar_vertical": "Loddrett", "wall.profile.avatar_save": "Lagre bilde", "wall.profile.avatar_remove": "Fjern bilde", "wall.profile.avatar_cancel": "Avbryt", "wall.profile.avatar_file_error": "Velg et gyldig JPEG-, PNG- eller WebP-bilde under 5 MiB.", "wall.profile.avatar_saved": "Profilbildet er oppdatert.",
   "wall.profile.my_posts": "MINE INNLEGG",
   "wall.profile.shown": "{count} vist",
   "wall.profile.no_posts": "Ingen innlegg ennå",

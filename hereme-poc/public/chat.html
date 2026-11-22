@@ -16,6 +16,8 @@
   <script src="/pwa.js" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/chat.css">
+  <script src="/avatar.js" defer></script>
+  <script src="/chat-render.js" defer></script>
   <script src="/chat.js" defer></script>
 </head>
 <body>
@@ -23,12 +25,11 @@
   <main class="chat-shell" id="chatShell">
     <aside class="chat-inbox" aria-label="Chat-innboks">
       <header class="inbox-header">
-        <a class="wall-link" href="/">← Plakatveggen</a>
-        <div class="inbox-heading"><h1>Chat</h1><span id="unreadCount" class="unread-count" hidden></span></div>
+        <div class="inbox-top"><a class="wall-link" href="/" aria-label="Plakatveggen" title="Plakatveggen"><img src="/assets/icons/chat-back-arrow.svg" alt=""></a><div class="inbox-heading"><h1>Chat</h1><span id="unreadCount" class="unread-count" hidden></span></div></div>
         <div class="search-line">
           <label class="sr-only" for="usernameSearch">Søk etter brukernavn</label>
           <input id="usernameSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Søk etter brukernavn…" aria-controls="searchResults" aria-expanded="false">
-          <button id="createGroup" class="icon-button group-add" type="button" aria-label="Opprett gruppe" title="Opprett gruppe"><img src="/assets/icons/chat-group-add.svg" alt=""></button>
+          <button id="createGroup" class="icon-button group-add" type="button" aria-label="Opprett gruppe" title="Opprett gruppe"><img src="/assets/icons/chat-group-create.svg" alt=""></button>
         </div>
         <div id="searchResults" class="search-results" role="listbox" aria-label="Brukerforslag" hidden></div>
         <div id="searchStatus" class="search-status" role="status" aria-live="polite"></div>
@@ -47,10 +48,10 @@
       <div id="conversationEmpty" class="conversation-empty">Velg en samtale eller søk etter en bruker.</div>
       <div id="conversationContent" class="conversation-content" hidden>
         <header class="conversation-header">
-          <button id="backToInbox" class="back-button" type="button" aria-label="Tilbake til samtaler">←</button>
-          <img id="conversationIcon" class="conversation-icon" src="/assets/icons/chat-single.svg" alt="">
+          <button id="backToInbox" class="back-button" type="button" aria-label="Tilbake til samtaler"><img src="/assets/icons/chat-back-arrow.svg" alt=""></button>
+          <span id="conversationAvatar" class="conversation-avatar" aria-hidden="true"></span>
           <div class="conversation-heading"><h2 id="conversationTitle" tabindex="-1"></h2><span id="conversationSubtitle"></span></div>
-          <button id="toggleDetails" type="button" class="details-button" aria-controls="conversationDetails" aria-expanded="false">Detaljer</button>
+          <button id="toggleDetails" type="button" class="details-button" aria-label="Detaljer" aria-controls="conversationDetails" aria-expanded="false"><img src="/assets/icons/chat-chevron-down.svg" alt=""></button>
         </header>
         <div id="conversationNotice" class="conversation-notice" role="status" hidden></div>
         <div id="decisionActions" class="decision-actions" hidden><button id="acceptInvite" class="primary-action" type="button">Godta</button><button id="declineInvite" type="button">Avslå</button></div>
@@ -63,9 +64,10 @@
         </div>
         <button id="olderMessages" class="older-messages" type="button" hidden>Vis eldre meldinger</button>
         <div id="messages" class="message-list" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <button id="newMessages" class="new-messages" type="button" hidden></button>
         <div class="composer-wrap">
           <form id="messageForm"><div class="message-form"><label class="sr-only" for="messageInput">Melding</label><textarea id="messageInput" rows="1" maxlength="5000" placeholder="Skriv en melding…"></textarea><button id="sendMessage" class="primary-action" type="submit" disabled>Send</button></div>
-            <div class="attachment-line"><button class="attachment-button" id="pickImage" type="button" aria-label="Ta eller velg bilde" title="Ta eller velg bilde"><img src="/assets/icons/chat-attach-image.svg" alt=""></button><button class="attachment-button" id="pickVideo" type="button" aria-label="Ta eller velg video" title="Ta eller velg video"><img src="/assets/icons/chat-attach-video.svg" alt=""></button><button class="attachment-button" id="pickFile" type="button" aria-label="Legg ved filer" title="Legg ved filer"><img src="/assets/icons/chat-attach-file.svg" alt=""></button><span>Filer slettes etter 7 dager</span></div>
+            <div class="attachment-controls"><button class="attachment-button" id="toggleAttachments" type="button" aria-label="Legg ved" aria-controls="attachmentPopover" aria-expanded="false"><img src="/assets/icons/chat-attach-plus.svg" alt=""></button><div id="attachmentPopover" class="attachment-popover" role="group" aria-label="Vedleggsvalg" hidden><button class="attachment-button" id="pickImage" type="button" aria-label="Ta eller velg bilde" title="Ta eller velg bilde"><img src="/assets/icons/chat-attach-photo.svg" alt=""></button><button class="attachment-button" id="pickVideo" type="button" aria-label="Ta eller velg video" title="Ta eller velg video"><img src="/assets/icons/chat-attach-video.svg" alt=""></button><button class="attachment-button" id="pickFile" type="button" aria-label="Legg ved filer" title="Legg ved filer"><img src="/assets/icons/chat-attach-file.svg" alt=""></button><span id="attachmentRetention">Filer slettes etter 7 dager</span></div></div>
             <div id="stagedFiles" class="staged-files" aria-live="polite" hidden></div><progress id="uploadProgress" max="100" value="0" hidden></progress><button id="pauseUpload" type="button" hidden>Pause</button><span id="uploadStatus" role="status"></span>
           </form>
           <input id="imageInput" type="file" accept="image/*" capture="environment" multiple hidden><input id="videoInput" type="file" accept="video/*" capture="environment" multiple hidden><input id="fileInput" type="file" multiple hidden>

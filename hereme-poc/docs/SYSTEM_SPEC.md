@@ -9,8 +9,8 @@ See [ADR 0011](adr/0011-passkeys.md) and `PASSKEYS_PROGRESS.md`.
 temporary www/legacy redirects are prepared. Live cutover is BLOCKED pending DNS
 resolution and a reviewed clean release. See [execution ledger](domain-migration.md).
 
-**Snapshot:** 2026-11-21, E12-01/E13-01 local implementation
-**Code baseline:** `master` at `2bdb336` with uncommitted domain migration and passkey changes.
+**Snapshot:** 2026-11-22, E17 chat redesign and optional avatars in the local worktree
+**Code baseline:** `master` at `951f482` plus uncommitted E17 changes.
 **Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 
@@ -50,7 +50,7 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 | UI | Mobile full-screen post detail; desktop Simple and Advanced wall views; light/dark preference; locally served Cascadia Code; square controls and reduced-motion support. |
 | Media | Original images are kept and validated server-side; display and thumbnail derivatives are generated. Post video is at most 180 seconds and uses the media worker when enabled. |
 | Staff | Role-based moderator and administrator surfaces, with audited actions and server-side authorization. |
-| Personal profile | An authenticated member has a private, addressable `/me` profile with their identity, member date, received upvotes, authored-post activity and accepted direct/group-chat counts. |
+| Personal profile | An authenticated member has a private, addressable `/me` profile with their identity, member date, received upvotes, authored-post activity and accepted direct/group-chat counts. They may add, crop, replace or remove an optional public-facing avatar. |
 | PWA and notifications | The site exposes an optional installable PWA. Members have one in-app inbox, account category preferences and per-device Web Push opt-in. Production push remains disabled until device verification. |
 
 ## PWA and notification delivery
@@ -93,7 +93,7 @@ The 13 bundled examples are marked synthetic. Existing user-authored content is 
 
 ### Conversations and consent
 
-- Mobile opens one inbox for direct messages and groups. Desktop uses the same conversation UI in two panes. Rows show an icon, title and a 15-grapheme message preview, or `(attachment)` for an attachment-only message.
+- Mobile opens one compact inbox for direct messages and groups. Desktop uses the same conversation UI in two panes. Rows show an authorized avatar, title and a 15-grapheme message preview, or `(attachment)` for an attachment-only message. Accepted groups show up to three participant avatars ordered by latest message activity; pending invites show a neutral group icon.
 - Username lookup runs as the user types, using indexed candidates and fuzzy ranking. Selecting a result opens an existing conversation or a local draft; it does not send a request.
 - The first Send creates one pending direct conversation, stores the initial message and issues one durable request notification. Only the sender can read pending content. The recipient accepts or declines; decline is terminal for that pair. Retry keys avoid duplicate messages and requests.
 - A group builder adds and removes people before confirmation. Confirmation creates one group and one invitation per final invitee. Invitees cannot read group messages until acceptance. The creator can send immediately.
@@ -108,9 +108,9 @@ The 13 bundled examples are marked synthetic. Existing user-authored content is 
 
 ### Attachments and live updates
 
-- The composer places text and Send above three square image, video and general-file pickers. Selection changes only a local draft. Up to 12 files may be staged, removed and sent with optional text as **one ordered message**.
+- One square plus button opens photo, video and general-file choices. Selection changes only a local draft. Up to 12 files may be staged, removed and sent with optional text as **one ordered message**.
 - Send uploads 4 MiB chunks into private staging, then claims the staged IDs with the message in a database transaction. Retry keys prevent duplicate final messages. Failed uploads keep the in-page draft for retry. Staged files not sent are deleted after one day.
-- One image has an inline thumbnail; one video has an inline preview control; one ordinary file has a file row. Multiple files appear as one bundle with a viewer and individual download actions. The server checks current membership for every private preview and download.
+- Consecutive messages from one sender form compact runs; each message retains its own accessible author and timestamp. A lone attachment displays without a text bubble. Two or more files form one fanned bundle opening a gallery with individual download actions. The server checks current membership for every private preview and download. Keyed transcript reconciliation retains existing media nodes when WebSocket events refresh history.
 - Sent attachment bytes expire seven days after message creation. A separate worker deletes bytes permanently and retains expired metadata so the message can show a tombstone. Normal application snapshots exclude private chat bytes; restoring a snapshot does not recover attachments.
 - Authenticated WebSockets announce recipient-scoped event IDs. The browser re-fetches canonical HTTP state on events and reconnect; HTTP provides history, pagination and uploads. The server checks session revocation and limits connections. A disconnected browser has a bounded reconnect delay.
 
@@ -122,20 +122,22 @@ The 13 bundled examples are marked synthetic. Existing user-authored content is 
 | --- | --- |
 | `public/` | Plain browser JavaScript/CSS and static assets. UI renders API state and dispatches actions; it does not own durable policy. |
 | `server/index.js` | HTTP routes, authentication/CSRF middleware, limits and response mapping. |
-| `server/domain/` | Identity, posts, interactions, staff actions, chat, media, video, locations and verification rules. |
-| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, notifications, push subscriptions/outbox/deliveries, live notification events, passkey credentials/challenges/handles, ownership proofs and audit records. Migrations reach schema 18. WAL mode is used. |
-| Private data directory | SQLite plus public post media, temporary uploads and private chat bytes. Chat bytes are outside public static paths. |
+| `server/domain/` | Identity, posts, interactions, staff actions, chat, avatars, media, video, locations and verification rules. |
+| SQLite | Canonical users, sessions, roles, posts, votes, comments, reports, media, chats, attachments, avatars, notifications, push subscriptions/outbox/deliveries, live notification events, passkey credentials/challenges/handles, ownership proofs and audit records. Migrations reach schema 20. WAL mode is used. |
+| Private data directory | SQLite plus public post media, processed avatars, temporary uploads and private chat bytes. Avatar bytes are served only through a versioned route; chat bytes are outside public static paths. |
 | Workers | Durable post-media processing, minute-based chat attachment cleanup and bounded Web Push delivery. |
 | WebSocket channel | Live signals only; persisted messages and notifications remain authoritative. |
 | Caddy | HTTPS/WSS reverse proxy in the Docker deployment. Production Node binds to loopback. |
 
 Key API groups are `/api/session*` and `/api/me` for identity; `/api/posts*` for forum content; `/api/admin/*` for staff; `/api/chats*`, `/api/chat-uploads/*`, `/api/chat/files/*`, `/api/chat/notifications` and `/api/chat-socket` for chat. Route names and DTOs in `server/index.js` are authoritative when implementing a client.
 
+Avatars are optional pseudonymous public images. `POST /api/me/avatar` accepts one JPEG, PNG or WebP up to 5 MiB with crop coordinates; the server validates and rotates it, strips metadata, and stores only 64 px and 256 px WebP variants. `DELETE /api/me/avatar` restores the initial-letter fallback. The authenticated user projection includes versioned avatar URLs; active-user images are readable through `/api/avatars/:id/:version/:size`. Usernames remain separate from stable avatar ownership. The existing profile explains visibility before upload. Account deletion purges the image; backups include avatar variants and checksums. See [ADR 0012](adr/0012-optional-avatars.md).
+
 ## Security, retention and operating limits
 
 - Production requires one HTTPS public origin, loopback binding, secure HttpOnly session cookies, CSRF protection on writes, host/origin validation and rate limits. Authentication and membership are checked server-side for private data.
 - Production defaults configure a 30-day session, a 2 GiB upload ceiling and a 2 GiB free-disk reserve. These are operational limits; “any file size” is not a literal unlimited-resource guarantee.
-- Post media and database backups use checksums and WAL-safe snapshots. Private chat bytes are deliberately omitted from normal snapshots to avoid restoring expired files. Chat messages and expired-file metadata remain.
+- Post media, avatar variants and database backups use checksums and WAL-safe snapshots. Private chat bytes are deliberately omitted from normal snapshots to avoid restoring expired files. Chat messages and expired-file metadata remain.
 - `GET /api/live`, `/api/health` and `/api/ready` expose liveness, operational metrics and readiness. Readiness checks database, foreign keys, media paths, disk, expected schema and chat-worker freshness.
 - Location geometry and optional BankID verification are disabled by the current production flags. Existing role-based staff sign-in is active. New provider-backed verification or administration flows require separate data, policy and rollout decisions.
 
@@ -145,7 +147,7 @@ The public PoC target is `https://hereme.46.251.249.110.nip.io/`. At **2026-11-2
 
 `deploy/deploy-online.ps1` packages only a clean committed `hereme-poc` tree. It uploads a release, creates and verifies a backup, builds the Docker image, cuts over, checks public readiness and attempts rollback on failed cutover. `release/v2` is a local frozen code reference at `5d7b72d`; branch creation alone does not deploy or publish it.
 
-Last local implementation checks recorded for this snapshot: **38 automated Node tests passed**, the desktop/mobile chat browser flow passed, **68 JavaScript files** passed syntax checking, and `git diff --check` passed. These checks do not replace a production smoke test or a real-device video test.
+Local E17 checks on 2026-11-22: **70 automated Node tests passed**, the chat browser flow and avatar browser flow at 320/390 CSS px passed, **103 JavaScript files** passed syntax checking, and `git diff --check` passed. Browser captures and open device checks are listed in `docs/chat-redesign-progress.md`. These checks do not replace a production smoke test, clone restore or real-device media test.
 
 ## Known gaps and decisions to scope next
 

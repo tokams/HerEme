@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22 — Compact chat and optional avatars (E17-01/E17-02)
+
+- Condensed inbox and conversation headers, moved file choices into a plus-button popover, grouped consecutive sender messages, and added bare single-media cards and fanned multi-file bundles with the existing private gallery.
+- Reconciled messages by stable IDs so live refreshes retain mounted media, while preserving staged Send, consent and seven-day private attachment retention.
+- Added optional profile photo crop/change/removal, shared square avatars and authorized group stacks. Schema 20 stores avatar ownership; the server writes only validated, metadata-free WebP variants and includes them in verified backups.
+- Added browser, API and renderer checks; physical iPhone/PWA and production-clone migration checks remain open.
+
 ## 2026-11-22 — Mobile UI stabilization (E16-01)
 
 - Update vote controls and score in place, keeping poster media mounted and the wall stable during rapid votes and request failures. Distinguish failed images from intentional text-only posters.

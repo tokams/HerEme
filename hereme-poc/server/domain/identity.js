@@ -18,7 +18,8 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
   function userProjection(user){
     const roles=roleRows.all(user.id).map(row=>row.role);
     const caps=new Set();for(const role of roles)for(const cap of capabilities[role]||[])caps.add(cap);
-    return {id:user.id,name:user.name,status:user.status,secured:Boolean(user.secured_at),preferred_language:user.preferred_language??null,roles,capabilities:[...caps]};
+    const avatar=db.prepare('SELECT version FROM user_avatars WHERE user_id=?').get(user.id);
+    return {id:user.id,name:user.name,status:user.status,secured:Boolean(user.secured_at),preferred_language:user.preferred_language??null,avatar_url:avatar?`/api/avatars/${encodeURIComponent(user.id)}/${avatar.version}/small`:null,avatar_large_url:avatar?`/api/avatars/${encodeURIComponent(user.id)}/${avatar.version}/large`:null,roles,capabilities:[...caps]};
   }
   function issueSession(userId,userAgent=''){
     const raw=crypto.randomBytes(32).toString('base64url'),csrf=crypto.randomBytes(24).toString('base64url');

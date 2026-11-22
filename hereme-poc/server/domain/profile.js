@@ -1,7 +1,7 @@
 'use strict';
 const {fail}=require('./errors');
 
-function createProfileService(db,{posts}){
+function createProfileService(db,{posts,avatars}){
   const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
   const decode=value=>{try{return JSON.parse(Buffer.from(value,'base64url').toString('utf8'));}catch{fail('INVALID_CURSOR','Ugyldig sidepeker.');}};
   function summary(user,{sort='new',cursor='',limit=20}={}){
@@ -24,7 +24,7 @@ function createProfileService(db,{posts}){
       FROM posts p LEFT JOIN post_design d ON d.post_id=p.id WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ?`).all(...params,limit+1);
     const hasMore=rows.length>limit;if(hasMore)rows.pop();const last=rows.at(-1);
     const next_cursor=hasMore?encode({sort,created_at:last.created_at,id:Math.abs(last.id),score:last.score}):null;
-    return {profile:{name:author.name,created_at:author.created_at},metrics,posts:rows,next_cursor,has_more:hasMore};
+    return {profile:{name:author.name,created_at:author.created_at,...avatars.urls(user.id)},metrics,posts:rows,next_cursor,has_more:hasMore};
   }
   return {summary};
 }

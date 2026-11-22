@@ -65,6 +65,7 @@
   "wall.profile.direct_chats": "Direct chats",
   "wall.profile.group_chats": "Group chats",
   "wall.profile.account_settings": "Account settings",
+  "wall.profile.avatar_edit": "Edit profile picture", "wall.profile.avatar_title": "Profile picture", "wall.profile.avatar_public": "Your photo is visible wherever your pseudonym is visible. JPEG, PNG or WebP, up to 5 MiB. Choose a square crop before saving.", "wall.profile.avatar_zoom": "Zoom", "wall.profile.avatar_horizontal": "Horizontal", "wall.profile.avatar_vertical": "Vertical", "wall.profile.avatar_save": "Save photo", "wall.profile.avatar_remove": "Remove photo", "wall.profile.avatar_cancel": "Cancel", "wall.profile.avatar_file_error": "Choose a valid JPEG, PNG or WebP image under 5 MiB.", "wall.profile.avatar_saved": "Profile picture updated.",
   "wall.profile.my_posts": "MY POSTS",
   "wall.profile.shown": "{count} shown",
   "wall.profile.no_posts": "No posts yet",

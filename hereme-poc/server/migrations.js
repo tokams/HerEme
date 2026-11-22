@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 19) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 20) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -386,6 +386,17 @@ function applyMigrations(db) {
     db.exec('BEGIN IMMEDIATE');
     try{db.exec(`ALTER TABLE users ADD COLUMN preferred_language TEXT CHECK(preferred_language IN ('nb','en'));
       INSERT INTO schema_migrations(version) VALUES(19); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<20){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE user_avatars (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL CHECK(version>0),
+      small_path TEXT NOT NULL,
+      large_path TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+      INSERT INTO schema_migrations(version) VALUES(20); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

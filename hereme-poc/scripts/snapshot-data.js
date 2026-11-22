@@ -31,7 +31,7 @@ async function snapshotData(sourceDir, destinationDir) {
     if (snapshot.prepare('PRAGMA foreign_key_check').all().length) {
       throw new Error('Snapshot contains broken foreign keys.');
     }
-    for(const directory of ['uploads','media']){
+    for(const directory of ['uploads','media','avatars']){
       const from=path.join(source,directory),to=path.join(staging,directory);
       if(fs.existsSync(from))fs.cpSync(from,to,{recursive:true,errorOnExist:true,force:false});else fs.mkdirSync(to,{recursive:true});
     }
@@ -55,6 +55,12 @@ async function snapshotData(sourceDir, destinationDir) {
         if(crypto.createHash('sha256').update(original).digest('hex')!==row.sha256)throw new Error(`Media checksum mismatch: ${row.id}`);
       }
     }
+    if(snapshot.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_avatars'").get()){
+      for(const row of snapshot.prepare('SELECT user_id,small_path,large_path FROM user_avatars').all())for(const relative of [row.small_path,row.large_path]){
+        const file=path.resolve(staging,relative);if(!file.startsWith(staging+path.sep))throw new Error(`Unsafe avatar record ${row.user_id}: ${relative}`);
+        if(!fs.existsSync(file))throw new Error(`Missing avatar record ${row.user_id}: ${relative}`);
+      }
+    }
     counts = Object.fromEntries(['users', 'rooms', 'posts', 'votes', 'comments', 'reports'].map(table =>
       [table, snapshot.prepare(`SELECT count(*) AS count FROM ${table}`).get().count]));
     applyMigrations(snapshot);
@@ -65,7 +71,7 @@ async function snapshotData(sourceDir, destinationDir) {
   } finally {
     snapshot.close();
   }
-  const checksums={};for(const directory of ['uploads','media'])for(const file of walk(path.join(staging,directory)))checksums[path.relative(staging,file).replaceAll('\\','/')]=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  const checksums={};for(const directory of ['uploads','media','avatars'])for(const file of walk(path.join(staging,directory)))checksums[path.relative(staging,file).replaceAll('\\','/')]=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   const manifest = { version: 2, source, createdAt: new Date().toISOString(), counts, checksums };
   fs.writeFileSync(path.join(staging, 'snapshot.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
   fs.renameSync(staging, destination);

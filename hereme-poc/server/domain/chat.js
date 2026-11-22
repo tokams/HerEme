@@ -2,7 +2,7 @@
 const fs=require('node:fs');const path=require('node:path');const crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
 const {fail}=require('./errors');const V=require('./validation');
-function createChatService(db,dataDir,config,{audit,notifications:notificationService}){
+function createChatService(db,dataDir,config,{audit,notifications:notificationService,avatars}){
   const root=path.join(dataDir,'chat');fs.mkdirSync(root,{recursive:true});
   const id=()=>crypto.randomUUID();const uploads=new Set();
   const record=(actor,action,type,subject)=>audit.record({actorId:actor?.id||null,action,subjectType:type,subjectId:subject});
@@ -21,7 +21,7 @@ function createChatService(db,dataDir,config,{audit,notifications:notificationSe
     const second=db.prepare("SELECT id,name,normalized_name FROM users WHERE substr(normalized_name,2,1)=? AND status='active' AND id<>? AND NOT EXISTS(SELECT 1 FROM chat_blocks WHERE (blocker_id=users.id AND blocked_id=?) OR (blocker_id=? AND blocked_id=users.id)) ORDER BY normalized_name LIMIT 200").all([...q][1],user.id,user.id,user.id);
     const candidates=[...new Map([...first,...second].map(item=>[item.id,item])).values()];
     const tolerance=Math.min(3,Math.max(1,Math.floor([...q].length/3)));
-    return candidates.map(item=>{const distance=editDistance(q,item.normalized_name);const tier=item.normalized_name===q?0:item.normalized_name.startsWith(q)?1:item.normalized_name.includes(q)?2:distance<=tolerance?3:4;return {...item,tier,distance};}).filter(item=>item.tier<4).sort((a,b)=>a.tier-b.tier||a.distance-b.distance||a.normalized_name.localeCompare(b.normalized_name,'no')||a.id.localeCompare(b.id)).slice(0,8).map(({id,name})=>({id,name}));
+    return candidates.map(item=>{const distance=editDistance(q,item.normalized_name);const tier=item.normalized_name===q?0:item.normalized_name.startsWith(q)?1:item.normalized_name.includes(q)?2:distance<=tolerance?3:4;return {...item,tier,distance};}).filter(item=>item.tier<4).sort((a,b)=>a.tier-b.tier||a.distance-b.distance||a.normalized_name.localeCompare(b.normalized_name,'no')||a.id.localeCompare(b.id)).slice(0,8).map(({id,name})=>({id,name,...avatars.publicView(id)}));
   }
   function direct(user,targetId){
     if(user.id===targetId||!active(targetId)||blocked(user.id,targetId))fail('RECIPIENT_UNAVAILABLE','Brukeren kan ikke kontaktes.',404);
@@ -90,7 +90,18 @@ function createChatService(db,dataDir,config,{audit,notifications:notificationSe
     const incoming=db.prepare("SELECT c.id,'direct' kind,c.creator_id,'incoming' state,u.name name,c.created_at,c.updated_at,NULL last_body,NULL last_kind,(SELECT count(*) FROM chat_notifications n WHERE n.chat_id=c.id AND n.recipient_id=? AND n.read_at IS NULL) unread,r.id request_id FROM chat_requests r JOIN chats c ON c.id=r.chat_id JOIN users u ON u.id=r.sender_id WHERE r.recipient_id=? AND r.state='pending' AND NOT EXISTS(SELECT 1 FROM chat_members m WHERE m.chat_id=c.id AND m.user_id=?)").all(user.id,user.id,user.id);
     const invited=db.prepare("SELECT c.id,'group' kind,c.creator_id,'invited' state,c.name,c.created_at,i.created_at updated_at,NULL last_body,NULL last_kind,(SELECT count(*) FROM chat_notifications n WHERE n.chat_id=c.id AND n.recipient_id=? AND n.read_at IS NULL) unread,i.id invite_id FROM chat_invites i JOIN chats c ON c.id=i.chat_id WHERE i.recipient_id=? AND i.state='pending'").all(user.id,user.id);
     const legacy=db.prepare("SELECT 'legacy:'||r.id id,'direct' kind,NULL creator_id,'incoming' state,u.name,r.created_at,r.created_at updated_at,NULL last_body,NULL last_kind,1 unread,r.id request_id FROM chat_requests r JOIN users u ON u.id=r.sender_id WHERE r.recipient_id=? AND r.state='pending' AND r.chat_id IS NULL").all(user.id);
-    return [...joined,...incoming,...invited,...legacy].sort((a,b)=>String(b.updated_at).localeCompare(String(a.updated_at))||b.id.localeCompare(a.id));
+    const participants=db.prepare(`SELECT u.id,u.name FROM chat_members cm JOIN users u ON u.id=cm.user_id
+      WHERE cm.chat_id=? AND u.status='active' AND (u.id<>? OR ?='group')
+      ORDER BY (SELECT max(m.id) FROM chat_messages m WHERE m.chat_id=cm.chat_id AND m.sender_id=u.id) DESC,cm.joined_at DESC,u.id LIMIT 3`);
+    const requestPeer=db.prepare('SELECT sender_id,recipient_id FROM chat_requests WHERE id=? OR chat_id=? ORDER BY created_at DESC LIMIT 1');
+    return [...joined,...incoming,...invited,...legacy].map(row=>{
+      const visible=row.state==='invited'?[]:row.state==='incoming'||row.id.startsWith('legacy:')?[]:participants.all(row.id,user.id,row.kind);
+      if(!visible.length&&row.kind==='direct'){
+        const request=requestPeer.get(row.request_id||'',row.id),peerId=request&&(request.sender_id===user.id?request.recipient_id:request.sender_id);
+        visible.push({id:peerId||undefined,name:row.name});
+      }
+      return {...row,participants:visible.map(person=>({...person,...(person.id?avatars.publicView(person.id):{avatar_url:null})}))};
+    }).sort((a,b)=>String(b.updated_at).localeCompare(String(a.updated_at))||b.id.localeCompare(a.id));
   }
   function notifications(user,before){const cursor=before?V.integer(before,{name:'Sidepeker',min:1}):Number.MAX_SAFE_INTEGER;return db.prepare('SELECT id,actor_id,chat_id,kind,created_at,read_at FROM chat_notifications WHERE recipient_id=? AND id<? ORDER BY id DESC LIMIT 50').all(user.id,cursor);}
   function markRead(user,chatId){const changed=db.prepare("UPDATE chat_notifications SET read_at=datetime('now') WHERE recipient_id=? AND chat_id=? AND read_at IS NULL").run(user.id,chatId);if(changed.changes)event(user.id,chatId,'conversation.updated');return {ok:true};}
@@ -125,7 +136,7 @@ function createChatService(db,dataDir,config,{audit,notifications:notificationSe
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
   function presence(user,visible){if(typeof visible!=='boolean')fail('INVALID_INPUT','Ugyldig synlighet.');db.prepare("INSERT INTO chat_presence(user_id,visible,seen_at) VALUES(?,?,datetime('now')) ON CONFLICT(user_id) DO UPDATE SET visible=excluded.visible,seen_at=excluded.seen_at").run(user.id,Number(visible));return {visible};}
-  function peers(user,chatId){member(chatId,user);return db.prepare("SELECT u.id,u.name,CASE WHEN p.visible=1 AND p.seen_at>datetime('now','-90 seconds') AND NOT EXISTS(SELECT 1 FROM chat_blocks b WHERE (b.blocker_id=u.id AND b.blocked_id=?) OR (b.blocker_id=? AND b.blocked_id=u.id)) THEN 1 ELSE 0 END online FROM chat_members m JOIN users u ON u.id=m.user_id LEFT JOIN chat_presence p ON p.user_id=u.id WHERE m.chat_id=?").all(user.id,user.id,chatId);}
+  function peers(user,chatId){member(chatId,user);return db.prepare("SELECT u.id,u.name,CASE WHEN p.visible=1 AND p.seen_at>datetime('now','-90 seconds') AND NOT EXISTS(SELECT 1 FROM chat_blocks b WHERE (b.blocker_id=u.id AND b.blocked_id=?) OR (b.blocker_id=? AND b.blocked_id=u.id)) THEN 1 ELSE 0 END online FROM chat_members m JOIN users u ON u.id=m.user_id LEFT JOIN chat_presence p ON p.user_id=u.id WHERE m.chat_id=?").all(user.id,user.id,chatId).map(person=>({...person,...avatars.publicView(person.id)}));}
   function stage(user,input){
     const name=V.text(input.name,{name:'Filnavn',min:1,max:255}).replace(/[\\/]/g,'_');
     const bytes=V.integer(input.bytes,{name:'Filstørrelse',min:1,max:config.maxVideoBytes});

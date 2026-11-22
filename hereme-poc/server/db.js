@@ -6,7 +6,7 @@ const { applyMigrations } = require('./migrations');
 const { runtimeConfig } = require('./config');
 
 const { dataDir } = runtimeConfig();
-for(const directory of ['uploads','media','tmp'])fs.mkdirSync(path.join(dataDir,directory),{recursive:true});
+for(const directory of ['uploads','media','avatars','tmp'])fs.mkdirSync(path.join(dataDir,directory),{recursive:true});
 const databasePath = path.join(dataDir, 'hereme.sqlite');
 const freshDatabase = !fs.existsSync(databasePath);
 const db = new DatabaseSync(databasePath);
