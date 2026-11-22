@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22 — Notification icon and quick logout
+
+- Render the notification bell inline in the header and inbox so it does not
+  depend on a separate image request.
+- Allow logout and notification disabling when the browser registration has no
+  PushManager, and ignore a stale badge response after the account changes.
+
 ## 2026-11-22 — Language selector placement
 
 - Kept language switching in the hamburger menu and login/registration flow.
