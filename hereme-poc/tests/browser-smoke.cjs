@@ -35,6 +35,17 @@ async function ready(page) {
   await page.evaluate(()=>Promise.all([...document.images].map(img=>img.decode())));
   await page.evaluate(()=>document.fonts.ready);
 }
+async function recordWallWalkthrough(browser,base,storage,evidence,withMotion){
+  const recording=await browser.newContext({viewport:{width:390,height:844},storageState:storage,recordVideo:{dir:data,size:{width:390,height:844}}});
+  const clip=await recording.newPage();
+  if(!withMotion)for(const asset of ['motion.css','motion.js'])await clip.route(`**/${asset}`,route=>route.fulfill({status:200,contentType:asset.endsWith('.css')?'text/css':'application/javascript',body:''}));
+  await clip.goto(base);await ready(clip);
+  await clip.locator('.post-card .tile-open').first().click();await clip.locator('.detail-modal').waitFor();await clip.waitForTimeout(300);
+  await clip.locator('.detail-modal .modal-close').click();await clip.locator('.modal-panel').waitFor({state:'detached'});
+  await clip.locator('.menu-button').click();await clip.locator('.modal-panel').waitFor();await clip.waitForTimeout(300);
+  await clip.locator('.modal-close').click();await clip.locator('.create-button').click();await clip.locator('.compose-modal').waitFor();await clip.waitForTimeout(300);
+  const video=clip.video();await clip.close();await video.saveAs(path.join(evidence,`wall-detail-menu-editor-${withMotion?'after':'before'}.webm`));await recording.close();
+}
 async function fits(page){
   const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
   assert.ok(size.scroll<=size.width,'Horizontal overflow: '+JSON.stringify(size));
@@ -59,6 +70,9 @@ async function publish(page,title) {
   const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
   page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
   await page.goto(base);await ready(page);await fits(page);
+  const motionTokens=await page.evaluate(()=>({press:getComputedStyle(document.documentElement).getPropertyValue('--motion-press-in').trim(),screen:getComputedStyle(document.documentElement).getPropertyValue('--motion-screen').trim()}));assert.deepEqual(motionTokens,{press:'90ms',screen:'480ms'});
+  const motionButton=page.locator('#themeToggle');await motionButton.focus();await page.keyboard.down('Enter');assert.equal(await motionButton.evaluate(node=>node.classList.contains('motion-key-press')),true);await page.keyboard.up('Enter');assert.equal(await motionButton.evaluate(node=>node.classList.contains('motion-key-press')),false);await motionButton.click();
+  const logo=page.locator('.logo'),logoBounds=await logo.boundingBox();await page.mouse.move(logoBounds.x+logoBounds.width/2,logoBounds.y+logoBounds.height/2);await page.mouse.down();assert.notEqual(await logo.evaluate(node=>getComputedStyle(node).transform),'none','Pointer press responds immediately.');await page.mouse.move(0,0);await page.mouse.up();await page.waitForFunction(()=>getComputedStyle(document.querySelector('.logo')).transform==='none');
   const videoBadgeBounds=await page.evaluate(()=>{
     const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:260px;z-index:-1';
     host.innerHTML=HeremeFeed.card({id:987,type:'video',duration_ms:125000,category:'story',title:'Video boundary check',created_at:'2026-11-20 12:00:00',score:0,my_vote:0,comment_count:0});
@@ -84,6 +98,8 @@ async function publish(page,title) {
   await page.locator('[data-action=auth-login]').waitFor();
   await page.locator('[data-action=auth-register]').waitFor();
   await page.locator('.modal-close').click();
+  assert.equal(await page.locator('.motion-backdrop-exit').evaluate(node=>getComputedStyle(node).animationDuration),'0.16s');
+  await page.locator('.modal-panel').waitFor({state:'detached'});
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:path.join(screenshots,'desktop-simple-dark.png'),fullPage:true});
   for(const width of regressionWidths){
@@ -226,6 +242,8 @@ async function publish(page,title) {
   await page.locator('.article-chapter').first().waitFor();
   assert.equal(await page.locator('.article-chapter').count(),4);assert.equal(await page.locator('.article-chapter .article-media img').count(),2);
   assert.equal(await page.locator('.detail-toolbar .action-icon-button').count(),5);assert.equal(await page.locator('.detail-toolbar [data-action=article-edit]').getAttribute('aria-label'),'Rediger artikkel');
+  const editIcon=page.locator('.detail-toolbar [data-action=article-edit]');await editIcon.focus();assert.equal(await editIcon.getAttribute('data-motion-tip'),'Rediger artikkel');assert.equal(await editIcon.evaluate(node=>getComputedStyle(node,'::after').content),'"Rediger artikkel"');
+  await editIcon.hover();await page.waitForFunction(()=>getComputedStyle(document.querySelector('.detail-toolbar [data-action=article-edit]'),'::after').opacity==='1');
   await page.evaluate(()=>window.HeremeI18n.setLanguage('en'));await page.waitForFunction(()=>document.querySelector('.detail-toolbar .modal-close')?.getAttribute('aria-label')==='Close');assert.equal(await page.locator('.detail-toolbar [data-action=article-edit]').getAttribute('aria-label'),'Edit article');await page.evaluate(()=>window.HeremeI18n.setLanguage('nb'));await page.waitForFunction(()=>document.querySelector('.detail-toolbar .modal-close')?.getAttribute('aria-label')==='Lukk');
   if(e22Screenshots)await page.locator('.detail-modal').screenshot({path:path.join(e22Screenshots,'article-toolbar-desktop.png')});
   await page.setViewportSize({width:320,height:700});const toolbarGeometry=await page.locator('.detail-toolbar').evaluate(toolbar=>({left:toolbar.getBoundingClientRect().left,right:toolbar.getBoundingClientRect().right,viewport:innerWidth,buttons:[...toolbar.querySelectorAll('button')].map(button=>[button.getBoundingClientRect().width,button.getBoundingClientRect().height])}));assert.ok(toolbarGeometry.left>=0&&toolbarGeometry.right<=toolbarGeometry.viewport);assert.ok(toolbarGeometry.buttons.every(([width,height])=>width>=42&&height>=44),JSON.stringify(toolbarGeometry));if(e22Screenshots)await page.locator('.detail-toolbar').screenshot({path:path.join(e22Screenshots,'article-toolbar-320.png')});await page.setViewportSize({width:1440,height:1000});
@@ -260,6 +278,7 @@ async function publish(page,title) {
   await page.locator('#articleTitle').fill('Unfinished article');
   await page.locator('[data-action=article-save-draft]').click();await page.locator('.modal-close').click();
   await page.locator('.profile-chip').click();
+  assert.equal(await page.locator('#profileRoot').evaluate(node=>getComputedStyle(node).animationDuration),'0.48s','Profile route uses the shared screen duration.');
   await page.locator(`.profile-post-edit[data-id="${articleId}"]`).click();
   assert.equal(await page.locator('#articleTitle').inputValue(),'Oppdaterte turer i Rogaland');
   await page.locator('.modal-close').click();
@@ -267,6 +286,7 @@ async function publish(page,title) {
   assert.equal(await page.locator('#articleTitle').inputValue(),'Unfinished article');
   page.once('dialog',dialog=>dialog.accept());await page.locator('[data-action=article-delete-draft]').click();
   await page.locator('[data-action=profile-wall]').click();
+  assert.equal(await page.locator('#forumShell').evaluate(node=>getComputedStyle(node).animationDuration),'0.48s','Returning to the wall uses the shared screen duration.');
   // Demo posters use their preserved source to apply v3, while linking the untouched original.
   const seeded=page.locator('.post-card').filter({hasText:'Ka skjer i helgå?'}).first();
   await seeded.locator('.tile-open').click();
@@ -353,7 +373,7 @@ async function publish(page,title) {
   if(refinementScreenshots)await phone.locator('#toastRoot .toast').waitFor({state:'hidden'});
   for(const width of [375,390,430]){
     await phone.setViewportSize({width,height:844});
-    const geometry=await phone.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth+1,format:[...document.querySelectorAll('.design-format-tabs button')].map(el=>el.getBoundingClientRect().height),category:[...document.querySelectorAll('.category-choice span')].map(el=>el.getBoundingClientRect().height),media:[...document.querySelectorAll('.design-media-actions .media-action')].map(el=>el.getBoundingClientRect().height),publish:document.querySelector('#publishButton').getBoundingClientRect().height}));
+    const geometry=await phone.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth+1,format:[...document.querySelectorAll('.design-format-tabs button')].map(el=>el.offsetHeight),category:[...document.querySelectorAll('.category-choice span')].map(el=>el.offsetHeight),media:[...document.querySelectorAll('.design-media-actions .media-action')].map(el=>el.offsetHeight),publish:document.querySelector('#publishButton').offsetHeight}));
     assert.equal(geometry.overflow,false);assert.ok([...geometry.format,...geometry.category,...geometry.media,geometry.publish].every(height=>height>=44),JSON.stringify(geometry));
     if(refinementScreenshots)await phone.locator('.compose-modal').screenshot({path:path.join(refinementScreenshots,`poster-composer-${width}.png`)});
   }
@@ -375,7 +395,9 @@ async function publish(page,title) {
   await phone.locator('#postBody').fill('En enkel tanke fra mobil.');
   await phone.screenshot({path:path.join(screenshots,'mobile-create.png')});
   await publish(phone,'En enkel tanke fra mobil.');
+  await phone.goto('about:blank');
   await stop();assert.equal(await start(),base);
+  await phone.goto(base);await ready(phone);
   await phone.goto(base+'/?post='+imageId);
   await phone.locator('.comment-replies .comment-body').filter({hasText:'Og et trådet svar.'}).waitFor();
   assert.equal(await phone.locator('.detail-modal .vote-number').textContent(),'-1');
@@ -383,7 +405,7 @@ async function publish(page,title) {
   assert.equal(persisted.post.category,'question');assert.equal(persisted.post.room_id,null);
   assert.equal((await (await fetch(base+'/api/posts/'+imageId)).json()).post.text_position,'auto');
   // Detail-only reporting remains public, while moderation is private operator work.
-  await phone.locator('[data-action=report]').click();await phone.locator('#reportForm button').click();
+  await phone.locator('[data-action=report]').click();await phone.locator('#reportForm button').click();await phone.locator('.modal-panel').waitFor({state:'detached'});
   await phone.locator('.menu-button').click();assert.equal(await phone.locator('[data-action=admin],#adminPin').count(),0);
   assert.equal(await phone.locator('.modal-header h2').textContent(),'Din profil');
   await phone.locator('.account-summary').filter({hasText:'VeggTester'}).waitFor();
@@ -396,9 +418,10 @@ async function publish(page,title) {
   await phone.waitForFunction(()=>getComputedStyle(document.querySelector('.detail-modal')).animationName==='none');
   await phone.keyboard.press('Escape');
   assert.equal(await phone.locator('.modal-panel').count(),0);
+  if(process.env.HEREME_E23_RECORD){const evidence=path.join(root,'docs','e23-motion');fs.mkdirSync(evidence,{recursive:true});const storage=await mobile.storageState();await recordWallWalkthrough(browser,base,storage,evidence,false);await recordWallWalkthrough(browser,base,storage,evidence,true);}
   assert.deepEqual(errors,[],'Browser errors');
   await mobile.close();
   console.log(JSON.stringify({desktop:'1440x1000',mobile:'390x844',widths:regressionWidths,themes:5,seedPosts:13,createdPosts:3,filters:true,fullScreenDetail:true,reporting:true,persistence:true,screenshots}));
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
-  if(browser)await browser.close();await stop();fs.rmSync(data,{recursive:true});
+  if(browser)await browser.close();await stop();fs.rmSync(data,{recursive:true,maxRetries:5,retryDelay:200});
 });

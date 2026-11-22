@@ -4,6 +4,7 @@
   const E=HeremePoster.escape;
   const t=(key,params)=>window.HeremeI18n.t(`wall.${key}`,params);
   const csrfCookie=()=>document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf='))?.slice(12)?decodeURIComponent(document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf=')).slice(12)):'';
+  let motionRoute=location.pathname;
   const state={
     legacyToken:localStorage.getItem('hereme_token')||'',csrf:'',user:null,posts:[],meta:null,nextCursor:null,
     categories:[...HeremeThemes.ids],sort:'new',query:'',filtersOpen:false,activity:null,textPosition:'auto',modal:null,detailPost:null,comments:[],replyTo:null,
@@ -101,7 +102,7 @@
     if(history.state?.wall){const wall=history.state.wall;state.categories=wall.categories||state.categories;state.sort=wall.sort||state.sort;state.query=wall.query||'';$('#searchInput').value=state.query;$('#sortSelect').value=state.sort;renderFilters();}
     renderWall();const id=Number(params.get('post'));if(id&&params.has('history'))await openHistory(id,{route:false,from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
   }
-  function navigate(url,{replace=false}={}){rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);return applyRoute();}
+  async function navigate(url,{replace=false}={}){const previous=location.pathname;rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);await applyRoute();motionRoute=location.pathname;if(previous!==motionRoute)window.HeremeMotion?.enter(motionRoute==='/'?$('#forumShell'):$('#profileRoot'),'motion-screen-enter');}
   async function loadPosts({append=false}={}) {
     const request=++state.loadRequest;state.loadError='';
     $('#feed').setAttribute('aria-busy','true');
@@ -143,15 +144,27 @@
     for(const entry of entries){const media=await api('/api/article-assets/'+encodeURIComponent(entry.id));if(state.modal!=='compose'||state.articleDraft!==article)return;if(entry.cover&&article.cover?.media_id===entry.id)article.cover={...article.cover,...media};if(entry.chapter?.media_id===entry.id)entry.chapter.media={...media,name:entry.chapter.media_name||''};}
     if(entries.length&&state.modal==='compose'){saveDraft();updateArticlePreview();}
   }
+  function removeModalVisual(){
+    const root=$('#modalRoot'),overlay=root.querySelector('.modal-overlay');
+    if(!overlay||!window.HeremeMotion||window.HeremeMotion.reduced()){root.replaceChildren();return;}
+    const duration=Number.parseFloat(getComputedStyle(root).getPropertyValue('--motion-modal-exit'));
+    if(!Number.isFinite(duration)){root.replaceChildren();return;}
+    overlay.removeAttribute('data-action');overlay.setAttribute('aria-hidden','true');
+    overlay.querySelectorAll('a[href],button,input,select,textarea,summary,[tabindex]').forEach(element=>element.tabIndex=-1);
+    overlay.addEventListener('click',event=>event.stopPropagation(),{capture:true});
+    overlay.classList.add('motion-backdrop-exit');
+    setTimeout(()=>{if(root.contains(overlay))overlay.remove();},duration);
+  }
   function closeModal({fromRoute=false}={}) {
     if(state.publishing)return;
     if(state.modal==='compose'&&state.articleUploading){toast(t('design.uploading'));return;}
     if(state.modal==='compose'&&state.postMode==='article'&&state.articleDirty&&!confirm(t('e21.unsaved_confirm')))return;
     const closingHistory=state.modal==='history';resetPhoto();state.detailRequest++;state.modal=null;state.replyTo=null;state.pending=null;
-    $('#modalRoot').innerHTML='';lockBackground(false);
+    lockBackground(false);
     const returnTarget=state.returnFocus?.isConnected?state.returnFocus:
       document.querySelector(`[data-post-id="${state.detailPost?.id}"] .tile-open`)||$('.logo');
     returnTarget.focus({preventScroll:true});
+    removeModalVisual();
     if(closingHistory){history.replaceState(history.state,'','/');renderWall();return;}
     if(location.search.includes('post=')&&!fromRoute){history.back();return;}
   }
@@ -226,6 +239,7 @@
     openAuth('',async()=>action?.());return false;
   }
   function renderModal({preserve=false}={}) {
+    const firstOpen=!$('#modalRoot').firstElementChild||!!$('#modalRoot .motion-backdrop-exit');
     const content=$('.modal-content'),scroll=preserve?content?.scrollTop||0:0;
     const focus=preserve?document.activeElement?.id:null;
     const comment=preserve?$('#commentText')?.value:undefined;
@@ -253,6 +267,7 @@
     if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
+    if(firstOpen)window.HeremeMotion?.enter($('#modalRoot .modal-overlay'),'motion-backdrop-enter');
     if(state.modal==='history'&&state.historyVersion)$('.modal-content')?.insertAdjacentHTML('beforeend',HeremeDetail.revision(state.historyVersion));
     if(state.modal==='history')$('.modal-content')?.insertAdjacentHTML('afterbegin',`<button class="btn btn-secondary" data-action="history-current">${t('e21.current_version')}</button>`);
     if(state.modal==='history'&&state.historyComparison?.from===state.historyComparison?.to)$('.revision-diff')?.insertAdjacentHTML('afterbegin',`<p class="notice">${t('e21.older_version')}</p>`);
@@ -362,7 +377,7 @@
     closeAuthorMenu();const menu=document.createElement('div');menu.className='author-popover';menu.setAttribute('role','menu');menu._trigger=trigger;
     const userId=trigger.dataset.userId;menu.innerHTML=`<button type="button" role="menuitem" data-action="show-public-profile" data-user-id="${E(userId)}">${E(t('profile.show_public'))}</button>${userId!==state.user?.id?`<button type="button" role="menuitem" data-action="start-author-chat" data-user-id="${E(userId)}">${E(t('profile.start_chat'))}</button>`:''}`;
     const bounds=trigger.getBoundingClientRect();menu.style.left=`${Math.max(8,Math.min(bounds.left,innerWidth-190))}px`;menu.style.top=`${Math.min(bounds.bottom+5,innerHeight-104)}px`;
-    ($('.detail-modal')||document.body).append(menu);trigger.setAttribute('aria-expanded','true');menu.querySelector('button').focus({preventScroll:true});
+    ($('.detail-modal')||document.body).append(menu);window.HeremeMotion?.enter(menu,'motion-panel-enter');trigger.setAttribute('aria-expanded','true');menu.querySelector('button').focus({preventScroll:true});
   }
   async function share(id) {
     const url=new URL('https://hereme.no/');url.searchParams.set('post',id);
@@ -715,7 +730,7 @@
         else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
       }
     });
-    window.addEventListener('popstate',()=>{if(state.modal==='detail'){state.modal=null;state.detailPost=null;$('#modalRoot').innerHTML='';lockBackground(false);}applyRoute({fromPop:true}).catch(error=>toast(error.message));});
+    window.addEventListener('popstate',()=>{const previous=motionRoute;if(state.modal==='detail'){state.modal=null;state.detailPost=null;lockBackground(false);(state.returnFocus?.isConnected?state.returnFocus:$('.logo')).focus({preventScroll:true});removeModalVisual();}applyRoute({fromPop:true}).then(()=>{motionRoute=location.pathname;if(previous!==motionRoute)window.HeremeMotion?.enter(motionRoute==='/'?$('#forumShell'):$('#profileRoot'),'motion-screen-enter');}).catch(error=>toast(error.message));});
     try {
       state.meta=await api('/api/meta');
       state.csrf=csrfCookie();

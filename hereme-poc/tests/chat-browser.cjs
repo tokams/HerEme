@@ -15,6 +15,17 @@ async function assertVisual(locator,name){
   const ratio=changed/(left.info.width*left.info.height);assert.ok(ratio<=.035,`${name} visual mismatch ${(ratio*100).toFixed(2)}%`);
 }
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-chat-browser-'));
+async function recordChatWalkthrough(browser,url,storage,evidence,withMotion){
+  const recording=await browser.newContext({viewport:{width:390,height:844},storageState:storage,recordVideo:{dir:data,size:{width:390,height:844}}});
+  const clip=await recording.newPage();
+  if(!withMotion)for(const asset of ['motion.css','motion.js'])await clip.route(`**/${asset}`,route=>route.fulfill({status:200,contentType:asset.endsWith('.css')?'text/css':'application/javascript',body:''}));
+  await clip.goto(url);await clip.locator('.bundle-card').waitFor();
+  await clip.locator('#toggleAttachments').click();await clip.waitForTimeout(260);await clip.keyboard.press('Escape');
+  await clip.locator('.bundle-card').click();await clip.waitForTimeout(300);
+  await clip.locator('.bundle-item').filter({hasText:'bundle-a.png'}).click();await clip.locator('#attachmentViewer[open]').waitFor();
+  await clip.locator('#viewerNext').click();await clip.waitForTimeout(220);await clip.locator('#closeViewer').click();await clip.locator('#attachmentViewer').waitFor({state:'hidden'});
+  const video=clip.video();await clip.close();await video.saveAs(path.join(evidence,`chat-popover-bundle-gallery-${withMotion?'after':'before'}.webm`));await recording.close();
+}
 process.env.HEREME_DATA_DIR=data;process.env.HEREME_ENV='test';
 const app=require('../server/index'),S=require('../server/services');
 (async()=>{
@@ -48,6 +59,7 @@ const app=require('../server/index'),S=require('../server/services');
     await alice.locator('#messageInput').fill('Hei fra nettleseren');await alice.locator('#sendMessage').click();
     await alice.locator('.conversation-row').getByText('Venter på svar').waitFor();
     await bob.goto(base+'/chat.html');await bob.locator('.conversation-row').getByText('Meldingsforespørsel').click();
+    const motion=await bob.evaluate(()=>({press:getComputedStyle(document.documentElement).getPropertyValue('--motion-press-in').trim(),screen:getComputedStyle(document.documentElement).getPropertyValue('--motion-screen').trim()}));assert.deepEqual(motion,{press:'90ms',screen:'480ms'});
     assert.equal(await bob.locator('#conversation').isVisible(),true);assert.equal(await bob.locator('#chatShell .chat-inbox').isVisible(),false);
     assert.equal(await bob.locator('#messages').textContent(),'');
     await bob.locator('#acceptInvite').click();await bob.locator('#messages').getByText('Hei fra nettleseren').waitFor();
@@ -83,8 +95,11 @@ const app=require('../server/index'),S=require('../server/services');
     await bob.evaluate(()=>window.HeremeI18n.setLanguage('nb'));
     assert.equal(await bob.locator('#attachmentPopover').isVisible(),false);
     await bob.locator('#toggleAttachments').click();assert.equal(await bob.locator('#attachmentPopover').isVisible(),true);
+    assert.equal(await bob.locator('#attachmentPopover').evaluate(node=>getComputedStyle(node).animationName),'motion-panel-in');
     assert.deepEqual(await bob.locator('.attachment-choice span').allTextContents(),['Ta bilde','Ta opp video','Velg fra enhet']);
     await bob.keyboard.press('Escape');assert.equal(await bob.locator('#attachmentPopover').isVisible(),false);
+    await bob.locator('#toggleAttachments').focus();await bob.keyboard.down('Space');assert.equal(await bob.locator('#toggleAttachments').evaluate(node=>node.classList.contains('motion-key-press')),true);await bob.keyboard.up('Space');assert.equal(await bob.locator('#toggleAttachments').evaluate(node=>node.classList.contains('motion-key-press')),false);await bob.keyboard.press('Escape');
+    await bob.emulateMedia({reducedMotion:'reduce'});await bob.locator('#toggleAttachments').click();assert.equal(await bob.locator('#attachmentPopover').evaluate(node=>getComputedStyle(node).animationName),'none');await bob.keyboard.press('Escape');await bob.emulateMedia({reducedMotion:'no-preference'});
     assert.equal(await bob.locator('#toggleAttachments').getAttribute('aria-expanded'),'false');
     await bob.locator('#toggleDetails').click();assert.equal(await bob.locator('#toggleDetails').getAttribute('aria-expanded'),'true');
     await bob.locator('#toggleDetails').click();assert.equal(await bob.locator('#toggleDetails').getAttribute('aria-expanded'),'false');
@@ -145,8 +160,10 @@ const app=require('../server/index'),S=require('../server/services');
     await alice.locator('#messageInput').fill('Live update');await alice.locator('#sendMessage').click();
     await bob.locator('#messages').getByText('Live update').waitFor();
     assert.equal(await bob.locator('.bundle-card').evaluate(node=>node===window.__stableBundle),true,'WebSocket refresh must retain media DOM.');
+    assert.equal(await bob.locator('.bundle-card').evaluate(node=>node.closest('.message').getAnimations().length),0,'An existing bundle must not animate during a WebSocket update.');
     assert.equal(await bob.locator('.bundle-card').getAttribute('aria-expanded'),'true','WebSocket refresh must retain bundle expansion.');
     assert.equal(await bob.locator('.attachment-preview img').evaluate(node=>node===window.__stablePhoto),true,'WebSocket refresh must retain image DOM.');
+    if(process.env.HEREME_E23_RECORD){const evidence=path.join(__dirname,'..','docs','e23-motion');fs.mkdirSync(evidence,{recursive:true});const storage=await mobile.storageState();await recordChatWalkthrough(browser,bob.url(),storage,evidence,false);await recordChatWalkthrough(browser,bob.url(),storage,evidence,true);}
     const activeChatId=new URL(bob.url()).pathname.split('/').pop(),aliceId=S.db.prepare("SELECT id FROM users WHERE name='BrowserAlice'").get().id,bobId=S.db.prepare("SELECT id FROM users WHERE name='BrowserBob'").get().id,insertHistory=S.db.prepare("INSERT INTO chat_messages(chat_id,sender_id,body,created_at) VALUES(?,?,?,?)");
     for(let index=0;index<70;index++)insertHistory.run(activeChatId,index%4?aliceId:bobId,`History message ${index}`,new Date(Date.now()-(70-index)*60000).toISOString());
     S.db.prepare("UPDATE chats SET updated_at=datetime('now') WHERE id=?").run(activeChatId);await bob.reload();await bob.locator('#olderMessages').waitFor({state:'visible'});assert.equal(await bob.locator('.message[data-message-id]').count(),50);

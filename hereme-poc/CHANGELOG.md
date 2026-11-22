@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — E23 interaction motion
+
+- Added shared timing/easing tokens and tactile controls, keyboard press response, icon tooltips, menu entry, modal entry/exit, same-document view entry, and guarded chat message/media animations.
+- Reduced-motion preferences suppress decorative movement. Existing routes, layout, data contracts and live-media identity remain intact.
+
 ## 2026-11-22 — E22-05 chat media presentation
 
 - Replaced unbounded attachment grids with compact 2/4/5/8-file bundle presentation and a four-cell maximum inline expansion.
