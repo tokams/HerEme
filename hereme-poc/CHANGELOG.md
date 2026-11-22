@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22 — Install help translation
+
+- Translate the notification explanation inside the iPhone install sheet when
+  the interface language changes.
+
 ## 2026-11-22 — Norwegian and English interface
 
 - Added Norwegian Bokmål and English interface resources, accessible flag

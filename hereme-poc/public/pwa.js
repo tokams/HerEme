@@ -17,6 +17,7 @@
     for(const reason of document.querySelectorAll('#installReason,#installMenuReason'))reason.textContent=translate('install.reason');
     const sheet=document.getElementById('installHelp');if(!sheet)return;
     sheet.querySelector('h2').textContent=translate('install.help_title');
+    sheet.querySelector('p').textContent=translate('install.reason');
     ['one','two','three'].forEach((number,index)=>sheet.querySelectorAll('li')[index].textContent=translate('install.step_'+number));
     for(const [selector,key] of [['[data-install-close]','install.close'],['[data-install-later]','install.later'],['[data-install-already]','install.already']])sheet.querySelector(selector).textContent=translate(key);
   }
