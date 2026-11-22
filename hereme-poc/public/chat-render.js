@@ -8,7 +8,7 @@
     const name=escape(file.name),label=escape(t('attachment.view',{name:file.name}));
     if(!ready(file,now))return `<span class="expired-file">${name} — ${escape(t('attachment.expired'))}</span>`;
     if(file.media_kind==='image')return `<button class="attachment-preview" type="button" data-view-message="${message.id}" aria-label="${label}"><img src="${preview(file)}" alt="${name}" loading="lazy"><span class="attachment-broken" hidden>${escape(t('attachment.preview_unavailable'))}</span></button>`;
-    if(file.media_kind==='video')return `<button class="attachment-card video-card" type="button" data-view-message="${message.id}" aria-label="${escape(t('attachment.play',{name:file.name}))}"><video src="${preview(file)}#t=0.1" preload="metadata" muted playsinline></video><span class="video-play" aria-hidden="true"></span><span class="file-name">${name}</span><span class="attachment-broken" hidden>${escape(t('attachment.preview_unavailable'))}</span></button>`;
+    if(file.media_kind==='video')return `<button class="attachment-card video-card" type="button" data-view-message="${message.id}" aria-label="${escape(t('attachment.play',{name:file.name}))}"><video src="${preview(file)}#t=0.1" preload="metadata" muted playsinline></video><span class="video-play" aria-hidden="true"></span><span class="video-duration" data-video-duration hidden></span><span class="file-name">${name}</span><span class="attachment-broken" hidden>${escape(t('attachment.preview_unavailable'))}</span></button>`;
     return `<button class="attachment-card file-card" type="button" data-view-message="${message.id}" aria-label="${label}"><img src="/assets/icons/chat-attach-file.svg" alt=""><span>${name}</span></button>`;
   }
   function bundle(files,message,t,now){

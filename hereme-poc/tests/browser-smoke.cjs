@@ -176,12 +176,14 @@ async function publish(page,title) {
   assert.equal(saved.post.room_id,null);assert.equal(saved.post.poster_style,'alert');assert.equal(saved.post.content_format,'poster');
   await page.locator('.create-button').click();await page.locator('[data-action=format-article]').click();
   await page.locator('input[name=postCategory][value=story]').check();
-  await page.locator('#articleTitle').fill('Turer i Rogaland');await page.locator('#articleAbstract').fill('Tre korte turer du kan prøve denne uken.');
+  await page.locator('#articleTitle').fill('Turer i Rogaland');await page.locator('#articleAbstract').fill('Fire korte turer du kan prøve denne uken.');
   await page.locator('[data-chapter="0"] [data-chapter-field=heading]').fill('Første tur');
   await page.locator('[data-chapter="0"] [data-chapter-field=markdown]').fill('En **fin** tur med utsikt.');
   await page.locator('[data-action=chapter-add]').click();
   await page.locator('[data-chapter="1"] [data-chapter-field=heading]').fill('Neste tur');
   await page.locator('[data-chapter="1"] [data-chapter-field=markdown]').fill('Gå langs sjøen.');
+  for(const [heading,body] of [['Skogsturen','Følg den merkede stien.'],['Kveldsturen','Ta med lys på returen.']]){await page.locator('[data-action=chapter-add]').click();const index=await page.locator('[data-chapter]').count()-1;await page.locator(`[data-chapter="${index}"] [data-chapter-field=heading]`).fill(heading);await page.locator(`[data-chapter="${index}"] [data-chapter-field=markdown]`).fill(body);}
+  assert.equal(await page.locator('[data-chapter]').count(),4);
   await page.locator('[data-action=chapter-up][data-index="1"]').click();
   assert.equal(await page.locator('[data-chapter="0"] [data-chapter-field=heading]').inputValue(),'Neste tur');
   await page.locator('[data-action=chapter-collapse][data-index="0"]').click();assert.equal(await page.locator('[data-chapter="0"] .chapter-fields').isHidden(),true);
@@ -191,17 +193,30 @@ async function publish(page,title) {
   await page.locator('#articlePreview .article-hero-image').waitFor();
   const draftCover=await page.locator('#articlePreview .article-hero-image').getAttribute('src');
   assert.equal((await fetch(base+draftCover)).status,404);
-  assert.match(await page.locator('#articlePreview .article-markdown').last().innerHTML(),/<strong>fin<\/strong>/);
+  assert.ok((await page.locator('#articlePreview .article-markdown').evaluateAll(nodes=>nodes.map(node=>node.innerHTML))).some(html=>/<strong>fin<\/strong>/.test(html)));
   await page.locator('[data-chapter="0"] [data-article-file="0"]').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
   await page.locator('[data-chapter="0"] .media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
-  await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
+  await page.locator('[data-chapter="1"] [data-article-file="1"]').setInputFiles(path.join(root,'public/assets/demo/sources/source-02-coffee_cups.jpg'));
+  await page.locator('[data-chapter="1"] .media-status').filter({hasText:'source-02-coffee_cups.jpg'}).waitFor();
+  assert.equal(await page.locator('#articlePreview .article-chapter .article-media img').count(),2);
+  const videoBytes=Buffer.from(await page.evaluate(async()=>{const canvas=document.createElement('canvas');canvas.width=32;canvas.height=32;const context=canvas.getContext('2d'),stream=canvas.captureStream(10),recorder=new MediaRecorder(stream,{mimeType:'video/webm'}),chunks=[];recorder.ondataavailable=event=>chunks.push(event.data);const finished=new Promise(resolve=>recorder.onstop=resolve);recorder.start();context.fillStyle='#568a67';context.fillRect(0,0,32,32);await new Promise(resolve=>setTimeout(resolve,250));recorder.stop();await finished;stream.getTracks().forEach(track=>track.stop());return [...new Uint8Array(await new Blob(chunks,{type:'video/webm'}).arrayBuffer())];}));
+  const previewVideoId='123e4567-e89b-42d3-a456-426614174099';
+  await page.route(`**/media/${previewVideoId}/*`,route=>route.request().url().endsWith('.jpg')?route.fulfill({status:200,contentType:'image/jpeg',body:fs.readFileSync(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'))}):route.fulfill({status:200,contentType:'video/webm',body:videoBytes}));
+  await page.route('**/api/article-assets/videos',route=>route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({media_id:previewVideoId,upload_url:`/api/video-uploads/${previewVideoId}`,bytes:videoBytes.length})}));
+  await page.route(`**/api/video-uploads/${previewVideoId}`,async route=>{if(route.request().method()==='PATCH')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({media_id:previewVideoId,status:'queued'})});await new Promise(resolve=>setTimeout(resolve,350));return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({media_id:previewVideoId,status:'ready',media_url:`/media/${previewVideoId}/display.mp4`,thumbnail_url:`/media/${previewVideoId}/thumbnail.jpg`})});});
+  await page.locator('[data-chapter="2"] [data-article-file="2"]').setInputFiles({name:'chapter-preview.webm',mimeType:'video/webm',buffer:videoBytes});
+  await page.locator('#articlePreview .article-chapter .article-media video').waitFor();await page.locator('[data-chapter="2"] .media-status').filter({hasText:'chapter-preview.webm'}).waitFor();
+  assert.equal(await page.locator('#articlePreview .article-chapter .article-media img').count(),2);assert.equal(await page.locator('#articlePreview .article-chapter .article-media video').count(),1);
+  await page.locator('[data-action=article-media-remove][data-index="2"]').click();await page.unroute('**/api/article-assets/videos');await page.unroute(`**/api/video-uploads/${previewVideoId}`);await page.unroute(`**/media/${previewVideoId}/*`);
+  await page.setViewportSize({width:844,height:390});await page.locator('[data-chapter="3"] [data-chapter-field=markdown]').focus();await page.locator('[data-chapter="3"] [data-chapter-field=markdown]').scrollIntoViewIfNeeded();const finalField=await page.locator('[data-chapter="3"] [data-chapter-field=markdown]').evaluate(field=>{const box=field.getBoundingClientRect();return{focused:field===document.activeElement,left:box.left,right:box.right,bottom:box.bottom,viewport:[innerWidth,innerHeight],overflow:document.documentElement.scrollWidth>innerWidth};});assert.equal(finalField.focused,true);assert.equal(finalField.overflow,false);assert.ok(finalField.left>=0&&finalField.right<=finalField.viewport[0]&&finalField.bottom<=finalField.viewport[1]);await page.setViewportSize({width:1440,height:1000});
+  await page.locator('#articlePreview .article-chapter .article-media img').first().waitFor();
   await page.locator('#articlePreview .article-media').last().click();await page.locator('#articlePreview .article-media-viewer[open] img').waitFor();await page.locator('#articlePreview [data-action=article-media-close]').click();
-  await page.locator('[data-action=article-media-remove][data-index="0"]').click();assert.equal(await page.locator('#articlePreview .article-chapter .article-media').count(),0);
+  await page.locator('[data-action=article-media-remove][data-index="0"]').click();assert.equal(await page.locator('#articlePreview .article-chapter .article-media').count(),1);
   await page.locator('[data-chapter="0"] [data-article-file="0"]').setInputFiles(path.join(root,'public/assets/demo/sources/source-01-rain_bus_stop.jpg'));
-  await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
+  await page.locator('#articlePreview .article-chapter .article-media img').first().waitFor();assert.equal(await page.locator('#articlePreview .article-chapter .article-media img').count(),2);
   await page.locator('[data-chapter="0"] .media-status').filter({hasText:'source-01-rain_bus_stop.jpg'}).waitFor();
   page.once('dialog',dialog=>dialog.accept());await page.locator('.modal-close').click();await page.locator('.create-button').click();await page.locator('[data-action=format-article]').click();
-  await page.locator('#articlePreview .article-hero-image').waitFor();await page.locator('#articlePreview .article-chapter .article-media img').waitFor();
+  await page.locator('#articlePreview .article-hero-image').waitFor();await page.locator('#articlePreview .article-chapter .article-media img').first().waitFor();assert.equal(await page.locator('[data-chapter]').count(),4);assert.equal(await page.locator('#articlePreview .article-chapter .article-media img').count(),2);
   if(refinementScreenshots){await page.locator('#toastRoot .toast').waitFor({state:'hidden'});await page.locator('#articlePreview').scrollIntoViewIfNeeded();await page.locator('.compose-modal').screenshot({path:path.join(refinementScreenshots,'article-preview-desktop.png')});}
   await page.locator('#publishButton').click();await page.locator('.modal-panel').waitFor({state:'hidden'});
   assert.equal((await fetch(base+draftCover)).status,200);
@@ -209,6 +224,7 @@ async function publish(page,title) {
   assert.equal(await articleCard.evaluate(el=>getComputedStyle(el).gridColumnStart),'span 2');
   await articleCard.locator('.tile-open').click();
   await page.locator('.article-chapter').first().waitFor();
+  assert.equal(await page.locator('.article-chapter').count(),4);assert.equal(await page.locator('.article-chapter .article-media img').count(),2);
   assert.equal(await page.locator('.detail-toolbar .action-icon-button').count(),5);assert.equal(await page.locator('.detail-toolbar [data-action=article-edit]').getAttribute('aria-label'),'Rediger artikkel');
   if(e22Screenshots)await page.locator('.detail-modal').screenshot({path:path.join(e22Screenshots,'article-toolbar-desktop.png')});
   await page.setViewportSize({width:320,height:700});const toolbarGeometry=await page.locator('.detail-toolbar').evaluate(toolbar=>({left:toolbar.getBoundingClientRect().left,right:toolbar.getBoundingClientRect().right,viewport:innerWidth,buttons:[...toolbar.querySelectorAll('button')].map(button=>[button.getBoundingClientRect().width,button.getBoundingClientRect().height])}));assert.ok(toolbarGeometry.left>=0&&toolbarGeometry.right<=toolbarGeometry.viewport);assert.ok(toolbarGeometry.buttons.every(([width,height])=>width>=42&&height>=44),JSON.stringify(toolbarGeometry));if(e22Screenshots)await page.locator('.detail-toolbar').screenshot({path:path.join(e22Screenshots,'article-toolbar-320.png')});await page.setViewportSize({width:1440,height:1000});
@@ -283,11 +299,13 @@ async function publish(page,title) {
   await phone.locator('#filterToggle').click();
   await phone.locator('#categoryFilters input[value=tip]').uncheck();await settleWall(phone);
   await phone.locator('#filterToggle').click();
+  await phone.locator('[data-post-id="'+imageId+'"] .tile-open img').evaluate(node=>window.__wallMedia=node);
   await phone.locator('[data-post-id="'+imageId+'"] .vote-up').click();
   await phone.waitForFunction(id=>document.querySelector('[data-post-id="'+id+'"] .vote-up').getAttribute('aria-pressed')==='false',imageId);
   assert.equal(await phone.locator('.modal-panel').count(),0);
   await phone.locator('[data-post-id="'+imageId+'"] .vote-up').click();
   await phone.waitForFunction(id=>document.querySelector('[data-post-id="'+id+'"] .vote-up').getAttribute('aria-pressed')==='true',imageId);
+  assert.equal(await phone.locator('[data-post-id="'+imageId+'"] .tile-open img').evaluate(node=>node===window.__wallMedia),true,'Wall voting must not replace poster media.');
   // Closing a lower tile preserves both browsing position and category selection.
   const lower=phone.locator('.tile-open').last();await lower.scrollIntoViewIfNeeded();
   const priorScroll=await phone.evaluate(()=>scrollY);
@@ -311,8 +329,10 @@ async function publish(page,title) {
   await phone.locator('.detail-toolbar [data-action=share]').click();
   assert.equal(await phone.evaluate(()=>navigator.clipboard.readText()),'https://hereme.no/?post='+imageId);
   await phone.screenshot({path:path.join(screenshots,'mobile-detail.png')});
+  await phone.locator('.detail-modal .poster-photo').evaluate(node=>window.__detailMedia=node);
   await phone.locator('.detail-modal .vote-down').click();
   await phone.waitForFunction(()=>document.querySelector('.detail-modal .vote-number')?.textContent==='-1');
+  assert.equal(await phone.locator('.detail-modal .poster-photo').evaluate(node=>node===window.__detailMedia),true,'Detail voting must not replace poster media.');
   await phone.locator('#commentText').fill('En kommentar fra mobil.');
   await phone.locator('#commentForm button').click();
   await phone.locator('.comment-body').filter({hasText:'En kommentar fra mobil.'}).waitFor();

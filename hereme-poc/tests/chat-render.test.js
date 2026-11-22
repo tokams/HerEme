@@ -32,6 +32,19 @@ test('single private media is bare, bundles retain order and escaped names',()=>
   assert.match(single,/bare-media/);assert.match(single,/attachment-preview/);assert.doesNotMatch(single,/<photo>/);
   const bundle=descriptors([{...message(2,'Kari'),body:'',attachments:files}],{me:'Kari',t,now:'2026-11-22T00:00:00.000Z'}).at(-1).html;
   assert.match(bundle,/bundle-stack/);assert.match(bundle,/aria-expanded="false"/);assert.match(bundle,/bundle-items/);assert.ok(bundle.indexOf('first')<bundle.indexOf('second'));assert.equal((bundle.match(/stack-layer-\d/g)||[]).length,3);
+  const video=descriptors([{...message(3,'Kari'),body:'',attachments:[files[1]]}],{me:'Kari',t,now:'2026-11-22T00:00:00.000Z'}).at(-1).html;
+  assert.match(video,/data-video-duration/,'A single video exposes a duration slot populated from media metadata.');
+});
+
+test('collapsed bundles preserve every authorized item at 2, 8 and 12 attachments',()=>{
+  const expires_at='2026-11-30T00:00:00.000Z';
+  for(const count of [2,8,12]){
+    const files=Array.from({length:count},(_,index)=>({id:`file-${count}-${index}`,name:`item-${index}.${index%3===0?'jpg':index%3===1?'mp4':'txt'}`,status:'ready',expires_at,media_kind:index%3===0?'image':index%3===1?'video':'file'}));
+    const rendered=descriptors([{...message(count,'Kari'),body:'Bundle',attachments:files}],{me:'Kari',t,now:'2026-11-22T00:00:00.000Z'}).at(-1).html;
+    assert.match(rendered,new RegExp(`>${count} files<`));
+    assert.equal((rendered.match(/class="bundle-item"/g)||[]).length,count);
+    for(const file of files)assert.match(rendered,new RegExp(`data-file-id="${file.id}"`));
+  }
 });
 
 test('avatar component accepts only canonical URLs and keeps deterministic initials',()=>{

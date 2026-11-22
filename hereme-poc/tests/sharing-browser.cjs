@@ -31,6 +31,8 @@ const app=require('../server/index'),S=require('../server/services');
     assert.equal((await bob.request.get(base+'/api/chats').then(r=>r.json())).chats.length,before.chats.length);
     await page.locator('#messageInput').fill('A private request');await page.locator('#sendMessage').click();await page.waitForURL(url=>/^\/chat\/[0-9a-f-]{36}$/.test(url.pathname));
     const pending=(await bob.request.get(base+'/api/chats').then(r=>r.json())).chats.find(row=>row.name==='ShareAlice');assert.equal(pending.state,'pending');
+    await page.goBack();await page.waitForURL(`**/?post=${post.id}`);await page.locator('.detail-modal .article-chapter').waitFor();
+    await page.goForward();await page.waitForURL(url=>url.pathname===`/chat/${pending.id}`);await page.locator('#messages').getByText('A private request').waitFor();
     await page.locator('#backToInbox').click();await page.waitForURL(`**/?post=${post.id}`);await page.locator('.detail-modal .article-reader,.detail-modal .detail-copy').first().waitFor();
     await page.locator('.detail-meta .author-trigger').click();await page.getByRole('menuitem',{name:'Start chat'}).click();await page.waitForURL(url=>url.pathname===`/chat/${pending.id}`);
     await page.locator('#backToInbox').click();await page.waitForURL(`**/?post=${post.id}`);

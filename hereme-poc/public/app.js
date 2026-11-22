@@ -116,7 +116,7 @@
   addEventListener('hereme:passkey-invite',()=>toast(t('account.passkey_invite')));
   function wrapper(title,body,footer='',kind='') {
     return `<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel ${kind}" role="dialog" aria-modal="true" aria-label="${E(title)}">
-      <header class="modal-header"><h2>${E(title)}</h2><button class="modal-close" data-action="close-modal" aria-label="${E(t('common.close'))}">${HeremeIcons.icon('close')} <span>${E(t('common.close'))}</span></button></header>
+      <header class="modal-header"><h2>${E(title)}</h2><button type="button" class="action-icon-button modal-close" data-action="close-modal" aria-label="${E(t('common.close'))}" title="${E(t('common.close'))}">${HeremeIcons.icon('close')}</button></header>
       <div class="modal-content">${body}</div>${footer?`<footer class="modal-footer">${footer}</footer>`:''}</section></div>`;
   }
   function resetPhoto() {
