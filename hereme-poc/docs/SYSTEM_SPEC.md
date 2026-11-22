@@ -9,8 +9,8 @@ See [ADR 0011](adr/0011-passkeys.md) and `PASSKEYS_PROGRESS.md`.
 temporary www/legacy redirects are prepared. Live cutover is BLOCKED pending DNS
 resolution and a reviewed clean release. See [execution ledger](domain-migration.md).
 
-**Snapshot:** 2026-11-22, E19 mobile UI stabilization in the local worktree
-**Code baseline:** `master` at `8f9fdd2` plus uncommitted E19 changes. See `docs/E19_IMPLEMENTATION.md` for local evidence.
+**Snapshot:** 2026-11-22, E20 content formats and typography in the local worktree
+**Code baseline:** `master` at `14cd0c7` plus uncommitted E20 changes. See `docs/E20_IMPLEMENTATION.md` for local evidence.
 **Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 
@@ -44,7 +44,7 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 | --- | --- |
 | Wall | One published feed ordered newest first; historical rooms remain in data but are retired from navigation and creation. |
 | Categories | Exactly five poster styles: question, opinion, story, alert and tip. Filters allow multiple or no categories. |
-| Posts | Text, link, image and video paths; poster crop and title placement are stored with content. New posts begin with an author upvote. |
+| Posts | Five categories and two content formats: posters have one text field with optional image/video; articles have title, abstract, optional cover and ordered Markdown chapters with optional media. Existing text/link/image/video posts project as posters. New posts begin with an author upvote. |
 | Voting | One current vote per user/post. Repeating a vote removes it; changing direction replaces it. Displayed score includes preserved historical base score. |
 | Discussion | Nested comments up to four levels including the root. Reports are submitted from post detail; three distinct unresolved reporters move published content to review. |
 | UI | Mobile full-screen post detail; desktop Simple and Advanced wall views; light/dark preference; locally served Cascadia Code; square controls and reduced-motion support. |
@@ -132,7 +132,7 @@ Post-specific share metadata is inserted server-side into the normal wall HTML f
 | `public/` | Plain browser JavaScript/CSS and static assets. UI renders API state and dispatches actions; it does not own durable policy. |
 | `server/index.js` | HTTP routes, authentication/CSRF middleware, limits and response mapping. |
 | `server/domain/` | Identity, posts, interactions, staff actions, chat, avatars, media, video, locations and verification rules. |
-| SQLite | Canonical users, sessions, roles, posts, post/comment votes, comments, reports, media, chats, attachments, avatars, notifications, push subscriptions/outbox/deliveries, live notification events, passkey credentials/challenges/handles, ownership proofs and audit records. Migrations reach schema 21. WAL mode is used. |
+| SQLite | Canonical users, sessions, roles, posts, post/comment votes, comments, reports, media, chats, attachments, avatars, notifications, push subscriptions/outbox/deliveries, live notification events, passkey credentials/challenges/handles, ownership proofs and audit records. Additive `poster_content`, `articles` and `article_assets` reach schema 22. WAL mode is used. |
 | Private data directory | SQLite plus public post media, processed avatars, temporary uploads and private chat bytes. Avatar bytes are served only through a versioned route; chat bytes are outside public static paths. |
 | Workers | Durable post-media processing, minute-based chat attachment cleanup and bounded Web Push delivery. |
 | WebSocket channel | Live signals only; persisted messages and notifications remain authoritative. |

@@ -37,6 +37,7 @@
     return `<div class="tile-header"><span class="category-name">${icon(t.id)}${E(t.label)}</span><time datetime="${E(p.created_at.replace(' ','T'))}Z">${ago(p.created_at)}</time></div>`;
   }
   function card(p) {
+    if(p.content_format==='article')return `<article class="post-card article-card theme-${p.category}" data-post-id="${p.id}" data-category="${p.category}">${header(p)}<button class="tile-open article-open" data-action="detail" data-id="${p.id}" aria-label="${E(t('post.open',{title:p.title}))}"><span class="article-cover">${Poster.image(p.image_url)?`<img src="${E(Poster.image(p.image_url))}" alt="" loading="lazy">`:''}</span><span class="article-summary"><small>${E(t('article.label'))}</small><strong>${E(p.title)}</strong><span>${E(p.article_abstract||p.body)}</span><b>${E(t('article.read'))} →</b></span></button>${controls(p)}</article>`;
     return `<article class="post-card theme-${p.category} ${Poster.image(p.image_url)?'is-photo':'is-text'}" data-post-id="${p.id}" data-category="${p.category}">${header(p)}
       <button class="tile-open" data-action="detail" data-id="${p.id}" aria-label="${E(t('post.open',{title:p.title}))}">${Poster.surface(p)}${p.type==='video'?`<span class="video-tile-badge">▶ ${Math.floor((p.duration_ms||0)/60000)}:${String(Math.floor((p.duration_ms||0)/1000)%60).padStart(2,'0')}</span>`:''}</button>
       ${controls(p)}</article>`;

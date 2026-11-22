@@ -7,7 +7,7 @@
   const state={
     legacyToken:localStorage.getItem('hereme_token')||'',csrf:'',user:null,posts:[],meta:null,nextCursor:null,
     categories:[...HeremeThemes.ids],sort:'new',query:'',filtersOpen:false,activity:null,textPosition:'auto',modal:null,detailPost:null,comments:[],replyTo:null,
-    category:'story',postMode:null,composeStep:'select',draft:{title:'',body:'',link:''},editorImage:null,editorFile:null,
+    category:'story',postMode:'poster',composeStep:'edit',draft:{title:'',body:'',link:''},articleDraft:{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]},articleUploading:false,editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
     loadRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
@@ -127,7 +127,7 @@
   function openModal(type) {
     if(!state.modal)state.returnFocus=document.activeElement;
     state.modal=type;lockBackground(true);
-    if(type==='compose'){resetPhoto();state.postMode=null;state.composeStep='select';state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';state.draft={title:'',body:'',link:''};}
+    if(type==='compose'){resetPhoto();state.postMode='poster';state.composeStep='edit';state.category='story';state.textPosition='auto';state.postArea=state.selectedAreas[0]||'';const saved=JSON.parse(localStorage.getItem('hereme_design_draft:'+state.user.id)||'null');state.draft={title:'',body:saved?.body||'',link:''};state.articleDraft=saved?.article||{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]};}
     renderModal();
   }
   function closeModal({fromRoute=false}={}) {
@@ -218,14 +218,14 @@
     if(state.modal==='recovery-key')html=wrapper(t('recovery.title'),`<p>${t('recovery.intro')}</p><form id="recoverySaveForm" class="form-stack recovery-save-form" action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${E(state.csrf)}"><label class="field" for="recoveryUsername"><span>${t('account.pseudonym')}</span><input id="recoveryUsername" name="username" value="${E(state.user?.name||'')}" autocomplete="username" required></label><label class="field" for="recoveryPassword"><span>${t('account.recovery_key')}</span><span class="credential-row"><input id="recoveryPassword" class="recovery-key" name="password" type="password" value="${E(state.recoveryKey)}" autocomplete="new-password" required><button class="btn btn-secondary" type="button" data-action="toggle-recovery">${t('recovery.show')}</button></span></label><div class="recovery-actions"><button class="btn btn-secondary" type="button" data-action="copy-recovery">${t('recovery.copy')}</button><button class="btn btn-primary" type="submit">${t('recovery.save_device')} →</button></div></form><p class="notice">${t('recovery.notice')}</p>`, `<button class="text-button" data-action="recovery-continue">${t('recovery.continue_without')}</button>`);
     if(state.modal==='areas')html=wrapper(t('areas.title'),HeremeLocations.body(state.areas,state.areaGeometry,state.draftAreas),`<button class="btn btn-primary" data-action="save-areas">${t('areas.save')}</button>`,'area-modal');
     if(state.modal==='compose'){
-      const footer=state.composeStep==='select'?'':`<span class="muted-note">${t(state.composeStep==='edit'?'compose.one_more_step':'compose.ready_when')}</span><button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${state.composeStep==='edit'?t('compose.next')+' →':t(`compose.publish_${state.postMode}`)+' ↗'}</button>`;
+      const footer=`<button type="submit" form="composeForm" class="btn btn-primary" id="publishButton">${t(`design.publish_${state.postMode}`)} ↗</button>`;
       html=wrapper(t('compose.add_to_wall'),HeremeCompose.body(state),footer,'compose-modal');
     }
     if(state.modal==='detail') {
       const p=state.detailPost;
       html=`<div class="modal-overlay" data-action="dismiss-modal"><section class="modal-panel detail-modal" role="dialog" aria-modal="true" aria-label="${t('detail.post')}">
         <header class="detail-toolbar"><button class="modal-close" data-action="close-modal">× ${t('common.close')}</button>${p?`<button class="report-button" data-action="report" data-id="${p.id}">${t('detail.report')}</button><button class="btn btn-secondary" data-action="share" data-id="${p.id}">↗ ${t('detail.share')}</button>`:''}</header>
-        <div class="modal-content">${p?HeremeDetail.body(p,state.comments,state.replyTo):`<p class="loading-card">${t('detail.loading')}</p>`}</div></section></div>`;
+        <div class="modal-content">${p&&(p.content_format!=='article'||p.article)?HeremeDetail.body(p,state.comments,state.replyTo):`<p class="loading-card">${t('detail.loading')}</p>`}</div></section></div>`;
     }
     if(state.modal==='report')html=wrapper(t('report.title'),`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>${t('report.problem')}</span><select id="reportReason">${['personal','harassment','illegal','spam','other'].map(reason=>`<option value="${reason}">${t(`report.${reason}`)}</option>`).join('')}</select></label><p class="notice">${t('report.notice')}</p><button class="btn btn-primary" type="submit">${t('report.send')}</button></form>`);
     if(state.modal==='menu')html=accountMenu();
@@ -239,6 +239,7 @@
     if(state.modal==='menu'&&state.user){const button=document.createElement('button');button.className='btn btn-secondary';button.textContent=t('account.security_passkeys');button.onclick=()=>window.HeremePasskeys.security();$('.account-actions')?.prepend(button);}
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
+    if(state.modal==='compose')updateArticlePreview();
     if(state.modal==='compose'&&state.photoLoading&&$('#publishButton'))$('#publishButton').disabled=true;
     if(comment!==undefined&&$('#commentText'))$('#commentText').value=comment;
     if(preserve&&$('.modal-content'))$('.modal-content').scrollTop=scroll;
@@ -247,7 +248,9 @@
   }
   function saveDraft() {
     state.draft={title:$('#postTitle')?.value??state.draft.title,body:$('#postBody')?.value??state.draft.body,link:$('#postLink')?.value??state.draft.link};
+    if(state.modal==='compose'&&state.user){const article=state.articleDraft;article.title=$('#articleTitle')?.value??article.title;article.abstract=$('#articleAbstract')?.value??article.abstract;for(const field of document.querySelectorAll('[data-chapter-field]'))article.chapters[Number(field.closest('[data-chapter]').dataset.chapter)][field.dataset.chapterField]=field.value;localStorage.setItem('hereme_design_draft:'+state.user.id,JSON.stringify({body:state.draft.body,article}));}
   }
+  function updateArticlePreview(){const root=$('#articlePreview');if(!root)return;const article=state.articleDraft;root.innerHTML=`<h2>${E(article.title)}</h2><p>${E(article.abstract)}</p>${article.chapters.map((chapter,index)=>`<h3>${index+1}. ${E(chapter.heading)}</h3><p>${E(chapter.markdown)}</p>`).join('')}`;}
   function updatePreview() {
     saveDraft();
     if($('#posterPreview')){$('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.postMode==='video'?'<span class="video-preview-badge">'+HeremeIcons.icon('video')+' Video</span>':'');HeremePoster.enhance($('#posterPreview'));}
@@ -337,7 +340,7 @@
     if(!file)return;
     if(!file.type.startsWith('image/'))throw new Error(t('validation.image_file'));
     if(file.size>25*1024*1024)throw new Error(t('validation.image_size'));
-    saveDraft();resetPhoto();state.postMode='image';state.composeStep='edit';const request=state.imageRequest;
+    saveDraft();resetPhoto();state.postMode='poster';state.composeStep='edit';const request=state.imageRequest;
     state.photoLoading=true;if($('#publishButton'))$('#publishButton').disabled=true;
     if($('#photoFilename'))$('#photoFilename').textContent=t('validation.opening_image');
     const url=URL.createObjectURL(file),image=new Image();
@@ -353,7 +356,7 @@
   }
   async function loadVideo(file) {
     if(!file)return;if(!file.type.startsWith('video/'))throw new Error(t('validation.video_file'));
-    saveDraft();resetPhoto();state.postMode='video';state.composeStep='edit';const url=URL.createObjectURL(file),video=document.createElement('video');video.preload='metadata';video.muted=true;video.src=url;
+    saveDraft();resetPhoto();state.postMode='poster';state.composeStep='edit';const url=URL.createObjectURL(file),video=document.createElement('video');video.preload='metadata';video.muted=true;video.src=url;
     await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=()=>reject(new Error(t('validation.video_open_failed')));});
     if(!Number.isFinite(video.duration)||video.duration<=0||video.duration>180){URL.revokeObjectURL(url);throw new Error(t('validation.video_duration'));}
     video.currentTime=Math.min(.2,video.duration/2);await new Promise(resolve=>{video.onseeked=resolve;setTimeout(resolve,500);});
@@ -377,6 +380,18 @@
       state.videoUpload=null;return started;
     } finally {state.videoUploading=false;state.videoXhr=null;}
   }
+  async function uploadArticleAsset(file){
+    if(!file)throw new Error(t('design.optional_media'));
+    state.articleUploading=true;$('#publishButton').disabled=true;
+    try{
+      if(file.type.startsWith('image/')){const form=new FormData();form.set('image',file);return {...await api('/api/article-assets/images',{method:'POST',form}),name:file.name};}
+      if(!file.type.startsWith('video/'))throw new Error(t('validation.video_upload_failed'));
+      const started=await api('/api/article-assets/videos',{method:'POST',body:{bytes:file.size,mime_type:file.type}});
+      for(let offset=0;offset<file.size;){const end=Math.min(offset+4*1024*1024,file.size);await sendVideoChunk(started.upload_url,file.slice(offset,end),offset,end,file.size);offset=end;}
+      for(let attempt=0;attempt<90;attempt++){const result=await api(started.upload_url);if(result.status==='ready')return {media_id:started.media_id,kind:'video',name:file.name,url:result.media_url};if(['failed','rejected'].includes(result.status))throw new Error(t('validation.video_duration'));await new Promise(resolve=>setTimeout(resolve,2000));}
+      throw new Error(t('design.processing'));
+    }finally{state.articleUploading=false;if($('#publishButton'))$('#publishButton').disabled=false;}
+  }
   function sendVideoChunk(url,blob,start,end,total){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();state.videoXhr=xhr;xhr.open('PATCH',url);xhr.setRequestHeader('x-csrf-token',state.csrf);xhr.setRequestHeader('Content-Range',`bytes ${start}-${end-1}/${total}`);xhr.onload=()=>{let result={};try{result=JSON.parse(xhr.responseText||'{}');}catch{}if(xhr.status>=200&&xhr.status<300)resolve(result);else reject(new Error(result.error?.message||t('validation.video_upload_failed')));};xhr.onerror=()=>reject(new Error(t('validation.video_upload_retry')));xhr.onabort=()=>reject(new Error(t('validation.video_cancelled')));xhr.send(blob);});}
   async function imageToBlob(image) {
     const ratio=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight));
@@ -390,34 +405,38 @@
   async function submitCompose() {
     if(state.publishing||state.photoLoading)return;
     saveDraft();
-    const title=state.draft.title.trim();
-    if(title.length<3||title.length>160)throw new Error(t('validation.title_length'));
-    if(state.postMode==='image'&&!state.editorImage)throw new Error(t('validation.image_required'));
-    if(state.postMode==='video'&&!state.editorVideo)throw new Error(t('validation.video_required'));
+    if(state.articleUploading)throw new Error(t('design.uploading'));
+    if(state.postMode==='poster'&&state.draft.body.trim().length<3)throw new Error(t('validation.body_required'));
+    if(state.postMode==='article'&&(!state.articleDraft.title.trim()||!state.articleDraft.abstract.trim()||state.articleDraft.chapters.some(chapter=>!chapter.heading.trim()||!chapter.markdown.trim())))throw new Error(t('design.missing_content'));
     const button=$('#publishButton');button.disabled=true;button.textContent='Publiserer …';
-    if(!state.editorVideo)$('#composeForm').inert=true;
+    $('#composeForm').inert=true;
     state.publishing=true;
     try {
-      if(state.postMode==='video'){await uploadVideo(state.editorFile,{title,body:state.draft.body.trim(),category:state.category,poster_style:state.category,text_position:state.textPosition,area_id:state.postArea||undefined});state.publishing=false;closeModal();toast(t('compose.video_processing'));return;}
+      if(state.postMode==='article'){
+        const article=state.articleDraft,result=await api('/api/articles',{method:'POST',body:{title:article.title.trim(),abstract:article.abstract.trim(),category:state.category,cover_media_id:article.cover?.media_id||null,chapters:article.chapters.map(({heading,markdown,alt,media_id})=>({heading,markdown,alt,media_id}))}});
+        localStorage.removeItem('hereme_design_draft:'+state.user.id);state.publishing=false;closeModal();await loadPosts();document.querySelector(`[data-post-id="${result.id}"]`)?.scrollIntoView({block:'center'});toast(t('compose.published'));return;
+      }
+      const body=state.draft.body.trim();
+      if(state.editorVideo){await uploadVideo(state.editorFile,{format:'poster',body,category:state.category,poster_style:state.category,text_position:state.textPosition,area_id:state.postArea||undefined});localStorage.removeItem('hereme_design_draft:'+state.user.id);state.publishing=false;closeModal();toast(t('compose.video_processing'));return;}
       const form=new FormData();
-      form.set('title',title);form.set('body',state.draft.body.trim());form.set('category',state.category);
+      form.set('format','poster');form.set('body',body);form.set('category',state.category);
       form.set('poster_style',state.category);form.set('text_position',state.textPosition);
-      form.set('type',state.postMode==='image'?'image':state.draft.link.trim()?'link':'text');
-      if(state.postMode==='text'&&state.draft.link.trim())form.set('link_url',state.draft.link.trim());
+      form.set('type',state.editorImage?'image':'text');
       if(state.postArea)form.set('area_id',state.postArea);
-      if(state.postMode==='image') {
+      if(state.editorImage) {
         form.set('image',await imageToBlob(state.editorImage),'hereme-bilde.jpg');
         for(const [key,value]of Object.entries({image_zoom:state.editorZoom,image_x:state.editorX,image_y:state.editorY}))form.set(key,value);
         if(state.editorSynthetic)form.set('synthetic_demo','true');
       }
       const result=await api('/api/posts',{method:'POST',form});
       state.publishing=false;
+      localStorage.removeItem('hereme_design_draft:'+state.user.id);
       if(!state.categories.includes(state.category))state.categories.push(state.category);
       state.query='';$('#searchInput').value='';state.sort='new';$('#sortSelect').value='new';
       closeModal();renderFilters();await loadPosts();
       document.querySelector(`[data-post-id="${result.id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'});
       toast(t('compose.published'));
-    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.textContent=t(`compose.publish_${state.postMode}`)+' ↗';throw error;}
+    } catch(error) {state.publishing=false;$('#composeForm').inert=false;button.disabled=false;button.textContent=t(`design.publish_${state.postMode}`)+' ↗';throw error;}
   }
   async function submitComment() {
     const id=state.detailPost.id;
@@ -492,12 +511,18 @@
     if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast(t('recovery.copied'));return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast(t('recovery.copied'));return;}}window.prompt(t('recovery.copy_prompt'),state.recoveryKey);return;}
     if(action==='recovery-continue'){const pending=state.pending;state.pending=null;state.recoveryKey='';closeModal();await loadPosts();if(pending)await pending();return;}
     if(action==='compose'){if(requireUser(()=>openModal('compose')))openModal('compose');return;}
-    if(action==='compose-back'){saveDraft();if(state.composeStep==='finish')state.composeStep='edit';else{resetPhoto();state.postMode=null;state.composeStep='select';}renderModal();return;}
+    if(action==='format-poster'||action==='format-article'){saveDraft();state.postMode=action==='format-poster'?'poster':'article';renderModal({preserve:true});return;}
+    if(action==='chapter-add'){saveDraft();state.articleDraft.chapters.push({heading:'',markdown:'',alt:'',media_id:null});renderModal({preserve:true});return;}
+    if(['chapter-up','chapter-down','chapter-remove'].includes(action)){saveDraft();const chapters=state.articleDraft.chapters,index=Number(target.dataset.index);if(action==='chapter-remove'&&chapters.length>1)chapters.splice(index,1);if(action==='chapter-up'&&index>0)[chapters[index-1],chapters[index]]=[chapters[index],chapters[index-1]];if(action==='chapter-down'&&index<chapters.length-1)[chapters[index+1],chapters[index]]=[chapters[index],chapters[index+1]];renderModal({preserve:true});return;}
+    if(action==='article-cover-remove'){saveDraft();state.articleDraft.cover=null;renderModal({preserve:true});return;}
+    if(action==='article-media-remove'){saveDraft();const chapter=state.articleDraft.chapters[Number(target.dataset.index)];chapter.media_id=null;chapter.media_name='';renderModal({preserve:true});return;}
     if(action==='remove-photo'){saveDraft();resetPhoto();renderModal({preserve:true});return;}
     if(action==='pause-upload'){state.videoPaused=true;target.dataset.action='resume-upload';target.textContent=t('compose.resume');return;}
     if(action==='resume-upload'){state.videoPaused=false;state.videoResume?.();state.videoResume=null;target.dataset.action='pause-upload';target.textContent='Pause';return;}
     if(action==='cancel-upload'){state.videoCancelled=true;state.videoPaused=false;state.videoResume?.();state.videoXhr?.abort();if(state.videoUpload)await api(state.videoUpload.upload_url,{method:'DELETE'}).catch(()=>{});return;}
     if(action==='detail'){await openDetail(id);return;}
+    if(action==='article-media'){const dialog=$('.article-media-viewer'),body=dialog.querySelector('div'),src=target.dataset.src;if(!/^\/media\/[a-zA-Z0-9-]+\//.test(src))throw new Error('Invalid article media path.');body.replaceChildren();const media=document.createElement(target.dataset.kind==='video'?'video':'img');media.src=src;if(media.tagName==='VIDEO')media.controls=true;else media.alt=target.getAttribute('aria-label')||'';body.append(media);state.articleMediaFocus=target;dialog.showModal();return;}
+    if(action==='article-media-close'){const dialog=$('.article-media-viewer');dialog.close();dialog.querySelector('video')?.pause();state.articleMediaFocus?.focus({preventScroll:true});return;}
     if(action==='vote'){await vote(id,Number(target.dataset.value));return;}
     if(action==='share'){await share(id);return;}
     if(action==='comments'){$('#discussion').scrollIntoView({behavior:'smooth'});$('#commentText').focus({preventScroll:true});return;}
@@ -510,7 +535,7 @@
       if(!source)throw new Error('Ugyldig kildebilde.');
       const response=await fetch(source);if(!response.ok)throw new Error('Kildebildet kunne ikke lastes.');
       const blob=await response.blob();openModal('compose');
-      state.postMode='image';state.composeStep='edit';state.category=post.category;state.draft.title=post.title;renderModal();
+      state.postMode='poster';state.composeStep='edit';state.category=post.category;state.draft.body=post.poster_text||post.title;renderModal();
       await loadPhoto(new File([blob],'plakat-kilde.jpg',{type:blob.type}),Boolean(post.synthetic_demo));return;
     }
     if(action==='copy-connect') {
@@ -530,16 +555,7 @@
       state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');if(localStorage.getItem('hereme_language'))await window.HeremeI18n.setLanguage(window.HeremeI18n.getLanguage());state.recoveryKey=result.recovery_key;state.modal='recovery-key';renderModal();
     }
     if(id==='recoverForm') {const result=await api('/api/session/recover',{method:'POST',body:{name:$('#recoverName').value.trim(),recovery_key:$('#recoverKey').value}});state.user=result.user;await window.HeremeI18n.applyAccountLanguage?.(result.user);state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');const pending=state.pending;state.pending=null;closeModal();await loadPosts();if(pending)await pending();}
-    if(id==='composeForm'){
-      if(state.composeStep==='edit'){
-        saveDraft();
-        if(state.postMode==='text'&&!state.draft.body.trim())throw new Error(t('validation.body_required'));
-        if(state.postMode==='image'&&!state.editorImage)throw new Error(t('validation.take_image_first'));
-        if(state.postMode==='video'&&!state.editorVideo)throw new Error(t('validation.take_video_first'));
-        state.composeStep='finish';renderModal();$('#postTitle')?.focus();return;
-      }
-      await submitCompose();
-    }
+    if(id==='composeForm')await submitCompose();
     if(id==='commentForm')await submitComment();
     if(id==='reportForm') {
       const result=await api(`/api/posts/${state.reportId}/report`,{method:'POST',body:{reason:$('#reportReason').value}});
@@ -555,7 +571,7 @@
     if(input.id==='textPosition'){state.textPosition=input.value;updatePreview();}
     if(input.id==='postArea'){state.postArea=input.value;}
     if(input.name==='postCategory'){state.category=input.value;updatePreview();}
-    if(input.name==='postMode'){saveDraft();resetPhoto();state.postMode=input.value;state.composeStep='edit';renderModal();(state.postMode==='text'?$('#postBody'):$('.media-action'))?.focus();return;}
+    if(input.id==='articleCoverInput'||input.dataset.articleFile!==undefined){saveDraft();toast(t('design.uploading'));const uploaded=await uploadArticleAsset(input.files?.[0]);if(input.id==='articleCoverInput')state.articleDraft.cover=uploaded;else{const chapter=state.articleDraft.chapters[Number(input.dataset.articleFile)];chapter.media_id=uploaded.media_id;chapter.media_name=uploaded.name;chapter.media_kind=uploaded.kind;}saveDraft();if(state.modal==='compose')renderModal({preserve:true});return;}
     if(['postFileInput','postCameraInput'].includes(input.id))await loadPhoto(input.files?.[0]);
     if(['postVideoInput','postVideoCameraInput'].includes(input.id))await loadVideo(input.files?.[0]);
   }
@@ -577,7 +593,8 @@
     document.addEventListener('submit',event=>handleSubmit(event).catch(error=>toast(error.message)));
     document.addEventListener('change',event=>handleChange(event).catch(error=>toast(error.message)));
     document.addEventListener('input',event=>{
-      if(event.target.id==='postTitle')updatePreview();
+      if(event.target.id==='postBody')updatePreview();
+      if(event.target.id==='articleTitle'||event.target.id==='articleAbstract'||event.target.dataset.chapterField){saveDraft();updateArticlePreview();}
       if(event.target.id==='searchInput'){clearTimeout(state.searchTimer);state.searchTimer=setTimeout(()=>{state.query=event.target.value.trim();loadPosts();},220);}
       if(['editorZoom','editorX','editorY'].includes(event.target.id)){state[event.target.id]=Number(event.target.value);updatePreview();}
     });
@@ -585,6 +602,7 @@
       if((event.key==='Enter'||event.key===' ')&&event.target.dataset.action==='area-toggle'){event.preventDefault();event.target.click();return;}
       if(event.key==='Escape'&&$('.author-popover')){closeAuthorMenu({focus:true});return;}
       if(!state.modal)return;
+      if(event.key==='Escape'&&$('.article-media-viewer')?.open){event.preventDefault();$('.article-media-viewer').close();state.articleMediaFocus?.focus({preventScroll:true});return;}
       if(event.key==='Escape')closeModal();
       if(event.key==='Tab') {
         const nodes=[...document.querySelectorAll('.modal-panel button,.modal-panel input,.modal-panel textarea,.modal-panel select,.modal-panel a[href],.modal-panel summary')].filter(el=>!el.disabled&&el.getClientRects().length);

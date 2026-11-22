@@ -47,6 +47,12 @@ async function importUserContent(sourceDirectory,targetDirectory,{snapshotRoot=n
         const id=existing?allocateId(to,'posts'):sourcePost.id,post={...sourcePost,id,author_id:mappedAuthor};insertRow(to,'posts',post);postMap.set(sourcePost.id,id);newPostIds.push(id);imported.posts++;
         const design=from.prepare('SELECT * FROM post_design WHERE post_id=?').get(sourcePost.id);if(design)insertRow(to,'post_design',{...design,post_id:id});
         const presentation=from.prepare('SELECT * FROM post_presentation WHERE post_id=?').get(sourcePost.id);if(presentation)insertRow(to,'post_presentation',{...presentation,post_id:id});
+        const sourcePoster=from.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='poster_content'").get()
+          ?from.prepare('SELECT text FROM poster_content WHERE post_id=?').get(sourcePost.id)?.text:null;
+        const posterText=sourcePoster??(sourcePost.body?.trim()
+          ?(sourcePost.body.trim().startsWith(sourcePost.title)?sourcePost.body:`${sourcePost.title}\n\n${sourcePost.body}`)
+          :sourcePost.title);
+        to.prepare('INSERT INTO poster_content(post_id,text) VALUES(?,?)').run(id,posterText);
         if(sourcePost.image_url?.startsWith('/uploads/')){
           const name=sourcePost.image_url.slice('/uploads/'.length);if(!name||name.includes('/')||name.includes('\\')||name==='..')throw new Error(`Unsafe upload path on post ${sourcePost.id}`);
           const sourceFile=path.join(incoming,'uploads',name),targetFile=path.join(target,'uploads',name),bytes=fs.readFileSync(sourceFile);

@@ -69,12 +69,16 @@ async function mergeData(sourceDir, targetDir) {
     const incomingDb = new DatabaseSync(path.join(incomingDir, 'hereme.sqlite'), { readOnly: true });
     let incoming,incomingRelease;
     try {
+      const hasTable=name=>!!incomingDb.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
       incoming = readRows(incomingDb);
       incomingRelease={
         designs:incomingDb.prepare('SELECT * FROM post_design').all(),
         presentations:incomingDb.prepare('SELECT * FROM post_presentation').all(),
         links:incomingDb.prepare('SELECT * FROM post_media').all(),
-        media:incomingDb.prepare('SELECT * FROM media').all()
+        media:incomingDb.prepare('SELECT * FROM media').all(),
+        posterContent:hasTable('poster_content')?incomingDb.prepare('SELECT * FROM poster_content').all():[],
+        articles:hasTable('articles')?incomingDb.prepare('SELECT * FROM articles').all():[],
+        articleAssets:hasTable('article_assets')?incomingDb.prepare('SELECT * FROM article_assets').all():[]
       };
     } finally { incomingDb.close(); }
     targetDb.exec('BEGIN IMMEDIATE; PRAGMA defer_foreign_keys=ON;');
@@ -106,9 +110,14 @@ async function mergeData(sourceDir, targetDir) {
         }
       }
       const insertedPosts=new Set(actions.filter(action=>action.table==='posts'&&action.insert).map(action=>action.insert.id));
-      const releaseLinks=incomingRelease.links.filter(row=>insertedPosts.has(row.post_id)),releaseMediaIds=new Set(releaseLinks.map(row=>row.media_id));
+      const releaseLinks=incomingRelease.links.filter(row=>insertedPosts.has(row.post_id));
+      const releaseArticleAssets=incomingRelease.articleAssets.filter(row=>insertedPosts.has(row.post_id));
+      const releaseMediaIds=new Set([...releaseLinks.map(row=>row.media_id),...releaseArticleAssets.map(row=>row.media_id)]);
       for(const row of incomingRelease.media.filter(row=>releaseMediaIds.has(row.id))){const columns=Object.keys(row);targetDb.prepare(`INSERT INTO media(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...columns.map(column=>row[column]));}
       for(const [table,rows] of [['post_presentation',incomingRelease.presentations.filter(row=>insertedPosts.has(row.post_id))],['post_design',incomingRelease.designs.filter(row=>insertedPosts.has(row.post_id))],['post_media',releaseLinks]])for(const row of rows){const columns=Object.keys(row);targetDb.prepare(`INSERT OR IGNORE INTO ${table}(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...columns.map(column=>row[column]));}
+      for(const row of releaseArticleAssets){const columns=Object.keys(row);targetDb.prepare(`INSERT INTO article_assets(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...columns.map(column=>row[column]));}
+      for(const row of incomingRelease.articles.filter(row=>insertedPosts.has(row.post_id))){const columns=Object.keys(row);targetDb.prepare(`INSERT INTO articles(${columns.join(',')}) VALUES(${columns.map(()=>'?').join(',')})`).run(...columns.map(column=>row[column]));}
+      for(const id of insertedPosts){const row=incomingRelease.posterContent.find(item=>item.post_id===id);if(row)targetDb.prepare('INSERT INTO poster_content(post_id,text) VALUES(?,?)').run(id,row.text);else targetDb.prepare(`INSERT INTO poster_content(post_id,text) SELECT id,CASE WHEN trim(body)='' THEN title WHEN substr(trim(body),1,length(title))=title THEN body ELSE title||char(10)||char(10)||body END FROM posts WHERE id=?`).run(id);}
       backfillDesigns(targetDb);
       backfillLegacyMedia(targetDb,target);
       // Reports from two instances may jointly reach the existing moderation threshold.

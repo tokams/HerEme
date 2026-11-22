@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-22 — Poster and article formats (E20, local worktree)
+
+- Added additive schema 22 content projections. Existing posts are reshaped into full poster text while retaining their original records, relationships, votes, comments, and media.
+- Added titleless poster publishing, structured Markdown articles, owned article media, two-column article cards, chapter reading, and a chapter media viewer.
+- Reworked the composer, poster excerpts, compact action strip, chat and reading typography; expanded migration, API and browser checks. Source Sans 3 font files and physical iPhone verification remain open before release.
+
 ## 2026-11-22 — Mobile UI stabilization (E19)
 
 - Keep mobile chat panes and composer aligned to the visible viewport after keyboard and zoom changes; place the attachment picker beside the message field with three labeled capture/device actions.

@@ -4,27 +4,29 @@ const V=require('./validation');
 const {ids:categoryIds,legacyCategory,parseDesign,insertDesign}=require('../post-design');
 const encode=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
 const decode=value=>{try{return JSON.parse(Buffer.from(value,'base64url').toString('utf8'));}catch{fail('INVALID_CURSOR','Ugyldig sidepeker.');}};
-function createPostService(db,{media,audit,config={}}={}){
+function createPostService(db,{media,audit,articles,config={}}={}){
   const projection=`SELECT p.*,r.slug room_slug,r.name room_name,r.emoji room_emoji,
     COALESCE(CASE WHEN u.status='active' THEN u.name END,p.demo_author,'anonym') author,CASE WHEN u.status='active' AND COALESCE(pp.synthetic_demo,0)=0 THEN u.id ELSE NULL END author_public_id,COALESCE(pp.synthetic_demo,0) synthetic_demo,pp.poster_json,
     d.category,d.image_zoom,d.image_x,d.image_y,d.text_position,pa.area_id,pm.media_id,m.kind media_kind,m.status media_status,
+    CASE WHEN ar.post_id IS NULL THEN 'poster' ELSE 'article' END content_format,ar.abstract article_abstract,pc.text poster_text,
     m.display_path media_display_path,m.thumbnail_path media_thumbnail_path,m.duration_ms,
     p.base_score+COALESCE((SELECT sum(v.value) FROM votes v WHERE v.post_id=p.id),0) score,
     (SELECT count(*) FROM comments c WHERE c.post_id=p.id) comment_count`;
   const joins=` FROM posts p LEFT JOIN rooms r ON r.id=p.room_id LEFT JOIN users u ON u.id=p.author_id
     LEFT JOIN post_presentation pp ON pp.post_id=p.id LEFT JOIN post_design d ON d.post_id=p.id LEFT JOIN post_areas pa ON pa.post_id=p.id
-    LEFT JOIN post_media pm ON pm.post_id=p.id LEFT JOIN media m ON m.id=pm.media_id`;
+    LEFT JOIN post_media pm ON pm.post_id=p.id LEFT JOIN media m ON m.id=pm.media_id LEFT JOIN articles ar ON ar.post_id=p.id LEFT JOIN poster_content pc ON pc.post_id=p.id`;
   function publicPost(row,myVote=0){
     if(!row)return null;const {author_id,demo_author,base_score,poster_json,...result}=row;
     const design=row.category?{category:row.category,image_zoom:row.image_zoom,image_x:row.image_x,image_y:row.image_y,text_position:row.text_position}:parseDesign({},legacyCategory(row.room_slug,row.type));
-    return {...result,...design,poster_style:design.category,poster:poster_json?JSON.parse(poster_json):null,my_vote:myVote,
+    const posterText=row.poster_text||(row.body?.trim()?row.body.trim().startsWith(row.title)?row.body:`${row.title}\n\n${row.body}`:row.title);
+    return {...result,...design,poster_text:posterText,poster_style:design.category,poster:poster_json?JSON.parse(poster_json):null,my_vote:myVote,
       media_url:row.media_display_path?'/'+row.media_display_path.replaceAll('\\','/'):null,
       media_thumbnail_url:row.media_thumbnail_path?'/'+row.media_thumbnail_path.replaceAll('\\','/'):null};
   }
   function visible(id,userId=null){
     const row=db.prepare(projection+joins+" WHERE p.id=? AND p.status='published'").get(id);
     const vote=userId&&row?db.prepare('SELECT value FROM votes WHERE post_id=? AND user_id=?').get(id,userId)?.value||0:0;
-    return publicPost(row,vote);
+    const post=publicPost(row,vote);if(post?.content_format==='article')post.article=articles.detail(id);return post;
   }
   function list({categories,areas,sort='new',q='',cursor='',limit=24,userId=null}={}){
     sort=['new','top','hot'].includes(sort)?sort:fail('INVALID_SORT','Ugyldig sortering.');
@@ -47,7 +49,8 @@ function createPostService(db,{media,audit,config={}}={}){
     return {posts,has_more:hasMore,next_cursor:hasMore?encode({sort,key:last.page_key,time:last.created_at,id:Math.abs(last.id)}):null};
   }
   async function create(input,user,file){
-    const title=V.text(input.title,{name:'Overskrift',min:3,max:160}),body=V.optionalText(input.body,{name:'Innlegg',max:3000});
+    const modern=input.format==='poster',body=modern?V.text(input.body,{name:'Plakattekst',min:3,max:3000}):V.optionalText(input.body,{name:'Innlegg',max:3000});
+    const title=modern?body.slice(0,160):V.text(input.title,{name:'Overskrift',min:3,max:160});
     const type=V.enumValue(input.type,['text','link','image'],'Innleggstype');
     const design=parseDesign(input,legacyCategory(null,type));let link=null;
     if(type==='link'||input.link_url)link=V.httpUrl(input.link_url);
@@ -60,6 +63,7 @@ function createPostService(db,{media,audit,config={}}={}){
       const row=db.prepare(`INSERT INTO posts(id,room_id,author_id,title,body,type,link_url,image_url,base_score)
         VALUES(?,?,?,?,?,?,?,?,0)`).run(require('../migrations').nextId(db,'posts'),null,user.id,title,body,type,link,stored?.url||null);
       const id=Number(row.lastInsertRowid);
+      if(modern)db.prepare('INSERT INTO poster_content(post_id,text) VALUES(?,?)').run(id,body);
       db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(?,?,1)').run(id,user.id);
       insertDesign(db,id,design);
       if(stored)db.prepare('INSERT INTO post_media(post_id,media_id) VALUES(?,?)').run(id,stored.id);

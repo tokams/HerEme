@@ -6,6 +6,11 @@
   const loggedMediaErrors=new Set();
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const image=url=>typeof url==='string'&&(/^\/uploads\/[a-zA-Z0-9_-]+\.(png|jpg|webp)$/.test(url)||/^\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/(display|thumbnail)\.(jpg|webp|png)$/.test(url)||/^\/assets\/[a-z0-9_-]+\.svg$/.test(url)||/^\/assets\/demo\/(posts|sources)\/[a-z0-9_-]+\.(jpg|webp|png)$/.test(url))?url:'';
+  function excerpt(value){
+    const words=String(value||'').trim().match(/\S+/gu)||[];let count=0,characters=0;
+    for(const word of words){const next=characters+word.length+(count?1:0);if(count&&next>35)break;characters=next;count++;if(count===5)break;}
+    return {opening:words.slice(0,count).join(' '),remaining:words.slice(count).join(' ')};
+  }
   function cropRect(iw,ih,w,h,zoom=1,x=50,y=50) {
     if(![iw,ih,w,h,zoom,x,y].every(Number.isFinite)||Math.min(iw,ih,w,h)<=0||zoom<1||zoom>3||x<0||x>100||y<0||y>100)throw new Error('Invalid poster crop.');
     const scale=Math.max(w/iw,h/ih)*zoom,width=iw*scale,height=ih*scale;
@@ -25,7 +30,7 @@
     return `<div class="poster-surface theme-${theme.id} placement-${position} ${src?'with-image':'without-image'} ${baked?'original-poster':''} ${detail?'detail-surface':''}">
       ${src?`<img class="poster-photo" src="${escape(src)}" alt="${baked?escape(title):''}" loading="${detail||previewUrl?'eager':'lazy'}" decoding="async" data-zoom="${baked?1:post.image_zoom??1}" data-x="${baked?50:post.image_x??50}" data-y="${baked?50:post.image_y??50}">`:`<span class="poster-motif" aria-hidden="true">${theme.symbol}</span>`}
       ${src?`<span class="poster-media-status">${escape(t('media_loading'))}</span><span class="poster-media-error" role="status" hidden>${baked?`${escape(title)} · `:''}${escape(t('media_error'))}</span>`:''}
-      ${baked?`<span class="sr-only">${escape(title)}</span>`:`<span class="poster-decor">${icon(theme.id)}</span><span class="poster-text"><span class="poster-title ${density}">${escape(title)}</span></span>`}
+      ${baked?`<span class="sr-only">${escape(title)}</span>`:`<span class="poster-decor">${icon(theme.id)}</span><span class="poster-text">${post.poster_text?`<span class="poster-copy"><strong>${escape(excerpt(post.poster_text).opening)}</strong><span>${escape(excerpt(post.poster_text).remaining)}</span></span>`:`<span class="poster-title ${density}">${escape(title)}</span>`}</span>`}
       ${post.synthetic_demo?`<span class="demo-tag">${t('demo')}</span>`:''}
     </div>`;
   }
@@ -57,6 +62,6 @@
       while(title.offsetHeight>height&&size>10)title.style.fontSize=(--size)+'px';
     }
   }
-  const api={escape,image,cropRect,surface,enhance,fitTitles};
+  const api={escape,image,excerpt,cropRect,surface,enhance,fitTitles};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.HeremePoster=api;
 })(globalThis);

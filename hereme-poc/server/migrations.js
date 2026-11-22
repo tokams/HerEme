@@ -13,7 +13,7 @@ function makeUserNamesUnique(db,{writeNormalized=false}={}){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 21) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 22) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -410,6 +410,33 @@ function applyMigrations(db) {
     CREATE INDEX posts_author_status ON posts(author_id,status);
     CREATE INDEX comments_author_post ON comments(author_id,post_id);
     INSERT INTO schema_migrations(version) VALUES(21); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<22){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE article_assets (
+      media_id TEXT PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
+      owner_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX article_assets_unattached ON article_assets(owner_id,created_at) WHERE post_id IS NULL;
+    CREATE TABLE poster_content (
+      post_id INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
+      text TEXT NOT NULL
+    );
+    INSERT INTO poster_content(post_id,text)
+      SELECT id,CASE WHEN trim(body)='' THEN title
+        WHEN substr(trim(body),1,length(title))=title THEN body
+        ELSE title||char(10)||char(10)||body END FROM posts;
+    CREATE TABLE articles (
+      post_id INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
+      abstract TEXT NOT NULL,
+      markdown_source TEXT NOT NULL,
+      chapters_json TEXT NOT NULL,
+      cover_media_id TEXT REFERENCES media(id),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO schema_migrations(version) VALUES(22); COMMIT;`);}catch(error){db.exec('ROLLBACK');throw error;}
   }
 }
 function readRows(db) {

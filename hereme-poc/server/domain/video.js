@@ -5,7 +5,7 @@ function hashFile(filename){return new Promise((resolve,reject)=>{const digest=c
 function createVideoService(db,dataDir,config,{audit,run=spawnSync}={}){
   function enabled(){if(!config.enableVideo)fail('VIDEO_DISABLED','Video er ikke aktivert på denne instansen.',404);}
   function begin(input,user){
-    enabled();const title=V.text(input.title,{name:'Overskrift',min:3,max:160}),body=V.optionalText(input.body,{name:'Innlegg',max:3000});
+    enabled();const modern=input.format==='poster',body=modern?V.text(input.body,{name:'Plakattekst',min:3,max:3000}):V.optionalText(input.body,{name:'Innlegg',max:3000}),title=modern?body.slice(0,160):V.text(input.title,{name:'Overskrift',min:3,max:160});
     const bytes=V.integer(input.bytes,{name:'Filstørrelse',min:1,max:config.maxVideoBytes});
     const normalizedMime=String(input.mime_type||'').split(';')[0].trim().toLowerCase();
     const mime=V.enumValue(normalizedMime,['video/mp4','video/quicktime','video/webm','video/x-m4v','video/3gpp'],'Videotype');
@@ -16,9 +16,19 @@ function createVideoService(db,dataDir,config,{audit,run=spawnSync}={}){
       db.prepare(`INSERT INTO media(id,owner_id,kind,status,original_path,mime_type,bytes,sha256)
         VALUES(?,?,'video','uploading',?,?,?,'')`).run(mediaId,user.id,relative,mime,bytes);
       const post=db.prepare(`INSERT INTO posts(id,author_id,title,body,type,status) VALUES(?,?,?,?, 'video','processing')`).run(nextId(db,'posts'),user.id,title,body);
-      const postId=Number(post.lastInsertRowid);insertDesign(db,postId,design);db.prepare('INSERT INTO post_media(post_id,media_id) VALUES(?,?)').run(postId,mediaId);db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(?,?,1)').run(postId,user.id);
+      const postId=Number(post.lastInsertRowid);insertDesign(db,postId,design);if(modern)db.prepare('INSERT INTO poster_content(post_id,text) VALUES(?,?)').run(postId,body);db.prepare('INSERT INTO post_media(post_id,media_id) VALUES(?,?)').run(postId,mediaId);db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(?,?,1)').run(postId,user.id);
       if(input.area_id){if(!config.enableLocations)fail('LOCATIONS_DISABLED','Områder er ikke aktivert.',404);if(!db.prepare('SELECT id FROM areas WHERE id=? AND active=1').get(input.area_id))fail('INVALID_AREAS','Ugyldig område.');db.prepare('INSERT INTO post_areas(post_id,area_id) VALUES(?,?)').run(postId,input.area_id);}
       db.exec('COMMIT');return {media_id:mediaId,post_id:postId,upload_url:`/api/video-uploads/${mediaId}`,bytes};
+    }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  function beginArticleAsset(input,user){
+    enabled();const bytes=V.integer(input.bytes,{name:'Filstørrelse',min:1,max:config.maxVideoBytes});
+    const mime=V.enumValue(String(input.mime_type||'').split(';')[0].trim().toLowerCase(),['video/mp4','video/quicktime','video/webm','video/x-m4v','video/3gpp'],'Videotype');
+    const stat=fs.statfsSync(dataDir);if(stat.bavail*stat.bsize-bytes<config.minFreeBytes)fail('DISK_PRESSURE','Ikke nok reservert lagringsplass.',503);
+    const id=crypto.randomUUID();db.exec('BEGIN IMMEDIATE');try{
+      db.prepare("INSERT INTO media(id,owner_id,kind,status,original_path,mime_type,bytes,sha256) VALUES(?,?,'video','uploading',?,?,?,'')").run(id,user.id,`tmp/${id}.upload`,mime,bytes);
+      db.prepare('INSERT INTO article_assets(media_id,owner_id) VALUES(?,?)').run(id,user.id);
+      db.exec('COMMIT');return {media_id:id,upload_url:`/api/video-uploads/${id}`,bytes};
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
   function receive(id,user,req){
@@ -60,7 +70,7 @@ function createVideoService(db,dataDir,config,{audit,run=spawnSync}={}){
     });
   }
   function status(id,user){const row=db.prepare('SELECT id,status,error_code,duration_ms,thumbnail_path,display_path,original_path,bytes FROM media WHERE id=? AND owner_id=?').get(id,user.id);if(!row)fail('UPLOAD_NOT_FOUND','Videoopplastingen finnes ikke.',404);const temporary=path.resolve(dataDir,row.original_path),uploaded=row.status==='uploading'&&fs.existsSync(temporary)?fs.statSync(temporary).size:row.bytes;delete row.original_path;return {...row,uploaded_bytes:uploaded,thumbnail_url:row.thumbnail_path?'/'+row.thumbnail_path:null,media_url:row.display_path?'/'+row.display_path:null};}
-  function cancel(id,user){const row=db.prepare("SELECT m.*,pm.post_id FROM media m JOIN post_media pm ON pm.media_id=m.id WHERE m.id=? AND m.owner_id=? AND m.status IN ('uploading','queued','failed','rejected')").get(id,user.id);if(!row)fail('UPLOAD_NOT_CANCELLABLE','Opplastingen kan ikke avbrytes.',409);db.exec('BEGIN IMMEDIATE');try{db.prepare('DELETE FROM posts WHERE id=?').run(row.post_id);db.prepare('DELETE FROM media WHERE id=?').run(id);db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}for(const relative of [row.original_path,row.display_path,row.thumbnail_path].filter(Boolean))fs.rmSync(path.resolve(dataDir,relative),{force:true});fs.rmSync(path.join(dataDir,'media',id),{recursive:true,force:true});return {ok:true};}
+  function cancel(id,user){const row=db.prepare("SELECT m.*,pm.post_id,a.post_id article_post_id FROM media m LEFT JOIN post_media pm ON pm.media_id=m.id LEFT JOIN article_assets a ON a.media_id=m.id WHERE m.id=? AND m.owner_id=? AND m.status IN ('uploading','queued','failed','rejected')").get(id,user.id);if(!row||row.article_post_id)fail('UPLOAD_NOT_CANCELLABLE','Opplastingen kan ikke avbrytes.',409);db.exec('BEGIN IMMEDIATE');try{if(row.post_id)db.prepare('DELETE FROM posts WHERE id=?').run(row.post_id);db.prepare('DELETE FROM media WHERE id=?').run(id);db.exec('COMMIT');}catch(error){db.exec('ROLLBACK');throw error;}for(const relative of [row.original_path,row.display_path,row.thumbnail_path].filter(Boolean))fs.rmSync(path.resolve(dataDir,relative),{force:true});fs.rmSync(path.join(dataDir,'media',id),{recursive:true,force:true});return {ok:true};}
   function processOne(){
     enabled();db.exec('BEGIN IMMEDIATE');let job;
     try{db.exec(`UPDATE media_jobs SET status='queued',locked_at=NULL,available_at=datetime('now') WHERE status='processing' AND locked_at<datetime('now','-30 minutes') AND attempts<3;
@@ -85,6 +95,6 @@ function createVideoService(db,dataDir,config,{audit,run=spawnSync}={}){
       db.exec('BEGIN IMMEDIATE');db.prepare("UPDATE media SET status='ready',display_path=?,thumbnail_path=?,duration_ms=?,width=?,height=?,updated_at=datetime('now') WHERE id=?").run(display,thumb,duration,video.width||null,video.height||null,media.id);db.prepare("UPDATE posts SET status='published',image_url=? WHERE id=(SELECT post_id FROM post_media WHERE media_id=?)").run('/'+thumb,media.id);db.prepare("UPDATE media_jobs SET status='done',error=NULL WHERE id=?").run(job.id);audit?.record({action:'media.ready',subjectType:'media',subjectId:media.id,next:{duration_ms:duration}});db.exec('COMMIT');return {id:media.id,status:'ready'};
     }catch(error){if(db.isTransaction)db.exec('ROLLBACK');db.exec('BEGIN IMMEDIATE');const attempts=db.prepare('SELECT attempts FROM media_jobs WHERE id=?').get(job.id).attempts,final=attempts>=3;db.prepare("UPDATE media_jobs SET status=?,error=?,available_at=datetime('now','+5 minutes') WHERE id=?").run(final?'failed':'queued',error.message.slice(0,500),job.id);db.prepare("UPDATE media SET status=?,error_code='PROCESSING_FAILED',updated_at=datetime('now') WHERE id=?").run(final?'failed':'queued',media.id);if(final)db.prepare("UPDATE posts SET status='rejected' WHERE id=(SELECT post_id FROM post_media WHERE media_id=?)").run(media.id);db.exec('COMMIT');throw error;}
   }
-  return {begin,receive,receiveChunk,status,cancel,processOne};
+  return {begin,beginArticleAsset,receive,receiveChunk,status,cancel,processOne};
 }
 module.exports={createVideoService};

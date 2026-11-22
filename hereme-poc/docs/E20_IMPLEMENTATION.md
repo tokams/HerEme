@@ -1,0 +1,11 @@
+# E20 content formats implementation
+
+The wall retains its five categories and adds poster and article presentation. A poster has one editable text source and optional image or video. The wall emphasizes the opening words and displays the rest in smaller type; detail shows the complete text. An article has a title, abstract, optional cover, and ordered Markdown chapters with optional media. Article cards span two wall columns. Article media opens in a focused viewer.
+
+Schema 22 adds `poster_content`, `articles`, and `article_assets` without rewriting `posts`. The migration fills `poster_content` from every existing title/body pair, including user authored posts, preserving the original fields, post IDs, URLs, votes, comments and uploaded media. If the body already begins with the title, it is not prepended again. The selective old user content import and preview merge also populate this projection for newly imported legacy posts. Article source and chapter order are stored separately from the existing post interaction row. Article attachments use the existing validated image pipeline and durable video upload/worker.
+
+The editor keeps text and article fields in a local draft per signed in account. Publishing validates category, media ownership and readiness on the server. Unpublished article media is served only to its owner; it becomes public with the article. Markdown is rendered from an escaped, limited subset; raw HTML is never passed through. Administrative post and user deletion includes article media cleanup. The original title/body and media of historical posts remain available for recovery.
+
+Local checks: `npm run check`, `npm test`, and `npm run test:browser` cover syntax, schema migration, old content import, poster/article API, Markdown safety, article card/reader, and mobile/desktop flows. Physical iPhone/PWA behavior and a migration against a production snapshot remain to be checked before deployment.
+
+Source Sans 3 is specified by the design and selected in CSS, but its WOFF2 and OFL files still need to be added before release. This workspace cannot reach the official Adobe font repository from the command line. Until those files are present and `@font-face` is declared, the app uses its Arial fallback. This is an open E20 acceptance gap.

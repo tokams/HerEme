@@ -72,7 +72,14 @@ app.use('/share-previews',(req,res,next)=>{
   res.set('Content-Type','image/jpeg').set('Cache-Control','no-store').send(fs.readFileSync(file));
 });
 app.use('/uploads',(req,res,next)=>{const original=req.pathname;req.pathname=req.pathname.slice(8)||'/';web.static(path.join(S.dataDir,'uploads'))(req,res,()=>{req.pathname=original;next();});});
-app.use('/media',(req,res,next)=>{const original=req.pathname;req.pathname=req.pathname.slice(6)||'/';web.static(path.join(S.dataDir,'media'))(req,res,()=>{req.pathname=original;next();});});
+app.use('/media',(req,res,next)=>{
+  const original=req.pathname,mediaId=/^\/media\/([0-9a-f-]{36})\//.exec(original)?.[1];
+  if(mediaId){
+    const asset=S.db.prepare('SELECT a.owner_id,p.status FROM article_assets a LEFT JOIN posts p ON p.id=a.post_id WHERE a.media_id=?').get(mediaId);
+    if(asset&&asset.status!=='published'&&S.identity.readSession(req,res)?.id!==asset.owner_id)return res.status(404).send('Not found.');
+  }
+  req.pathname=req.pathname.slice(6)||'/';web.static(path.join(S.dataDir,'media'))(req,res,()=>{req.pathname=original;next();});
+});
 app.use(web.static(path.resolve(__dirname,'..','public'),{extensions:['html']}));
 function appShell(name,res){res.set('Content-Type','text/html; charset=utf-8').send(fs.readFileSync(path.resolve(__dirname,'..','public',name)));}
 app.get('/chat',(req,res)=>appShell('chat.html',res));
@@ -85,9 +92,9 @@ app.get('/api/health',(req,res)=>{const worker=S.db.prepare('SELECT last_run FRO
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=21').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=22').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===21;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===22;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','avatars','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();})&&S.avatars.verify();
@@ -185,12 +192,15 @@ app.get('/api/posts',(req,res)=>{const current=S.identity.readSession(req,res);r
 app.get('/api/activity',(req,res)=>{const current=S.identity.readSession(req,res);const page=S.posts.list({...req.query,limit:Math.min(Number(req.query.limit)||50,50),userId:current?.id});res.json({...activity(page.posts),next_cursor:page.next_cursor});});
 app.get('/api/posts/:id',(req,res)=>{const current=S.identity.readSession(req,res),post=S.posts.visible(Number(req.params.id),current?.id);if(!post)return errors(res,404,'POST_NOT_FOUND','Innlegget finnes ikke.');res.json({post});});
 app.post('/api/posts',write('post:create',12),imageUpload.single('image'),async(req,res)=>{const result=await S.posts.create(req.body||{},req.auth,req.file),post=S.posts.visible(result.id);if(post)await S.sharePreviews.queue(post);res.status(201).json(result);});
+app.post('/api/article-assets/images',write('post:create',24),imageUpload.single('image'),async(req,res)=>res.status(201).json(await S.articles.uploadImage(req.file,req.auth)));
+app.post('/api/articles',write('post:create',12),async(req,res)=>{const result=S.articles.create(req.body||{},req.auth),post=S.posts.visible(result.id);if(post)await S.sharePreviews.queue(post);res.status(201).json(result);});
 app.post('/api/posts/:id/vote',write('vote',180),(req,res)=>res.json(S.interactions.vote(req.params.id,req.auth,req.body?.value)));
 app.get('/api/posts/:id/comments',(req,res)=>{const current=S.identity.readSession(req,res);res.json(S.interactions.comments(req.params.id,{...req.query,userId:current?.id}));});
 app.post('/api/comments/:id/vote',write('vote',180),(req,res)=>res.json(S.interactions.voteComment(req.params.id,req.auth,req.body?.value)));
 app.post('/api/posts/:id/comments',write('comment',40),(req,res)=>res.status(201).json(S.interactions.comment(req.params.id,req.auth,req.body||{})));
 app.post('/api/posts/:id/report',write('report',20),(req,res)=>{const result=S.interactions.report(req.params.id,req.auth,req.body?.reason);if(result.automatically_held)S.sharePreviews.invalidate(Number(req.params.id));res.status(201).json(result);});
 app.post('/api/video-uploads',write('post:create',3),(req,res)=>res.status(201).json(S.video.begin(req.body||{},req.auth)));
+app.post('/api/article-assets/videos',write('post:create',12),(req,res)=>res.status(201).json(S.video.beginArticleAsset(req.body||{},req.auth)));
 app.put('/api/video-uploads/:id',write('post:create',3),async(req,res)=>res.json(await S.video.receive(req.params.id,req.auth,req)));
 app.patch('/api/video-uploads/:id',write('post:create',300),async(req,res)=>res.json(await S.video.receiveChunk(req.params.id,req.auth,req)));
 app.get('/api/video-uploads/:id',(req,res)=>{const current=S.identity.requireUser(req,res);res.json(S.video.status(req.params.id,current));});
