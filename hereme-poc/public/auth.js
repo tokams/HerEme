@@ -20,12 +20,12 @@
     root.querySelector('#recoveryTitle').textContent=t('auth.save_title');
     root.querySelector('.auth-context').textContent=t('auth.save_intro');
     root.querySelector('input[name="username"]').parentElement.querySelector('span').textContent=t('auth.username');
-    root.querySelector('input[name="password"]').parentElement.querySelector('span').textContent=t('auth.code');
-    root.querySelector('form button').textContent=t('auth.saved');
-    root.querySelectorAll('.auth-context')[1].textContent=t('auth.save_hint');
+    root.querySelector('input[name="password"]').closest('label').querySelector('span').textContent=t('auth.code');
+    root.querySelector('form button[type="submit"]').textContent=t('auth.saved');
     root.querySelector('[data-save-passkey]').textContent=t('auth.add_device');
-    root.querySelector('[data-auth-continue]').textContent=t('auth.continue');
-    const copy=root.querySelector('[data-copy-recovery]');if(copy)copy.textContent=t('auth.copy');
+    root.querySelector('[data-passkey-hint]').textContent=t('auth.passkey_hint');
+    root.querySelector('[data-copy-recovery]').setAttribute('aria-label',t('auth.copy'));
+    root.querySelector('[data-auth-close]').setAttribute('aria-label',t('auth.close'));
   }
   function render(mode='login',message=''){
     const register=mode==='register',root=active.root;
@@ -37,21 +37,23 @@
   }
   function showRecovery(result,callback){
     const root=active.root;
+    active.registrationResult=result;
     active.backupPending=true;
-    root.innerHTML=`<div class="auth-overlay"><section class="auth-dialog auth-register" role="dialog" aria-modal="true" aria-labelledby="recoveryTitle"><header><div><p>HEREME / KONTO</p><h2 id="recoveryTitle">Lagre innloggingen din</h2></div></header><div class="auth-panel"><p class="auth-context">Innloggingskoden er en lang, automatisk laget kode. Den vises bare nå. Du kan bruke den sammen med pseudonymet ditt for å logge inn på andre enheter.</p><form action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${escape(result.csrf_token)}"><label class="field"><span>Pseudonym</span><input name="username" autocomplete="username" value="${escape(result.user.name)}"></label><label class="field"><span>Innloggingskode</span><input name="password" type="password" autocomplete="new-password" value="${escape(result.recovery_key)}"></label><button class="btn btn-primary" type="submit">Jeg har lagret koden</button></form><p class="auth-context">Nettleseren kan tilby å lagre innloggingen når du fortsetter. Du kan også kopiere koden selv.</p><code class="recovery-key">${escape(result.recovery_key)}</code><button type="button" class="btn btn-primary" data-save-passkey hidden>Bruk enheten til å logge inn</button><p role="status"></p><button type="button" class="btn btn-secondary" data-auth-continue>Fortsett uten nettleserlagring</button></div></section></div>`;
+    root.innerHTML=`<div class="auth-overlay"><section class="auth-dialog auth-register auth-recovery" role="dialog" aria-modal="true" aria-labelledby="recoveryTitle"><header><div><p>HEREME / KONTO</p><h2 id="recoveryTitle"></h2></div><button type="button" data-auth-close aria-label="Lukk">&times;</button></header><div class="auth-panel"><p class="auth-context"></p><button type="button" class="btn btn-primary" data-save-passkey></button><p data-passkey-hint></p><p role="status" aria-live="polite"></p><form action="/api/recovery/confirm" method="post" autocomplete="on"><input type="hidden" name="csrf_token" value="${escape(result.csrf_token)}"><label class="field"><span></span><input name="username" autocomplete="username" value="${escape(result.user.name)}" readonly></label><label class="field"><span></span><span class="recovery-input-row"><input name="password" type="password" autocomplete="new-password" value="${escape(result.recovery_key)}" readonly><button type="button" data-copy-recovery aria-label=""><img src="/assets/icons/auth-copy.svg" alt=""></button></span></label><button class="btn btn-secondary" type="submit"></button></form></div></section></div>`;
     localizeRecovery(root);
-    window.HeremePasskeys?.config().then(config=>{if(config.enabled&&root.isConnected)root.querySelector('[data-save-passkey]').hidden=false;}).catch(()=>{});
-    root.querySelector('[data-save-passkey]').onclick=async event=>{const button=event.target;button.disabled=true;try{await window.HeremePasskeys.register();root.querySelector('[role=status]').textContent=t('auth.device_saved');button.hidden=true;}catch(error){root.querySelector('[role=status]').textContent=error.message;button.disabled=false;}};
-    root.querySelector('[data-auth-continue]').addEventListener('click',async()=>{active.backupPending=false;window.HeremeAuth.recoveryKey=result.recovery_key;await window.HeremePwa?.reconcilePush?.();close({cancel:false});await callback?.(result,{created:true});});
+    const passkey=root.querySelector('[data-save-passkey]'),status=root.querySelector('[role=status]');
+    window.HeremePasskeys?.config().then(config=>{if(root.isConnected&&!config.enabled){passkey.disabled=true;status.textContent=t('auth.device_unavailable');}}).catch(error=>{if(root.isConnected){passkey.disabled=true;status.textContent=error.message;}});
+    passkey.onclick=async()=>{passkey.disabled=true;try{await window.HeremePasskeys.register();active.backupPending=false;status.textContent=t('auth.device_saved');passkey.hidden=true;}catch(error){status.textContent=error.message;passkey.disabled=false;}};
+    root.querySelector('[data-copy-recovery]').onclick=async()=>{try{await navigator.clipboard.writeText(result.recovery_key);status.textContent=t('auth.copied');}catch{status.textContent=t('auth.copy_failed');}};
+    root.querySelector('form').addEventListener('submit',()=>{active.backupPending=false;});
   }
   async function submit(form){const error=active.root.querySelector('.auth-error');error.hidden=true;const button=form.querySelector('button[type="submit"],button:not([type])');if(button)button.disabled=true;try{const fields=new FormData(form),created=form.dataset.authForm==='register',result=await request(created?'/api/session':'/api/session/recover',created?{name:fields.get('name')}:{name:fields.get('name'),recovery_key:fields.get('recovery_key')});const callback=active?.onSuccess;if(created&&result.recovery_key)return showRecovery(result,callback);await window.HeremePwa?.reconcilePush?.();await callback?.(result,{created:false});close({cancel:false});}catch(problem){if(error.isConnected){error.textContent=problem.message;error.hidden=false;if(button)button.disabled=false;}}}
   function open({mode='login',message='',onSuccess,onCancel}={}){
-    close({cancel:false});const root=document.createElement('div');root.className='auth-root';document.body.append(root);const onKey=event=>{if(event.key==='Escape'&&active?.root===root){if(active.backupPending&&!confirm('Du kan miste tilgangen hvis du ikke har lagret nøkkelen. Lukk likevel?'))return;close();}};active={root,returnFocus:document.activeElement,onSuccess,onCancel,message,onKey};render(mode,message);
-    root.addEventListener('click',event=>{if(event.target.matches('[data-auth-close]'))return close();const tab=event.target.closest('[data-auth-mode]');if(tab)render(tab.dataset.authMode,active.message);});
+    close({cancel:false});const root=document.createElement('div');root.className='auth-root';document.body.append(root);const dismiss=async()=>{if(active?.backupPending&&!confirm(t('auth.leave_warning')))return;if(active?.registrationResult){const result=active.registrationResult,callback=active.onSuccess;await window.HeremePwa?.reconcilePush?.();close({cancel:false});await callback?.(result,{created:true});}else close();};const onKey=event=>{if(event.key==='Escape'&&active?.root===root)dismiss();};active={root,returnFocus:document.activeElement,onSuccess,onCancel,message,onKey};render(mode,message);
+    root.addEventListener('click',event=>{if(event.target.matches('[data-auth-close]'))return dismiss();const tab=event.target.closest('[data-auth-mode]');if(tab)render(tab.dataset.authMode,active.message);});
     root.addEventListener('submit',event=>{const form=event.target.closest('[data-auth-form]');if(!form)return;event.preventDefault();submit(form);});document.addEventListener('keydown',onKey);
-    const observer=new MutationObserver(()=>{const key=root.querySelector('.recovery-key');if(!key||root.querySelector('[data-copy-recovery]'))return;const button=document.createElement('button');button.type='button';button.dataset.copyRecovery='';button.className='btn btn-secondary';button.textContent=t('auth.copy');button.onclick=async()=>{try{await navigator.clipboard.writeText(key.textContent);button.textContent=t('auth.copied');}catch{button.textContent='Kopiering feilet. Marker nøkkelen og kopier manuelt.';}};key.after(button);});observer.observe(root,{childList:true,subtree:true});
     root.addEventListener('keydown',event=>{if(event.key!=='Tab')return;const elements=[...root.querySelectorAll('button:not([disabled]),input:not([disabled]),a[href]')].filter(item=>!item.hidden&&item.getClientRects().length);if(!elements.length)return;const first=elements[0],last=elements.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}});
   }
   addEventListener('hereme:language',()=>{if(!active)return;const form=active.root.querySelector('[data-auth-form]');if(form)localize(active.root,form.dataset.authForm==='register');else if(active.root.querySelector('#recoveryTitle'))localizeRecovery(active.root);});
-  window.HeremeAuth={open,close,get recoveryKey(){return this.lastRecoveryKey||null;},set recoveryKey(value){this.lastRecoveryKey=value;}};
+  window.HeremeAuth={open,close};
 })();

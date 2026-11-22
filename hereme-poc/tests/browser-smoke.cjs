@@ -150,8 +150,9 @@ async function publish(page,title) {
   assert.equal(await page.locator('[data-auth-form=register] input[name=name]').getAttribute('autocomplete'),'username');
   await page.locator('[data-auth-form=register] input[name=name]').fill('VeggTester');
   await page.locator('[data-auth-form=register] button').click();
-  const recovery=await page.locator('.recovery-key').textContent();assert.ok(recovery.length>=20);
-  await page.locator('[data-auth-continue]').click();
+  const recovery=await page.locator('.auth-recovery input[name=password]').inputValue();assert.ok(recovery.length>=20);
+  assert.equal(await page.locator('.auth-recovery').evaluate((element,secret)=>element.textContent.includes(secret),recovery),false);
+  page.once('dialog',dialog=>dialog.accept());await page.locator('.auth-recovery [data-auth-close]').click();
   await page.locator('.auth-overlay').waitFor({state:'detached'});assert.equal(await page.locator('#profileLabel').textContent(),'VeggTester');
   await page.locator('.modal-panel').waitFor();
   assert.equal(await page.locator('input[name=postMode]:checked').count(),0);
@@ -258,6 +259,9 @@ async function publish(page,title) {
   await phone.locator('#commentText').fill('En kommentar fra mobil.');
   await phone.locator('#commentForm button').click();
   await phone.locator('.comment-body').filter({hasText:'En kommentar fra mobil.'}).waitFor();
+  const commentControls=await phone.locator('.comment-actions').first().evaluate(row=>{const button=row.querySelector('[data-value="1"]'),icon=button.querySelector('.comment-vote-icon'),box=button.getBoundingClientRect();return{target:[box.width,box.height],icon:[icon.getBoundingClientRect().width,icon.getBoundingClientRect().height],color:getComputedStyle(icon).backgroundColor};});
+  assert.ok(commentControls.target[0]>=44&&commentControls.target[1]>=44);
+  assert.deepEqual(commentControls.icon,[15,15]);assert.equal(commentControls.color,'rgb(46, 110, 79)');
   await phone.locator('.reply-button').first().click();
   await phone.locator('#commentText').fill('Og et trådet svar.');
   await phone.locator('#commentForm button').click();

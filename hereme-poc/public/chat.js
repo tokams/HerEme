@@ -12,7 +12,7 @@
     for(const [selector,key] of Object.entries(text)){const element=$(selector);if(!element)continue;if(['ASIDE','SECTION','NAV','DIALOG'].includes(element.tagName))element.setAttribute('aria-label',t(key));else if(element.matches('.presence-control'))element.lastChild.textContent=' '+t(key);else element.textContent=t(key);}
     const fields={usernameSearch:['search_users','placeholder'],groupName:['group_name_placeholder','placeholder'],messageInput:['write_message','placeholder']};
     for(const [id,[key,attribute]] of Object.entries(fields))$('#'+id).setAttribute(attribute,t(key));
-    for(const [id,key] of Object.entries({createGroup:'create_group',backToInbox:'back',toggleDetails:'details',toggleAttachments:'attachment.add',attachmentPopover:'attachment.options',pickImage:'attachment.pick_image',pickVideo:'attachment.pick_video',pickFile:'attachment.pick_file'})){const element=$('#'+id);element.setAttribute('aria-label',t(key));element.title=t(key);}
+    for(const [id,key] of Object.entries({createGroup:'create_group',backToInbox:'back',toggleDetails:'details',toggleAttachments:'attachment.add',attachmentPopover:'attachment.options',pickImage:'attachment.pick_image',pickVideo:'attachment.pick_video',pickFile:'attachment.pick_file'})){const element=$('#'+id);element.setAttribute('aria-label',t(key));element.title=t(key);if(element.matches('.attachment-choice'))element.querySelector('span').textContent=t(key);}
     $('.wall-link').setAttribute('aria-label',t('wall'));$('.wall-link').title=t('wall');
     $('#newMessages').textContent=t('conversation.new_messages');
     document.title=t('title');
@@ -58,10 +58,22 @@
     $('#toggleAttachments').disabled=locked;
   }
   function attachmentPopover(open,{restoreFocus=false}={}){
-    $('#attachmentPopover').hidden=!open;
+    const popover=$('#attachmentPopover');
+    popover.hidden=!open;
+    if(open){popover.classList.remove('below');const viewportBottom=window.visualViewport?window.visualViewport.offsetTop+window.visualViewport.height:window.innerHeight;if(popover.getBoundingClientRect().top<0&&popover.getBoundingClientRect().bottom+popover.offsetHeight<viewportBottom)popover.classList.add('below');}
     $('#toggleAttachments').setAttribute('aria-expanded',String(open));
     if(!open&&restoreFocus)$('#toggleAttachments').focus({preventScroll:true});
   }
+  function updateViewport(){
+    const viewport=window.visualViewport;
+    if(window.matchMedia('(max-width:760px)').matches&&viewport&&viewport.scale<=1.01)document.documentElement.style.setProperty('--chat-viewport-height',`${Math.round(viewport.height)}px`);
+    else if(!viewport||!window.matchMedia('(max-width:760px)').matches)document.documentElement.style.removeProperty('--chat-viewport-height');
+  }
+  updateViewport();
+  window.visualViewport?.addEventListener('resize',updateViewport);
+  window.visualViewport?.addEventListener('scroll',updateViewport);
+  window.addEventListener('resize',updateViewport);
+  window.addEventListener('orientationchange',updateViewport);
   function saveDraft(){if(!state.selection)return;draft().text=$('#messageInput').value;}
   function restoreDraft(){const current=draft();$('#messageInput').value=current.text;renderStage();}
   function showConversation(){

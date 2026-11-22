@@ -51,18 +51,27 @@ const app=require('../server/index'),S=require('../server/services');
       assert.equal(await bob.locator('#toggleDetails').getAttribute('aria-label'),language==='en'?'Details':'Detaljer');
       for(const width of widths){
         await bob.setViewportSize({width,height:700});
-        const geometry=await bob.evaluate(()=>{const back=document.querySelector('#backToInbox').getBoundingClientRect(),details=document.querySelector('#toggleDetails').getBoundingClientRect(),composer=document.querySelector('.composer-wrap').getBoundingClientRect(),title=document.querySelector('#conversationTitle');title.textContent='A very long group conversation name that must truncate without moving controls';const titleBox=title.getBoundingClientRect();return{scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth,backWidth:back.width,backHeight:back.height,detailsWidth:details.width,detailsHeight:details.height,titleRight:titleBox.right,detailsLeft:details.left,composerLeft:composer.left,composerRight:composer.right};});
+        await bob.waitForFunction(()=>Math.abs(document.querySelector('.composer-wrap').getBoundingClientRect().bottom-innerHeight)<3);
+        const geometry=await bob.evaluate(()=>{const back=document.querySelector('#backToInbox').getBoundingClientRect(),details=document.querySelector('#toggleDetails').getBoundingClientRect(),composer=document.querySelector('.composer-wrap').getBoundingClientRect(),plus=document.querySelector('#toggleAttachments').getBoundingClientRect(),input=document.querySelector('#messageInput').getBoundingClientRect(),send=document.querySelector('#sendMessage').getBoundingClientRect(),title=document.querySelector('#conversationTitle');title.textContent='A very long group conversation name that must truncate without moving controls';const titleBox=title.getBoundingClientRect();return{scrollWidth:document.documentElement.scrollWidth,viewport:innerWidth,viewportHeight:innerHeight,backWidth:back.width,backHeight:back.height,detailsWidth:details.width,detailsHeight:details.height,titleRight:titleBox.right,detailsLeft:details.left,composerLeft:composer.left,composerRight:composer.right,composerBottom:composer.bottom,plusTop:plus.top,inputTop:input.top,sendTop:send.top};});
         assert.ok(geometry.scrollWidth<=geometry.viewport,`${language} conversation overflowed at ${width}px`);
         assert.deepEqual([geometry.backWidth,geometry.backHeight],[44,44],`${language} back control was not square at ${width}px`);
         assert.deepEqual([geometry.detailsWidth,geometry.detailsHeight],[44,44],`${language} details control was not square at ${width}px`);
         assert.ok(geometry.titleRight<=geometry.detailsLeft,`${language} title overlapped Details at ${width}px`);
         assert.ok(geometry.composerLeft>=0&&geometry.composerRight<=geometry.viewport,`${language} composer clipped at ${width}px`);
+        assert.ok(Math.abs(geometry.plusTop-geometry.inputTop)<4&&Math.abs(geometry.sendTop-geometry.inputTop)<4,`${language} composer controls split across rows at ${width}px`);
+        assert.ok(Math.abs(geometry.composerBottom-geometry.viewportHeight)<3,`${language} composer detached from viewport bottom at ${width}px: ${JSON.stringify(geometry)}`);
       }
     }
     await bob.setViewportSize({width:390,height:844});
+    const zoomSession=await bob.context().newCDPSession(bob);
+    await zoomSession.send('Emulation.setPageScaleFactor',{pageScaleFactor:1.6});
+    await zoomSession.send('Emulation.setPageScaleFactor',{pageScaleFactor:1});
+    await bob.waitForFunction(()=>Math.abs(document.querySelector('.composer-wrap').getBoundingClientRect().bottom-innerHeight)<3);
+    await zoomSession.detach();
     await bob.evaluate(()=>window.HeremeI18n.setLanguage('nb'));
     assert.equal(await bob.locator('#attachmentPopover').isVisible(),false);
     await bob.locator('#toggleAttachments').click();assert.equal(await bob.locator('#attachmentPopover').isVisible(),true);
+    assert.deepEqual(await bob.locator('.attachment-choice span').allTextContents(),['Ta bilde','Ta opp video','Velg fra enhet']);
     await bob.keyboard.press('Escape');assert.equal(await bob.locator('#attachmentPopover').isVisible(),false);
     assert.equal(await bob.locator('#toggleAttachments').getAttribute('aria-expanded'),'false');
     await bob.locator('#toggleDetails').click();assert.equal(await bob.locator('#toggleDetails').getAttribute('aria-expanded'),'true');

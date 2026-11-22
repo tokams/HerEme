@@ -39,7 +39,7 @@
     $('#themeToggle').textContent=theme==='dark'?t('preferences.light'):t('preferences.dark');
     $('#themeToggle').setAttribute('aria-label',$('#themeToggle').textContent);
     $('#themeToggle').setAttribute('aria-pressed',theme==='light');
-    document.querySelector('meta[name=theme-color]').content=theme==='light'?'#f2f1eb':'#0f1113';
+    document.querySelector('meta[name=theme-color]').content=theme==='light'?'#fafaf6':'#0f1012';
     HeremePoster.fitTitles(document);
   }
   function localizeChrome(){

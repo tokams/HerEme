@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22 — Mobile UI stabilization (E19)
+
+- Keep mobile chat panes and composer aligned to the visible viewport after keyboard and zoom changes; place the attachment picker beside the message field with three labeled capture/device actions.
+- Put passkey enrollment first after registration, show one masked recovery code with adjacent copy action, and warn before leaving without a saved credential. Keep the existing recovery confirmation route and account identity.
+- Paint the standalone iOS status inset with the active theme color and use compact comment vote triangles with the existing vote colors and accessible tap targets.
+- Extend browser coverage for chat geometry, registration, passkey enrollment and comment controls. Physical iPhone Safari and installed PWA verification remains open.
+
 ## 2026-11-22 — Sharing, public profiles and chat media alignment (E18)
 
 - Size portrait chat images and videos to their visible media rather than a wider letterboxed box, keeping sent and received attachments against their respective transcript edges.

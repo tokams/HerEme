@@ -9,8 +9,8 @@ See [ADR 0011](adr/0011-passkeys.md) and `PASSKEYS_PROGRESS.md`.
 temporary www/legacy redirects are prepared. Live cutover is BLOCKED pending DNS
 resolution and a reviewed clean release. See [execution ledger](domain-migration.md).
 
-**Snapshot:** 2026-11-22, E18 sharing, comment votes and public profiles in the local worktree
-**Code baseline:** `master` at `340189d` plus uncommitted E18 changes. See `docs/E18_IMPLEMENTATION.md` for local evidence.
+**Snapshot:** 2026-11-22, E19 mobile UI stabilization in the local worktree
+**Code baseline:** `master` at `8f9fdd2` plus uncommitted E19 changes. See `docs/E19_IMPLEMENTATION.md` for local evidence.
 **Frozen baseline:** `release/v2` points to `5d7b72d`; it intentionally does not include the v3 changes.
 **Purpose:** One place to understand current behavior and scope the next change. Update the snapshot and evidence when code or deployment changes.
 
@@ -85,6 +85,7 @@ Staff use personal recovery sign-in. Mutations are capability and CSRF checked, 
 - `/me` is the authenticated member's own profile only; its private activity and account details do not appear in the public profile DTO.
 - `/u/<stable-user-id>` is a guest-readable minimal public profile for an active account. Public post and comment bylines link by stable ID; Start Chat opens `/chat?user=<id>` as a local draft or existing direct conversation and preserves first-Send consent.
 - One shared responsive dialog provides **Logg inn** and **Opprett konto** everywhere an account is required, including the chat route. It preserves the recovery-key model, displays a newly issued key exactly once and does not auto-submit the action that originally required authentication.
+- After registration, passkey enrollment is the primary action; the recovery code stays masked in one copyable field. Dismissal warns until passkey enrollment succeeds or the code is acknowledged. The recovery confirmation remains a native form submission to `/api/recovery/confirm`.
 - A visitor who opens `/chat` is shown the contextual message `Logg inn eller opprett en konto for å bruke chat.`. Closing the gate returns to the public wall; no chat is created merely by authenticating.
 
 ### Personal-profile projection
