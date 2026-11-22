@@ -225,8 +225,6 @@
     if(state.modal==='menu'&&state.user){const roles=$('.account-summary .muted-note');if(roles)roles.textContent=rolesLabel(state.user.roles);}
     if(state.modal==='menu')window.HeremePwa?.mountMenu($('.modal-content'));
     if(state.modal==='menu')window.HeremeLanguage?.mount($('.modal-content'),{menu:true});
-    if(state.modal==='compose')window.HeremeLanguage?.mount($('.compose-modal .modal-header'));
-    if(state.modal==='detail')window.HeremeLanguage?.mount($('.detail-toolbar'));
     if(state.modal==='menu'&&state.user){const button=document.createElement('button');button.className='btn btn-secondary';button.textContent=t('account.security_passkeys');button.onclick=()=>window.HeremePasskeys.security();$('.account-actions')?.prepend(button);}
     if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));

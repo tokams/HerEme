@@ -23,9 +23,3 @@ body{min-height:100dvh;overflow:hidden}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 :root[data-theme=light] .icon-button{background:#dce6db;border-color:#8da68e}:root[data-theme=light] .conversation-notice{background:#fff4cf;color:#4e3b00}:root[data-theme=light] .message.own{background:#e2f0df}:root[data-theme=light] .search-result:hover{background:#d7e5d7}
 :root:not([data-theme=light]) .chat-shell img[src$=".svg"]{filter:invert(.83)}
-.chat-shell .language-selector{position:absolute;top:10px;right:12px;z-index:3;background:var(--panel)}
-.chat-shell .language-selector img[src^="/assets/flag-"]{filter:none!important}
-.chat-shell .language-label{display:none}
-.conversation-header{position:relative}
-.conversation-header .language-selector{position:static;flex:none}
-@media(max-width:760px){.conversation-header{gap:6px;padding-inline:8px}}

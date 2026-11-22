@@ -246,7 +246,7 @@ async function publish(page,title) {
   await phone.waitForFunction(id=>location.search==='?post='+id,imageId);
   await phone.locator('.modal-close').focus();
   await phone.keyboard.press('Shift+Tab');
-  assert.equal(await phone.evaluate(()=>document.activeElement.dataset.language),'en');
+  assert.equal(await phone.evaluate(()=>document.activeElement.closest('form')?.id),'commentForm');
   await phone.keyboard.press('Tab');
   assert.equal(await phone.evaluate(()=>document.activeElement.dataset.action),'close-modal');
   assert.equal(await phone.locator('#forumShell').evaluate(el=>el.inert),true);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-22 — Language selector placement
+
+- Kept language switching in the hamburger menu and login/registration flow.
+  Removed flag controls from the header, post composer/detail, chat and policy
+  pages while retaining their selected-language presentation.
+
 ## 2026-11-22 — Install help translation
 
 - Translate the notification explanation inside the iPhone install sheet when

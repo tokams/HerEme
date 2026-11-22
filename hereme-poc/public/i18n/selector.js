@@ -21,6 +21,5 @@
     }
   }
   addEventListener('hereme:language',()=>document.querySelectorAll('.language-selector').forEach(update));
-  i18n.ready.then(()=>{const header=document.querySelector('.header-actions');if(header)mount(header);for(const chatHeader of document.querySelectorAll('.inbox-header,.conversation-header'))mount(chatHeader);});
   window.HeremeLanguage={mount};
 })();
