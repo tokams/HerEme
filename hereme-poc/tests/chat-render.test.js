@@ -25,6 +25,13 @@ test('sender runs restart after five minutes but remain grouped at the threshold
   assert.deepEqual(rendered.map(item=>item.runStart),[true,false,true]);
 });
 
+test('three consecutive messages remain separate bubbles with one visible sender header',()=>{
+  const rows=[message(1,'Kari'),{...message(2,'Kari'),created_at:'2026-11-22 10:21:00'},{...message(3,'Kari'),created_at:'2026-11-22 10:22:00'}];
+  const rendered=descriptors(rows,{me:'Ola',t}).filter(item=>item.key.startsWith('message:'));
+  assert.equal(rendered.length,3);assert.deepEqual(rendered.map(item=>item.runStart),[true,false,false]);
+  assert.equal(rendered.filter(item=>!item.html.includes('message-meta sr-only')).length,1);
+});
+
 test('single private media is bare, bundles retain order and escaped names',()=>{
   const expires_at='2026-11-30T00:00:00.000Z';
   const files=[{id:'first',name:'<photo>.jpg',status:'ready',expires_at,media_kind:'image'},{id:'second',name:'clip.mov',status:'ready',expires_at,media_kind:'video'},{id:'third',name:'notes.txt',status:'ready',expires_at,media_kind:'file'}];
@@ -45,6 +52,12 @@ test('collapsed bundles preserve every authorized item at 2, 8 and 12 attachment
     assert.equal((rendered.match(/class="bundle-item"/g)||[]).length,count);
     for(const file of files)assert.match(rendered,new RegExp(`data-file-id="${file.id}"`));
   }
+});
+
+test('expired attachments render no private preview endpoint',()=>{
+  const expired={id:'private-expired',name:'old-photo.jpg',status:'ready',expires_at:'2026-11-21T00:00:00.000Z',media_kind:'image'};
+  const rendered=descriptors([{...message(1,'Kari'),body:'',attachments:[expired]}],{me:'Kari',t,now:'2026-11-22T00:00:00.000Z'}).at(-1).html;
+  assert.match(rendered,/expired-file/);assert.doesNotMatch(rendered,/\/api\/chat\/files\/private-expired/);
 });
 
 test('avatar component accepts only canonical URLs and keeps deterministic initials',()=>{

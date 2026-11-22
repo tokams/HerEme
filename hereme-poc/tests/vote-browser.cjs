@@ -27,21 +27,24 @@ async function stop(){if(server?.exitCode===null){const done=new Promise(resolve
   await page.locator('[data-auth-mode=register]').click();
   await page.locator('[data-auth-form=register] input[name=name]').fill('VoteTester');
   await page.locator('[data-auth-form=register] button').click();
-  await page.locator('[data-auth-continue]').click();
+  await page.locator('.auth-recovery input[name=password]').waitFor();page.once('dialog',dialog=>dialog.accept());await page.locator('.auth-recovery [data-auth-close]').click();
   await page.locator('.auth-overlay').waitFor({state:'detached'});
   await page.locator('.modal-close').click();
 
   const card=page.locator('.post-card:has(.poster-photo)').first(),id=await card.getAttribute('data-post-id');
   await card.scrollIntoViewIfNeeded();
-  const baseline=await card.evaluate(node=>{window.__voteCard=node;window.__voteMedia=node.querySelector('.poster-photo');return {scrollY,nodeOrder:[...node.parentElement.children].map(item=>item.dataset.postId||'more'),src:window.__voteMedia.currentSrc||window.__voteMedia.src};});
+  const videoBytes=await page.evaluate(async()=>{const canvas=document.createElement('canvas');canvas.width=24;canvas.height=24;const context=canvas.getContext('2d'),stream=canvas.captureStream(10),recorder=new MediaRecorder(stream,{mimeType:'video/webm'}),chunks=[];recorder.ondataavailable=event=>chunks.push(event.data);const finished=new Promise(resolve=>recorder.onstop=resolve);recorder.start();for(let frame=0;frame<30;frame++){context.fillStyle=frame%2?'#568a67':'#93494f';context.fillRect(0,0,24,24);await new Promise(resolve=>setTimeout(resolve,100));}recorder.stop();await finished;stream.getTracks().forEach(track=>track.stop());return [...new Uint8Array(await new Blob(chunks,{type:'video/webm'}).arrayBuffer())];});
+  await card.evaluate(async(node,bytes)=>{const blob=new Blob([new Uint8Array(bytes)],{type:'video/webm'}),video=document.createElement('video');video.muted=true;video.loop=true;video.playsInline=true;video.src=URL.createObjectURL(blob);node.querySelector('.tile-open').append(video);await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=reject;});await video.play();await new Promise(resolve=>setTimeout(resolve,120));window.__votePlayback=video;},videoBytes);
+  const baseline=await card.evaluate(node=>{window.__voteCard=node;window.__voteMedia=node.querySelector('.poster-photo');return {scrollY,nodeOrder:[...node.parentElement.children].map(item=>item.dataset.postId||'more'),src:window.__voteMedia.currentSrc||window.__voteMedia.src,videoTime:window.__votePlayback.currentTime};});
   await page.route(`**/api/posts/${id}/vote`,async route=>{await new Promise(resolve=>setTimeout(resolve,80));await route.continue();});
   await card.locator('.vote-up').click();
   await card.locator('.vote-down').click();
   await card.locator('.vote-down').click();
   await page.waitForFunction(postId=>!document.querySelector(`[data-post-id="${postId}"] .vote-up`).matches('[aria-pressed="true"]')&&!document.querySelector(`[data-post-id="${postId}"] .vote-down`).matches('[aria-pressed="true"]'),id);
   await page.waitForTimeout(300);
-  const stable=await card.evaluate((node,baseline)=>({sameCard:node===window.__voteCard,sameMedia:node.querySelector('.poster-photo')===window.__voteMedia,scrollY,order:[...node.parentElement.children].map(item=>item.dataset.postId||'more'),src:window.__voteMedia.currentSrc||window.__voteMedia.src}),baseline);
+  const stable=await card.evaluate((node,baseline)=>({sameCard:node===window.__voteCard,sameMedia:node.querySelector('.poster-photo')===window.__voteMedia,sameVideo:node.querySelector('video')===window.__votePlayback,videoTime:window.__votePlayback.currentTime,videoPaused:window.__votePlayback.paused,scrollY,order:[...node.parentElement.children].map(item=>item.dataset.postId||'more'),src:window.__voteMedia.currentSrc||window.__voteMedia.src}),baseline);
   assert.equal(stable.sameCard,true);assert.equal(stable.sameMedia,true);assert.equal(stable.src,baseline.src);
+  assert.equal(stable.sameVideo,true);assert.equal(stable.videoPaused,false);assert.ok(stable.videoTime>baseline.videoTime,'Voting must not restart active playback.');
   assert.deepEqual(stable.order,baseline.nodeOrder);assert.ok(Math.abs(stable.scrollY-baseline.scrollY)<2);
 
   const fiveIds=await page.locator('.post-card').evaluateAll(cards=>cards.slice(0,5).map(card=>card.dataset.postId));

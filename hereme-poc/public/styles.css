@@ -401,8 +401,8 @@ details summary { min-height:44px; display:list-item; padding:12px 0; font-size:
   .modal-header,.modal-footer { padding:10px 14px; }
   .modal-header h2 { font-size:17px; }
   .modal-content { padding:16px; }
-  .detail-modal,.compose-modal { width:100%; height:100dvh; max-height:100dvh; border:0; }
-  .modal-overlay:has(.detail-modal),.modal-overlay:has(.compose-modal) { padding:0; }
+  .detail-modal,.compose-modal { width:100%; height:min(var(--app-viewport-height,100dvh),100dvh); max-height:min(var(--app-viewport-height,100dvh),100dvh); border:0; }
+  .modal-overlay:has(.detail-modal),.modal-overlay:has(.compose-modal) { inset:0 0 auto; height:min(var(--app-viewport-height,100dvh),100dvh); padding:0; transform:translateY(var(--app-viewport-offset,0)); }
   .detail-toolbar { padding:calc(6px + env(safe-area-inset-top)) 12px 6px; gap:8px; }
   .detail-modal .modal-content { display:block; padding-bottom:env(safe-area-inset-bottom); }
   .detail-poster { position:static; border-right:0; }

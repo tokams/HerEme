@@ -113,7 +113,8 @@
     if(request!==state.messageRequest||state.selection?.id!==chatId)return;
     $('#olderMessages').hidden=!hasMore;
     const list=$('#messages'),beforeIds=state.renderedMessages?.map(item=>item.id)||[];
-    const nearBottom=list.scrollHeight-list.scrollTop-list.clientHeight<72,oldHeight=list.scrollHeight,oldTop=list.scrollTop;
+    const nearBottom=list.scrollHeight-list.scrollTop-list.clientHeight<72,oldTop=list.scrollTop,listTop=list.getBoundingClientRect().top;
+    const anchor=!nearBottom?[...list.querySelectorAll('.message[data-message-id]')].find(node=>node.getBoundingClientRect().bottom>listTop):null,anchorOffset=anchor?anchor.getBoundingClientRect().top-listTop:null;
     const descriptors=HeremeChatRender.descriptors(messages,{me:state.me,t});
     const existing=new Map([...list.children].map(node=>[node.dataset.renderKey,node]));
     let position=list.firstChild;
@@ -130,10 +131,9 @@
       position=node.nextSibling;
     }
     for(const node of existing.values())node.remove();
-    const prepended=beforeIds.length&&messages.length&&messages[0].id<beforeIds[0].id;
     const appended=beforeIds.length&&messages.length&&messages.at(-1).id>beforeIds.at(-1);
     if(nearBottom||!beforeIds.length)list.scrollTop=list.scrollHeight;
-    else if(prepended)list.scrollTop=oldTop+list.scrollHeight-oldHeight;
+    else if(anchor?.isConnected)list.scrollTop=oldTop+(anchor.getBoundingClientRect().top-list.getBoundingClientRect().top-anchorOffset);
     else list.scrollTop=oldTop;
     $('#newMessages').hidden=!(appended&&!nearBottom);
     state.renderedMessages=messages;

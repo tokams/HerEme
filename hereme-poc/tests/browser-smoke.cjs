@@ -226,6 +226,7 @@ async function publish(page,title) {
   await page.locator('.article-chapter').first().waitFor();
   assert.equal(await page.locator('.article-chapter').count(),4);assert.equal(await page.locator('.article-chapter .article-media img').count(),2);
   assert.equal(await page.locator('.detail-toolbar .action-icon-button').count(),5);assert.equal(await page.locator('.detail-toolbar [data-action=article-edit]').getAttribute('aria-label'),'Rediger artikkel');
+  await page.evaluate(()=>window.HeremeI18n.setLanguage('en'));await page.waitForFunction(()=>document.querySelector('.detail-toolbar .modal-close')?.getAttribute('aria-label')==='Close');assert.equal(await page.locator('.detail-toolbar [data-action=article-edit]').getAttribute('aria-label'),'Edit article');await page.evaluate(()=>window.HeremeI18n.setLanguage('nb'));await page.waitForFunction(()=>document.querySelector('.detail-toolbar .modal-close')?.getAttribute('aria-label')==='Lukk');
   if(e22Screenshots)await page.locator('.detail-modal').screenshot({path:path.join(e22Screenshots,'article-toolbar-desktop.png')});
   await page.setViewportSize({width:320,height:700});const toolbarGeometry=await page.locator('.detail-toolbar').evaluate(toolbar=>({left:toolbar.getBoundingClientRect().left,right:toolbar.getBoundingClientRect().right,viewport:innerWidth,buttons:[...toolbar.querySelectorAll('button')].map(button=>[button.getBoundingClientRect().width,button.getBoundingClientRect().height])}));assert.ok(toolbarGeometry.left>=0&&toolbarGeometry.right<=toolbarGeometry.viewport);assert.ok(toolbarGeometry.buttons.every(([width,height])=>width>=42&&height>=44),JSON.stringify(toolbarGeometry));if(e22Screenshots)await page.locator('.detail-toolbar').screenshot({path:path.join(e22Screenshots,'article-toolbar-320.png')});await page.setViewportSize({width:1440,height:1000});
   assert.equal(await page.locator('.article-chapter h2').first().textContent(),'1. Neste tur');
@@ -339,6 +340,7 @@ async function publish(page,title) {
   const commentControls=await phone.locator('.comment-actions').first().evaluate(row=>{const button=row.querySelector('[data-value="1"]'),icon=button.querySelector('.comment-vote-icon'),box=button.getBoundingClientRect();return{target:[box.width,box.height],icon:[icon.getBoundingClientRect().width,icon.getBoundingClientRect().height],color:getComputedStyle(icon).backgroundColor};});
   assert.ok(commentControls.target[0]>=44&&commentControls.target[1]>=44);
   assert.deepEqual(commentControls.icon,[15,15]);assert.equal(commentControls.color,'rgb(46, 110, 79)');
+  assert.equal(await phone.locator('.reply-button').first().locator('svg.icon').count(),1);
   await phone.locator('.reply-button').first().click();
   await phone.locator('#commentText').fill('Og et trådet svar.');
   await phone.locator('#commentForm button').click();
@@ -347,6 +349,7 @@ async function publish(page,title) {
   await phone.locator('.modal-close').click();
   await phone.locator('.create-button').click();
   await phone.locator('.compose-modal').evaluate(el=>Promise.all(el.getAnimations().map(animation=>animation.finished)));
+  assert.equal((await phone.locator('.compose-modal .modal-header .modal-close').textContent()).trim(),'');assert.equal(await phone.locator('.compose-modal .modal-header .modal-close svg.icon').count(),1);
   if(refinementScreenshots)await phone.locator('#toastRoot .toast').waitFor({state:'hidden'});
   for(const width of [375,390,430]){
     await phone.setViewportSize({width,height:844});
@@ -356,6 +359,8 @@ async function publish(page,title) {
   }
   await phone.setViewportSize({width:390,height:844});
   await phone.locator('[data-action=format-article]').click();assert.ok(await phone.locator('#articlePreview').isVisible());
+  for(let index=0;index<3;index++)await phone.locator('[data-action=chapter-add]').click();assert.equal(await phone.locator('[data-chapter]').count(),4);assert.equal(await phone.locator('[data-chapter="3"] .chapter-order button svg.icon').count(),3);
+  await phone.locator('[data-chapter="3"] [data-chapter-field=markdown]').fill('Siste felt ved skjermtastaturet.');await phone.setViewportSize({width:390,height:500});await phone.waitForFunction(()=>Math.abs(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-viewport-height'))-visualViewport.height)<2);await phone.locator('[data-chapter="3"] [data-chapter-field=markdown]').focus();await phone.locator('[data-chapter="3"] [data-chapter-field=markdown]').scrollIntoViewIfNeeded();const keyboardGeometry=await phone.evaluate(()=>{const panel=document.querySelector('.compose-modal').getBoundingClientRect(),footer=document.querySelector('.compose-modal .modal-footer').getBoundingClientRect(),field=document.querySelector('[data-chapter="3"] [data-chapter-field=markdown]').getBoundingClientRect();return{viewport:visualViewport.height,panel:[panel.top,panel.bottom],footer:[footer.top,footer.bottom],field:[field.top,field.bottom],focused:document.activeElement.matches('[data-chapter="3"] [data-chapter-field=markdown]'),overflow:document.documentElement.scrollWidth>innerWidth};});assert.equal(keyboardGeometry.focused,true);assert.equal(keyboardGeometry.overflow,false);assert.ok(keyboardGeometry.panel[0]>=0&&keyboardGeometry.panel[1]<=keyboardGeometry.viewport+1,JSON.stringify(keyboardGeometry));assert.ok(keyboardGeometry.footer[1]<=keyboardGeometry.viewport+1&&keyboardGeometry.field[1]<=keyboardGeometry.footer[0],JSON.stringify(keyboardGeometry));await phone.setViewportSize({width:390,height:844});await phone.waitForFunction(()=>Math.abs(document.querySelector('.compose-modal').getBoundingClientRect().bottom-visualViewport.height)<2);
   if(refinementScreenshots)await phone.locator('.compose-modal').screenshot({path:path.join(refinementScreenshots,'article-composer-390.png')});
   await phone.locator('[data-action=format-poster]').click();
   await phone.locator('input[name=postCategory][value=opinion]').check();

@@ -28,6 +28,11 @@
     $('#toastRoot').innerHTML=`<div class="toast">${E(message)}</div>`;
     clearTimeout(state.toastTimer);state.toastTimer=setTimeout(()=>$('#toastRoot').innerHTML='',4000);
   }
+  function updateAppViewport(){
+    const viewport=window.visualViewport,mobile=window.matchMedia('(max-width:760px)').matches;
+    if(mobile&&viewport&&viewport.scale<=1.01){document.documentElement.style.setProperty('--app-viewport-height',`${Math.round(viewport.height)}px`);document.documentElement.style.setProperty('--app-viewport-offset',`${Math.round(viewport.offsetTop)}px`);}
+    else{document.documentElement.style.removeProperty('--app-viewport-height');document.documentElement.style.removeProperty('--app-viewport-offset');}
+  }
   function renderFilters() {
     $('#categoryFilters').innerHTML=HeremeFeed.filters(state.categories);
     $('#simpleCategories').innerHTML=HeremeFeed.categoryButtons(state.categories);
@@ -674,6 +679,7 @@
   }
   async function init() {
     window.addEventListener('beforeunload',event=>{if(state.modal==='compose'&&state.postMode==='article'&&state.articleDirty){event.preventDefault();event.returnValue='';}});
+    updateAppViewport();window.visualViewport?.addEventListener('resize',updateAppViewport);window.visualViewport?.addEventListener('scroll',updateAppViewport);window.addEventListener('resize',updateAppViewport);window.addEventListener('orientationchange',updateAppViewport);
     renderPreferences();
     renderFilters();
     for(const el of document.querySelectorAll('[data-icon]'))el.innerHTML=HeremeIcons.icon(el.dataset.icon);
