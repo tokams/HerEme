@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Account menu flicker
+
+Removed an older modal animation that faded the burger menu back to transparent just as its opening transition finished. The menu now opens once, and refreshing an open panel no longer triggers that fade.
+
 ## 2026-11-24 — Community sign-up defaults
 
 First visits now open in Norwegian Bokmål, including on browsers configured for English. Guest account prompts open on **Opprett konto**, with **Logg inn** available for returning users. Saved language preferences still apply.

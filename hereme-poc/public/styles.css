@@ -197,9 +197,7 @@ main { min-width:0; }
 .modal-open { overflow:hidden; }
 .passkey-security{background:var(--panel);color:var(--ink);border:2px solid var(--line);max-width:min(580px,94vw);max-height:90dvh;overflow:auto;padding:24px}.passkey-security::backdrop{background:#000b}.passkey-security button{min-height:44px;padding:10px;border:1px solid var(--muted);margin:8px 8px 8px 0}.passkey-security input{display:block;width:100%;padding:10px;margin:8px 0}.passkey-security h2{font-size:20px}
 .modal-overlay { position:fixed; inset:0; z-index:20; background:#000b; backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:24px; }
-.modal-panel { background:#101214; border:2px solid #000; width:min(580px,100%); max-height:calc(100dvh - 48px); display:flex; flex-direction:column; box-shadow:0 25px 80px #000b; overflow:hidden; animation:enter-modal 180ms ease-out; }
-@keyframes enter-modal { from { opacity:0; transform:translateY(10px) scale(.97); } to { opacity:1; transform:none; } }
-.modal-panel.modal-refresh { animation:none; }
+.modal-panel { background:#101214; border:2px solid #000; width:min(580px,100%); max-height:calc(100dvh - 48px); display:flex; flex-direction:column; box-shadow:0 25px 80px #000b; overflow:hidden; }
 .modal-header,.modal-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; background:#1e2022; flex-shrink:0; }
 .modal-header { border-bottom:2px solid #000; }
 .modal-footer { border-top:2px solid #000; }

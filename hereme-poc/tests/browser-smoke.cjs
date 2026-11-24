@@ -35,6 +35,34 @@ async function ready(page) {
   await page.evaluate(()=>Promise.all([...document.images].map(img=>img.decode())));
   await page.evaluate(()=>document.fonts.ready);
 }
+
+async function observeDialogOpening(page) {
+  return page.evaluateHandle(() => {
+    const root = document.querySelector('#modalRoot');
+    const animations = [];
+    let mounts = 0;
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) if (node.matches?.('.modal-overlay')) mounts++;
+      }
+    });
+    observer.observe(root, {childList: true});
+    const onStart = event => {
+      if (event.target.matches('.modal-panel')) animations.push(event.animationName);
+    };
+    root.addEventListener('animationstart', onStart);
+    return async () => {
+      const overlay = root.querySelector('.modal-overlay');
+      const panel = overlay.querySelector('.modal-panel');
+      await Promise.allSettled([...overlay.getAnimations(), ...panel.getAnimations()].map(a => a.finished));
+      // A second entry can start on the paint after the opening class is removed.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      observer.disconnect();
+      root.removeEventListener('animationstart', onStart);
+      return {mounts, animations};
+    };
+  });
+}
 async function recordWallWalkthrough(browser,base,storage,evidence,withMotion){
   const recording=await browser.newContext({viewport:{width:390,height:844},storageState:storage,recordVideo:{dir:data,size:{width:390,height:844}}});
   const clip=await recording.newPage();
@@ -72,7 +100,15 @@ async function publish(page,title) {
   await page.goto(base);await ready(page);await fits(page);
   const motionTokens=await page.evaluate(()=>({press:getComputedStyle(document.documentElement).getPropertyValue('--motion-press-in').trim(),screen:getComputedStyle(document.documentElement).getPropertyValue('--motion-screen').trim()}));assert.deepEqual(motionTokens,{press:'90ms',screen:''});
   const motionButton=page.locator('#themeToggle');await motionButton.focus();await page.keyboard.down('Enter');assert.equal(await motionButton.evaluate(node=>node.classList.contains('motion-key-press')),true);await page.keyboard.up('Enter');assert.equal(await motionButton.evaluate(node=>node.classList.contains('motion-key-press')),false);await motionButton.click();
-  const logo=page.locator('.logo'),logoBounds=await logo.boundingBox();await page.mouse.move(logoBounds.x+logoBounds.width/2,logoBounds.y+logoBounds.height/2);await page.mouse.down();assert.notEqual(await logo.evaluate(node=>getComputedStyle(node).transform),'none','Pointer press responds immediately.');await page.mouse.move(0,0);await page.mouse.up();await page.waitForFunction(()=>getComputedStyle(document.querySelector('.logo')).transform==='none');
+  const logo=page.locator('.logo'),logoBounds=await logo.boundingBox();
+  await page.mouse.move(logoBounds.x+logoBounds.width/2,logoBounds.y+logoBounds.height/2);
+  await page.mouse.down();
+  const pressedTransform=await logo.evaluate(async node=>{
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    return getComputedStyle(node).transform;
+  });
+  assert.notEqual(pressedTransform,'none','The held button shows press feedback after paint.');
+  await page.mouse.move(0,0);await page.mouse.up();await page.waitForFunction(()=>getComputedStyle(document.querySelector('.logo')).transform==='none');
   const videoBadgeBounds=await page.evaluate(()=>{
     const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:260px;z-index:-1';
     host.innerHTML=HeremeFeed.card({id:987,type:'video',duration_ms:125000,category:'story',title:'Video boundary check',created_at:'2026-11-20 12:00:00',score:0,my_vote:0,comment_count:0});
@@ -93,8 +129,12 @@ async function publish(page,title) {
   assert.equal(await page.locator('#simpleCategories svg').count(),5);
   assert.equal(await page.locator('#feed').evaluate(el=>getComputedStyle(el).columnGap),'10px');
   await page.setViewportSize({width:390,height:844});
+  const menuOpening=await observeDialogOpening(page);
   await page.locator('.menu-button').click();
   assert.equal(await page.locator('.modal-header h2').textContent(),'Konto');
+  const menu=await menuOpening.evaluate(finish=>finish());
+  assert.equal(menu.mounts,1,'One burger press opens one menu.');
+  assert.equal(menu.animations.length,1,'Menu panel entry animations: '+menu.animations.join(', '));
   await page.locator('[data-action=auth-login]').waitFor();
   await page.locator('[data-action=auth-register]').waitFor();
   await page.locator('.modal-close').click();
@@ -321,8 +361,9 @@ async function publish(page,title) {
   await seeded.locator('.tile-open').click();await postRequested;
   assert.equal(await page.locator('.detail-modal').count(),0,'Post detail stays closed until post data is ready.');
   assert.equal(await page.locator('#forumShell').isVisible(),true);
+  const detailOpening=await observeDialogOpening(page);
   releasePost();await page.locator('.detail-modal .poster-copy').waitFor();await page.unroute(`**/api/posts/${seededId}`,holdPost);
-  assert.equal(await page.locator('.detail-modal.modal-refresh').count(),0,'Post detail renders once.');
+  assert.deepEqual(await detailOpening.evaluate(finish=>finish()),{mounts:1,animations:[]},'Post detail renders once without an entry animation.');
   assert.equal(await page.locator('.detail-modal').evaluate(panel=>getComputedStyle(panel).animationName),'none','Post detail opens without a second panel animation.');
   assert.equal(await page.locator('.modal-overlay').evaluate(overlay=>getComputedStyle(overlay).animationName),'none','Post detail does not fade the wall to black.');
   assert.equal(await page.locator('.detail-modal .poster-photo').evaluate(image=>image.complete&&image.naturalWidth>0),true,'Primary post image is decoded when detail opens.');
@@ -449,8 +490,12 @@ async function publish(page,title) {
   await phone.locator('.modal-close').click();
   assert.equal((await fetch(base+'/api/admin/queue')).status,401);
   await phone.emulateMedia({reducedMotion:'reduce'});
+  const reducedMenu=await observeDialogOpening(phone);
+  await phone.locator('.menu-button').click();
+  assert.deepEqual(await reducedMenu.evaluate(finish=>finish()),{mounts:1,animations:[]});
+  await phone.keyboard.press('Escape');
   await phone.locator('[data-post-id="'+textId+'"] .tile-open').click();
-  await phone.waitForFunction(()=>getComputedStyle(document.querySelector('.detail-modal')).animationName==='none');
+  assert.equal(await phone.locator('.detail-modal').evaluate(panel=>getComputedStyle(panel).animationName),'none');
   await phone.keyboard.press('Escape');
   assert.equal(await phone.locator('.modal-panel').count(),0);
   if(process.env.HEREME_E23_RECORD){const evidence=path.join(root,'docs','e23-motion');fs.mkdirSync(evidence,{recursive:true});const storage=await mobile.storageState();await recordWallWalkthrough(browser,base,storage,evidence,false);await recordWallWalkthrough(browser,base,storage,evidence,true);}

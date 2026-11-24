@@ -6,9 +6,9 @@ Implemented on `feature/branding` from `82d270d`. `public/motion.css` owns the t
 | --- | --- | --- |
 | Enabled button/link press and release | 90 / 160 ms | Slight scale and one-pixel travel; disabled controls stay still. Keyboard Space/Enter receives the same feedback. |
 | Hover, focus and icon tooltip | 160 / 180 ms | Border/color change and a small anchored tooltip on hover-capable devices; focus ring remains immediate. |
-| Menu and attachment picker | 210 ms | Anchored fade, six-pixel entry and slight scale. |
+| Author popover and attachment picker | 210 ms | Anchored fade, six-pixel entry and slight scale. |
 | Bundle reveal and disclosure arrow | 260 ms | Animate the bounded inline grid without replacing media nodes. |
-| Small modal entry/exit; native dialog and gallery entry | 240 ms entry / 160 ms modal exit | Backdrop and panel enter together. A closing small modal ignores pointer actions and leaves the DOM after its short exit. |
+| Account menu and other small modals, native dialog and gallery entry | 240 ms entry / 160 ms modal exit | The backdrop and panel enter together once. Refreshing an open modal leaves its contents at full opacity. A closing small modal ignores pointer actions and leaves the DOM after its short exit. |
 | Full-screen post detail and composer | Immediate | Open one ready panel without a backdrop or panel fade; close without retaining a dark overlay. |
 | Same-document main view | Immediate when ready | Keep the current view visible while destination data loads, then switch without a whole-screen animation. Reuse the wall DOM and its decoded images when the feed has not changed. |
 | New chat message and selected gallery media | 170 ms | Only newly appended messages and loaded media enter; existing messages remain static on reconciliation. |

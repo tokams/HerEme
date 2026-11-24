@@ -328,7 +328,6 @@
     if(state.modal==='menu')window.HeremePwa?.mountMenu($('.modal-content'));
     if(state.modal==='menu')window.HeremeLanguage?.mount($('.modal-content'),{menu:true});
     if(state.modal==='menu'&&state.user){const button=document.createElement('button');button.className='btn btn-secondary';button.textContent=t('account.security_passkeys');button.onclick=()=>window.HeremePasskeys.security();$('.account-actions')?.prepend(button);}
-    if(preserve)$('.modal-panel')?.classList.add('modal-refresh');
     HeremePoster.enhance($('#modalRoot'));
     if(state.modal==='compose')updateArticlePreview();
     if(state.modal==='compose'&&state.photoLoading&&$('#publishButton'))$('#publishButton').disabled=true;
