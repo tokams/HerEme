@@ -34,7 +34,7 @@ const articles=createArticleService(db,dataDir,{media,audit,config});
 const contentRevisions=createContentRevisionService(db,{articles,audit});
 articles.cleanup();
 const posts=createPostService(db,{media,audit,articles,config});
-const sharePreviews=createSharePreviewService(posts,dataDir);
+const sharePreviews=createSharePreviewService(posts,dataDir,config.publicOrigin);
 const notifications=createNotificationService(db);
 const push=createPushService(db,config);
 const interactions=createInteractionService(db,{audit,notifications});

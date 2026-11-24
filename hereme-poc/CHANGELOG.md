@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-24 — Managed communities and operator panel
+
+The online deploy command now migrates the observed legacy Docker project and rolls out one immutable release to two independent communities. Both have local staff panels. A separate operator MFA session provides live site status, release identity and audited registration controls at `admin.hereme.no`. Added verified snapshots, candidate checks on private copies, per-project recovery and a disposable Docker/browser deployment rehearsal. The confirmed additional hostname is `tanteulrikkesvei.hereme.no`. Follow the [deployment runbook](docs/runbooks/multi-instance.md).
+
+## 2026-11-24 — Independent community runtime (development)
+
+Added a shared HTTPS gateway and reusable instance stack with content-addressed app images, private worker storage, host-scoped passkeys and canonical share URLs. Added two-process isolation and restore tests and a disposable Docker rehearsal. See [M1 progress](docs/M1_PROGRESS.md) for the remaining Docker and production gates.
+
 ## 2026-11-23 — Full-screen navigation flicker
 
 - Open and close the post detail and composer without layered backdrop/panel fades that made page-sized views appear to open twice.

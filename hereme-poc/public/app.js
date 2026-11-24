@@ -436,7 +436,7 @@
     ($('.detail-modal')||document.body).append(menu);window.HeremeMotion?.enter(menu,'motion-panel-enter');trigger.setAttribute('aria-expanded','true');menu.querySelector('button').focus({preventScroll:true});
   }
   async function share(id) {
-    const url=new URL('https://hereme.no/');url.searchParams.set('post',id);
+    const url=new URL('/',location.origin);url.searchParams.set('post',id);
     if(navigator.share) {
       try {await navigator.share({title:t('share.title'),url:url.href});return;}
       catch(error){if(error.name==='AbortError')return;}

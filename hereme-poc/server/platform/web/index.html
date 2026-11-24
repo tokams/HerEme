@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HerEme · Platform</title>
+  <link rel="stylesheet" href="/panel.css">
+  <script src="/panel.js" defer></script>
+</head>
+<body>
+  <header>
+    <strong>HerEme</strong>
+    <span>Platform administration</span>
+    <button id="logout" hidden>Sign out</button>
+  </header>
+  <main>
+    <section id="access">
+      <h1>Operator sign-in</h1>
+      <form id="login">
+        <label>Username<input name="name" autocomplete="username" required></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <label>Authenticator code<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label>
+        <button>Sign in</button>
+      </form>
+    </section>
+    <section id="dashboard" hidden>
+      <h1>Communities</h1>
+      <button id="refresh">Refresh status</button>
+      <div id="sites"></div>
+      <h2>Recent operator activity</h2>
+      <ol id="audit"></ol>
+    </section>
+    <p id="status" role="status"></p>
+  </main>
+</body>
+</html>

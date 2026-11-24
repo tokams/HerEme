@@ -8,6 +8,7 @@ function attachChatSocket(server,{db,identity,config}){
   server.on('upgrade',(req,socket,head)=>{
     if(new URL(req.url,'http://localhost').pathname!=='/api/chat-socket')return reject(socket,'404 Not Found');
     const origin=req.headers.origin,expected=config.production?config.publicOrigin:`http://${req.headers.host}`;
+    if (config.production && req.headers.host !== new URL(expected).host) return reject(socket,'421 Misdirected Request');
     if(origin!==expected)return reject(socket,'403 Forbidden');
     const user=identity.readSession(req,{set(){}},{allowLegacy:false});
     if(!user)return reject(socket,'401 Unauthorized');

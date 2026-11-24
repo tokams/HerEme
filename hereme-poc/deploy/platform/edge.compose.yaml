@@ -1,0 +1,38 @@
+name: ${EDGE_PROJECT:?Set the gateway project name}
+services:
+  edge:
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_BIND:-127.0.0.1:18080}:80"
+      - "${HTTPS_BIND:-127.0.0.1:18443}:443"
+      - "${HTTPS_BIND:-127.0.0.1:18443}:443/udp"
+    volumes:
+      - ./edge:/etc/caddy:ro
+      - certificates:/data
+      - config:/config
+    environment:
+      TLS_POLICY: ${TLS_POLICY:-development}
+      MAIN_UPSTREAM: ${MAIN_PROJECT:?}-http:8080
+      COMMUNITY_UPSTREAM: ${COMMUNITY_PROJECT:?}-http:8080
+    networks:
+      public: {}
+      main:
+        ipv4_address: ${MAIN_EDGE_PEER:?}
+      community:
+        ipv4_address: ${COMMUNITY_EDGE_PEER:?}
+networks:
+  public: {}
+  main:
+    external: true
+    name: ${MAIN_PROJECT}_ingress
+  community:
+    external: true
+    name: ${COMMUNITY_PROJECT}_ingress
+volumes:
+  certificates:
+    external: true
+    name: ${EDGE_DATA_VOLUME:?}
+  config:
+    external: true
+    name: ${EDGE_CONFIG_VOLUME:?}

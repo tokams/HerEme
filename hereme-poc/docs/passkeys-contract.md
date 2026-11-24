@@ -1,6 +1,6 @@
 # Passkey backend contract
 
-Passkeys are disabled unless `WEBAUTHN_ENABLED=1`. The RP is selected only by `WEBAUTHN_RP_ID` and one exact `WEBAUTHN_ALLOWED_ORIGINS` value. Production permits only `hereme.no` and `https://hereme.no` with the same public origin.
+Passkeys are enabled with `WEBAUTHN_ENABLED=1` or `true`. Production requires `WEBAUTHN_RP_ID` to equal the hostname of `HEREME_PUBLIC_ORIGIN` and the sole `WEBAUTHN_ALLOWED_ORIGINS` value to equal that exact HTTPS origin. Preserve the configured RP when moving an existing database.
 
 `GET /api/passkeys/config` returns `{enabled,rp_id}`. Anonymous `POST /api/passkeys/login/options` returns `{challenge_id,options}` and a short-lived HttpOnly binding cookie. `POST /api/passkeys/login/verify` accepts `{challenge_id,response}`, sets normal HerEme cookies, and returns `{user,csrf_token}`. Both anonymous posts require the exact configured Origin and are rate limited.
 

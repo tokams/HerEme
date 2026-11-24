@@ -1,0 +1,42 @@
+:root {
+  color-scheme: dark;
+  font: 100%/1.5 system-ui, sans-serif;
+  color: #e7ede6;
+  background: #101412;
+  --line: #49514b;
+  --muted: #bac3bb;
+  --accent: #c7e4a1;
+}
+* {box-sizing: border-box}
+body {margin: 0}
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .9rem clamp(1rem, 5vw, 4rem);
+  border-bottom: 1px solid var(--line);
+}
+header strong {font-size: 1.4rem}
+header span, li {color: var(--muted)}
+header button {margin-left: auto}
+main {max-width: 68rem; margin: 2.5rem auto; padding: 0 1.25rem}
+h1, h2 {line-height: 1.2}
+h1 {margin-bottom: 1rem}
+form {max-width: 24rem}
+label, input {display: block}
+input {width: 100%; margin: .25rem 0 1rem}
+input, button {font: inherit; padding: .55rem .85rem; border-radius: .25rem; border: 1px solid var(--line)}
+input {background: #181e1b; color: inherit}
+button {background: var(--accent); color: #172213; cursor: pointer}
+button:disabled {opacity: .6}
+#sites {display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; margin: 1.25rem 0 2rem}
+article {border: 1px solid var(--line); border-radius: .35rem; padding: 1rem; background: #1a211c; overflow-wrap: anywhere}
+article h2 {margin: 0 0 .35rem}
+a {color: var(--accent)}
+li {margin: .45rem 0}
+#status {font-weight: 600}
+:focus-visible {outline: 3px solid #8fc5ff; outline-offset: 3px}
+@media (max-width: 32rem) {
+  header {flex-wrap: wrap; gap: .4rem .75rem}
+  main {margin-top: 1.5rem}
+}

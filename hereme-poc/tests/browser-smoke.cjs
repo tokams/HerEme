@@ -383,7 +383,7 @@ async function publish(page,title) {
   if(e22Screenshots)await phone.locator('.detail-modal').screenshot({path:path.join(e22Screenshots,'detail-toolbar-mobile.png')});
   await phone.locator('[data-action=poster-media]').click();await phone.locator('.poster-media-viewer[open] img').waitFor();await phone.locator('[data-action=poster-media-close]').click();
   await phone.locator('.detail-toolbar [data-action=share]').click();
-  assert.equal(await phone.evaluate(()=>navigator.clipboard.readText()),'https://hereme.no/?post='+imageId);
+  assert.equal(await phone.evaluate(()=>navigator.clipboard.readText()),new URL('/?post='+imageId,phone.url()).href);
   await phone.screenshot({path:path.join(screenshots,'mobile-detail.png')});
   await phone.locator('.detail-modal .poster-photo').evaluate(node=>window.__detailMedia=node);
   await phone.locator('.detail-modal .vote-down').click();

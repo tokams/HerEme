@@ -1,0 +1,11 @@
+**
+!package.json
+!package-lock.json
+!public/
+!public/**
+!seed/
+!seed/**
+!server/
+!server/**
+!scripts/
+!scripts/**

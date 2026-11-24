@@ -1,124 +1,94 @@
+[CmdletBinding()]
 param(
     [string]$HostName = '46.251.249.110',
     [string]$UserName = 'dongjel',
     [string]$IdentityFile = "$env:USERPROFILE\.ssh\dongjel_relay",
     [string]$RemoteDirectory = '/home/dongjel/services/hereme',
-    [string]$Domain = 'hereme.no',
-    [string]$ExpectedPreviousDomain = '',
-    [switch]$Plan
+    [switch]$Plan,
+    [switch]$CredentialsOnly
 )
 $ErrorActionPreference = 'Stop'
-if ($Domain -ne 'hereme.no') { throw 'The canonical deployment domain must be hereme.no.' }
-if ($ExpectedPreviousDomain -and $ExpectedPreviousDomain -ne 'hereme.46.251.249.110.nip.io') { throw 'Unexpected previous domain.' }
-foreach ($name in @($Domain, 'www.hereme.no')) {
-    $records = @(Resolve-DnsName $name -Server 1.1.1.1 -ErrorAction Stop)
-    $addresses = @($records | Where-Object { $_.Type -eq 'A' } | ForEach-Object { $_.IPAddress })
-    if (-not $addresses -or @($addresses | Where-Object { $_ -ne $HostName }).Count) { throw "DNS for $name does not point exclusively to the deployment server." }
-    $ipv6 = @(Resolve-DnsName $name -Type AAAA -Server 1.1.1.1 -ErrorAction SilentlyContinue | Where-Object { $_.Type -eq 'AAAA' })
-    if ($ipv6.Count) { throw "Unexpected IPv6 DNS for $name; review before cutover." }
-}
-if ($Plan) { Write-Output "Plan: deploy to https://$Domain; preserve docker project/volumes, VAPID and private environment; require expected previous domain for cutover; retain old release for data-preserving rollback."; return }
+if ($HostName -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -or $UserName -notmatch '^[a-z][a-z0-9_-]*$' -or
+    $RemoteDirectory -notmatch '^(/[A-Za-z0-9_-]+)+$') { throw 'Invalid SSH address, account or legacy deployment path.' }
+$platform = "$RemoteDirectory-platform"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$hostsToCheck = @('hereme.no','www.hereme.no','tanteulrikkesvei.hereme.no','admin.hereme.no')
+if (-not $CredentialsOnly) {
+    foreach ($site in $hostsToCheck) {
+        try {
+            $ipv4 = @(Resolve-DnsName $site -Type A -Server 1.1.1.1 -DnsOnly -ErrorAction Stop |
+                Where-Object { $_.Type -eq 'A' } | ForEach-Object { $_.IPAddress })
+        } catch { throw "DNS preflight failed for $site. Expected A record $HostName. $($_.Exception.Message)" }
+        if (-not $ipv4 -or @($ipv4 | Where-Object { $_ -ne $HostName }).Count) { throw "Set the A record for $site to $HostName before deployment." }
+        $ipv6 = @(Resolve-DnsName $site -Type AAAA -Server 1.1.1.1 -DnsOnly -ErrorAction Stop | Where-Object { $_.Type -eq 'AAAA' })
+        if ($ipv6.Count) { throw "Unexpected IPv6 record for $site. Verify the target before cutover." }
+    }
+}
+if ($Plan) { Write-Output "DNS preflight passed. A committed release will run both communities and admin.hereme.no. Main keeps its existing data, Git and certificate volumes. Private verified backups and previous releases are retained under $platform."; return }
+$connection = "$UserName@$HostName"
 $identity = (Resolve-Path $IdentityFile).Path
-foreach ($command in @('git', 'ssh', 'scp')) {
-    if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { throw "Required command is missing: $command" }
+$options = @('-i',$identity,'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','UpdateHostKeys=no')
+$runId = [Guid]::NewGuid().ToString('N')
+if (-not $CredentialsOnly) {
+    $dirty = & git -C $repo status --porcelain --untracked-files=all
+    if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Commit the reviewed changes before deploying. The release is built from a clean Git HEAD.' }
+    $revision = (& git -C $repo rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0 -or $revision -notmatch '^[0-9a-f]{40}$') { throw 'Cannot determine the committed revision.' }
+    $release = "$platform/releases/$revision-$runId"
+    $archive = Join-Path ([IO.Path]::GetTempPath()) "hereme-$runId.tar.gz"
+    try {
+        & git -C $repo archive --format=tar.gz "--output=$archive" 'HEAD:hereme-poc'
+        if ($LASTEXITCODE -ne 0) { throw 'Could not package the committed release.' }
+        & ssh @options $connection "umask 077 && mkdir -p '$platform/releases' && mkdir '$release'"
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create a new private release directory.' }
+        & scp @options $archive "${connection}:$release/source.tar.gz"
+        if ($LASTEXITCODE -ne 0) { throw 'Could not transfer the release archive.' }
+        $checksum = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+        & ssh @options $connection "set -eu; umask 077; cd '$release'; echo '$checksum  source.tar.gz' | sha256sum -c -; (umask 022 && tar xzf source.tar.gz); rm source.tar.gz; python3 deploy/platform/release.py '$RemoteDirectory' '$platform' '$revision'"
+        if ($LASTEXITCODE -ne 0) { throw "Cutover failed. See the first remote error and $platform/backups before retrying." }
+    } finally {
+        if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive }
+    }
 }
-$dirty = & git -C $repo status --porcelain --untracked-files=all
-if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Commit the reviewed changes before deployment; the worktree must be clean.' }
-$revision = (& git -C $repo rev-parse --short=12 HEAD).Trim()
-if ($LASTEXITCODE -ne 0) { throw 'Cannot determine the release revision.' }
-$stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
-$upload = "/home/$UserName/services/hereme-upload-$stamp"
-$scratch = Join-Path ([IO.Path]::GetTempPath()) ("hereme-deploy-$stamp")
-New-Item -ItemType Directory -Path $scratch | Out-Null
-$archive = Join-Path $scratch 'release.tar.gz'
-$remoteScript = Join-Path $scratch 'release.sh'
-$script = @'
-#!/usr/bin/env bash
-set -euo pipefail
-stamp=$1
-revision=$2
-target=$3
-domain=$4
-upload=$5
-expected=$6
-backup_root="$(dirname "$target")/hereme-backups"
-backup="$backup_root/$stamp"
-previous="$(dirname "$target")/hereme-previous-$stamp"
-staged="$(dirname "$target")/hereme-staged-$stamp"
-rollback_image="hereme-local-forum:rollback-$stamp"
-compose='deploy/docker/compose.yaml'
-for command in docker tar curl install; do command -v "$command" >/dev/null; done
-docker compose version >/dev/null
-test -f "$target/$compose"
-test -f "$target/deploy/docker/.env"
-test -f "$upload.tar.gz"
-mkdir -p "$backup_root" "$staged"
-tar -xzf "$upload.tar.gz" -C "$staged"
-cp -p "$target/deploy/docker/.env" "$staged/deploy/docker/.env"
-# Keep the private environment outside the root-owned snapshot directory.
-# install applies restrictive permissions at creation, before any container runs.
-install -m 0600 "$target/deploy/docker/.env" "$backup_root/$stamp.production.env"
-# A failed build/preflight may already have replaced :latest on a previous run.
-# Rollback must use the image actually running the live app.
-live_container=$(cd "$target" && docker compose -p docker -f "$compose" ps -q app)
-test -n "$live_container"
-live_image=$(docker inspect --format '{{.Image}}' "$live_container")
-docker image tag "$live_image" "$rollback_image"
-docker run --rm --user 0 -v docker_hereme-data:/var/lib/hereme:ro -v "$backup_root":/backup "$rollback_image" node scripts/snapshot-data.js /var/lib/hereme "/backup/$stamp"
-# SQLite may need to create a transient -shm file even with a read-only connection.
-docker run --rm --user 0 -v "$backup_root":/backup "$rollback_image" node scripts/verify-backup.js "/backup/$stamp"
-if docker volume inspect docker_hereme-content-git >/dev/null 2>&1; then
-  docker run --rm --user 0 -v docker_hereme-content-git:/archive:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'tar -C /archive -czf /backup/'"$stamp"'/content-git.tar.gz . && sha256sum /backup/'"$stamp"'/content-git.tar.gz > /backup/'"$stamp"'/content-git.tar.gz.sha256'
-fi
-docker run --rm --user 0 -v docker_hereme-data:/data:ro -v "$backup_root":/backup "$rollback_image" sh -ec 'if [ -d /data/chat ]; then find /data/chat -maxdepth 1 -type f -printf "%f\n"; fi > /backup/'"$stamp"'/chat-files.txt'
-(cd "$staged" && docker compose -p docker -f "$compose" build app)
-docker run --rm --user "$(id -u):$(id -g)" -v "$staged/deploy/docker:/config" hereme-local-forum:latest node scripts/configure-domain.js /config/.env "$domain" "$expected"
-chmod 600 "$staged/deploy/docker/.env"
-(cd "$staged" && docker compose -p docker -f "$compose" run --rm --no-deps proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile)
-deployed=0
-schema_version() {
-  docker run --rm --network none --user 0 -v "$1:/db:ro" "$rollback_image" node -e 'const {DatabaseSync}=require("node:sqlite"); const db=new DatabaseSync("/db/hereme.sqlite",{readOnly:true}); console.log(db.prepare("SELECT max(version) AS version FROM schema_migrations").get().version); db.close()'
-}
-previous_schema=$(schema_version docker_hereme-data)
-rollback() {
-  trap - ERR
-  if [ "$deployed" -eq 1 ]; then return; fi
-  if ! live_schema=$(schema_version docker_hereme-data) || [ "$live_schema" != "$previous_schema" ]; then
-    echo 'Schema changed or could not be checked. Keeping the new release and current data for forward recovery.' >&2
-    return 1
-  fi
-  echo 'Deployment failed; restoring previous release and environment while preserving live data.' >&2
-  (cd "$target" && docker compose -p docker -f "$compose" down) || true
-  if [ -d "$previous" ]; then
-    if [ -d "$target" ]; then mv "$target" "$staged.failed"; fi
-    mv "$previous" "$target"
-  fi
-  docker image tag "$rollback_image" hereme-local-forum:latest
-  (cd "$target" && docker compose -p docker -f "$compose" up -d --no-build --force-recreate --wait)
-}
-trap rollback ERR
-mv "$target" "$previous"
-mv "$staged" "$target"
-(cd "$target" && docker compose -p docker -f "$compose" up -d --no-build --force-recreate --wait)
-curl --retry 12 --retry-all-errors --retry-delay 5 --retry-max-time 120 --fail --silent --show-error --max-time 15 "https://$domain/api/ready" >/dev/null
-deployed=1
-trap - ERR
-rm -f "$upload.tar.gz" "$upload.sh"
-echo "Deployed $revision to https://$domain/; backup: $backup; previous code: $previous"
-'@
+$secrets = Join-Path $repo 'secrets'
+[IO.Directory]::CreateDirectory($secrets) | Out-Null
+$private = Join-Path $secrets ".download-$runId"
+[IO.Directory]::CreateDirectory($private) | Out-Null
 try {
-    [IO.File]::WriteAllText($remoteScript, $script.Replace("`r`n", "`n"), (New-Object Text.UTF8Encoding $false))
-    & git -C $repo archive --format=tar.gz "--output=$archive" 'HEAD:hereme-poc'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not package the committed release.' }
-    $connection = "$UserName@$HostName"
-    $sshOptions = @('-i', $identity, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes')
-    & scp @sshOptions $archive "${connection}:$upload.tar.gz"
-    if ($LASTEXITCODE -ne 0) { throw 'Could not upload the release archive.' }
-    & scp @sshOptions $remoteScript "${connection}:$upload.sh"
-    if ($LASTEXITCODE -ne 0) { throw 'Could not upload the deploy procedure.' }
-    & ssh @sshOptions $connection "bash '$upload.sh' '$stamp' '$revision' '$RemoteDirectory' '$Domain' '$upload' '$ExpectedPreviousDomain'"
-    if ($LASTEXITCODE -ne 0) { throw 'Remote deployment failed. Review remote output and retained backup before retrying.' }
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    & icacls $private /inheritance:r /grant:r "*${sid}:(OI)(CI)F" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not protect the credential download directory.' }
+    foreach ($name in @('platform-operator.txt','tanteulrikkesvei-staff-credentials.txt')) {
+        $dest = Join-Path $secrets $name
+        $newFile = Join-Path $private $name
+        & scp @options "${connection}:$platform/state/secrets/$name" $newFile
+        if ($LASTEXITCODE -ne 0) { throw 'Credential download failed. Retry with -CredentialsOnly.' }
+        if (Test-Path -LiteralPath $dest) {
+            if ((Get-FileHash $dest).Hash -ne (Get-FileHash $newFile).Hash) { throw "Credential conflict at $dest. Review the existing file before retrying with -CredentialsOnly." }
+        } else {
+            & icacls $newFile /inheritance:r /grant:r "*${sid}:F" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not protect the downloaded credential file $name." }
+            [IO.File]::Move($newFile,$dest)
+        }
+    }
 } finally {
-    Remove-Item -LiteralPath $scratch -Recurse -Force
+    foreach ($name in @('platform-operator.txt','tanteulrikkesvei-staff-credentials.txt')) {
+        $tempFile = Join-Path $private $name
+        if (Test-Path -LiteralPath $tempFile) { Remove-Item -LiteralPath $tempFile }
+    }
+    [IO.Directory]::Delete($private)
+}
+Write-Output "Operator and new community credentials are available in $secrets."
+if (-not $CredentialsOnly) {
+    foreach ($site in @('hereme.no','tanteulrikkesvei.hereme.no')) {
+        $meta = Invoke-RestMethod "https://$site/api/meta" -TimeoutSec 15
+        $ready = Invoke-RestMethod "https://$site/api/ready" -TimeoutSec 15
+        if (-not $ready.ok -or $meta.public_origin -ne "https://$site" -or $meta.release -ne $revision) {
+            throw "Public verification failed for $site. Check the gateway, release and certificate."
+        }
+    }
+    if ((Invoke-RestMethod 'https://admin.hereme.no/live' -TimeoutSec 15).service -ne 'hereme-platform') {
+        throw 'The public platform panel failed its identity check.'
+    }
+    Write-Output "Verified both public communities and the platform panel at release $revision."
 }

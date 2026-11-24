@@ -43,7 +43,7 @@ Passnøkler. Keep a recovery backup. Passkeys do not verify real-world identity 
 change staff permissions. Synced credentials may appear on several devices.
 
 For the proposed `hereme.no` cutover, see [domain migration](domain-migration.md).
-This target is not yet verified live; DNSSEC activation is pending at Uniweb.
+The apex now resolves to the production host. The current two-community DNS and cutover requirements are in the platform runbook.
 
 ## Staff accounts and panel
 
@@ -68,9 +68,7 @@ Web Push is disabled by default. Generate one VAPID pair on an operator machine:
 npm run push:generate-vapid
 ```
 
-`deploy/deploy-online.ps1` initializes a missing pair inside the staged release,
-sets `WEB_PUSH_ENABLED=1`, preserves the same pair on later deployments and never
-prints either key. Manual Compose/systemd installations must perform the following
+`deploy/deploy-online.ps1` preserves the active main push settings. It creates and persists a separate VAPID pair for the new community. Manual Compose/systemd installations must perform the following
 configuration themselves.
 
 Put `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` and `WEB_PUSH_ENABLED=1` in the protected
@@ -100,6 +98,8 @@ background delivery, tap navigation, logout and account-switch checks.
 
 ### Chat retention and automated Docker deployment
 
+The Windows deployment command manages both communities and the operator panel. Follow the [platform deployment and recovery runbook](runbooks/multi-instance.md).
+
 Chat attachments live only in the private `chat` directory of the data volume.
 The one-minute chat worker deletes completed files seven days after upload and
 abandoned uploads after one day. The normal snapshot omits attachment bytes;
@@ -110,22 +110,7 @@ cleanup eventually fails `/api/ready`.
 
 On Windows PowerShell, after reviewing and committing a clean release, run
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy/deploy-online.ps1`
-from `hereme-poc`. The script uses the pinned public host, dedicated SSH key,
-strict host-key verification and existing remote `.env`. It packages the
-committed `hereme-poc` tree, copies it to the Docker host, makes and verifies
-a data snapshot, builds the new image, restarts Compose and checks public
-readiness, retrying while the proxy acquires its TLS certificate. On failed
-cutover the script restores the previous release only if it can verify the
-live schema version is unchanged. If migrations advanced or the schema cannot
-be read, it keeps the new release and live volume for forward recovery. Inspect
-Compose logs and public readiness before retrying. Snapshot restoration is manual.
-The backup verifier mounts its snapshot directory writable because SQLite may
-need to create a temporary shared-memory sidecar even for a read-only database
-connection. The verifier does not modify the snapshot database.
-The script never removes the named data volume. Previous code and backups are
-retained on the host for operator review; prune them only under the retention
-policy. It requires `git`, `ssh` and `scp` locally, and Docker Compose and
-`curl` on the host.
+from `hereme-poc`. It verifies DNS, uses strict SSH host-key checking and packages the committed tree. The first release preserves the observed legacy volumes. Later releases update one site at a time and retain a per-project release pointer. Read the platform runbook for credential retrieval, backups and recovery after a failed update.
 
 Use a supported Linux VM with Node 24+, Caddy, SQLite-compatible local storage
 and enough disk for retained originals plus derivatives. Create DNS only for a
@@ -242,7 +227,7 @@ sync jobs and Git/media purges to a staff session. The worker logs
 `content_git_sync`, `content_git_error` and reconciliation events. A Git outage
 does not block SQL publication; investigate failed jobs promptly and confirm the
 pending count returns to zero. The online deployment script archives the existing
-Git volume as `content-git.tar.gz` beside its verified SQLite/media snapshot and
+Git volume as `archive.tgz` beside each verified SQLite/media snapshot and
 stores its SHA-256 file. The initial deployment has no old Git volume to archive.
 
 To inspect or repair a restored archive, stop its content-Git worker, restore the

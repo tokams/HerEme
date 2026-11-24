@@ -14,7 +14,8 @@ recovery-key verification remains available when an authenticator is lost.
 Single-use expiring challenges are bound to ceremony, session/account where
 applicable, and configured RP/origin. Anonymous ceremonies have a browser binding.
 
-Production RP is exclusively hereme.no at https://hereme.no. Localhost uses a
+Under [ADR 0015](0015-independent-instances.md) the production RP equals the
+hostname of the instance's exact configured HTTPS origin. Localhost uses a
 separate development RP; credentials cannot move between RPs. Rollback disables
 WebAuthn while preserving additive tables and legacy recovery authentication.
 Do not roll back live data to old snapshots after concurrent writes.

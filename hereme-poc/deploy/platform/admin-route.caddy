@@ -1,0 +1,9 @@
+admin.hereme.no {
+	header Strict-Transport-Security "max-age=31536000"
+	request_body {
+		max_size 8KB
+	}
+	reverse_proxy platform:3100 {
+		header_up X-Hereme-Client {remote_host}
+	}
+}

@@ -24,7 +24,7 @@ const services=require('../server/services');
     await page.locator('[data-action=auth-register]').click();
     await page.locator('[data-auth-form=register] input[name=name]').fill('QuickLogout');
     await page.locator('[data-auth-form=register] button').click();
-    await page.locator('[data-auth-continue]').click();
+    await page.locator('form[action="/api/recovery/confirm"] button[type=submit]').click();
     await page.waitForFunction(()=>document.querySelector('#profileLabel')?.textContent==='QuickLogout');
     assert.equal(await page.locator('#notificationButton svg').count(),1);
     assert.equal(await page.locator('#notificationButton img').count(),0);

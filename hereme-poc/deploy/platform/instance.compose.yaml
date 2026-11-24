@@ -1,0 +1,104 @@
+name: ${INSTANCE_PROJECT:?Set a unique project name}
+x-runtime: &runtime
+  image: sha256:${APP_IMAGE_ID:?Set the 64 hex digits of the local Docker image ID}
+  pull_policy: never
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  volumes:
+    - data:/var/lib/hereme
+x-environment: &environment
+  HEREME_ENV: production
+  HOST: 127.0.0.1
+  PORT: 3000
+  HEREME_DATA_DIR: /var/lib/hereme
+  HEREME_DATABASE_START: ${DATABASE_START:?Use empty or existing}
+  HEREME_PUBLIC_ORIGIN: https://${INSTANCE_HOST:?Set canonical hostname}
+  HEREME_TRUST_PROXY: loopback
+  HEREME_MIN_FREE_BYTES: 2147483648
+  HEREME_SESSION_DAYS: 30
+  HEREME_LOG_FORMAT: json
+  HEREME_ENABLE_VIDEO: 1
+  HEREME_MAX_VIDEO_BYTES: 2147483648
+  HEREME_FFPROBE: /usr/bin/ffprobe
+  HEREME_FFMPEG: /usr/bin/ffmpeg
+  WEBAUTHN_ENABLED: ${WEBAUTHN_ENABLED:-false}
+  WEBAUTHN_RP_ID: ${INSTANCE_HOST}
+  WEBAUTHN_ALLOWED_ORIGINS: https://${INSTANCE_HOST}
+  WEB_PUSH_ENABLED: ${WEB_PUSH_ENABLED:-0}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+  HEREME_PUSH_POLL_MS: ${HEREME_PUSH_POLL_MS:-2000}
+x-worker: &worker
+  <<: *runtime
+  depends_on:
+    app:
+      condition: service_healthy
+  environment: *environment
+  network_mode: none
+
+services:
+  app:
+    <<: *runtime
+    environment: *environment
+    networks:
+      ingress:
+        aliases: ["${INSTANCE_PROJECT}-http"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('node:http').get({host:'127.0.0.1',port:3000,path:'/api/ready',headers:{Host:new URL(process.env.HEREME_PUBLIC_ORIGIN).host}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+  sidecar:
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
+    restart: unless-stopped
+    network_mode: service:app
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      INSTANCE_HOST: ${INSTANCE_HOST}
+      EDGE_PEER: ${EDGE_PEER:?Set the edge IP on this internal network}
+    volumes:
+      - ./sidecar.Caddyfile:/etc/caddy/Caddyfile:ro
+  worker:
+    <<: *worker
+    command: [node, server/media-worker.js]
+  chat-worker:
+    <<: *worker
+    command: [node, server/chat-worker.js]
+    environment:
+      <<: *environment
+      HEREME_CHAT_WORKER: "1"
+  content-git-worker:
+    <<: *worker
+    command: [node, server/content-git-worker.js]
+    environment:
+      <<: *environment
+      HEREME_CONTENT_GIT_DIR: /var/lib/hereme-git
+    volumes:
+      - data:/var/lib/hereme
+      - archive:/var/lib/hereme-git
+  push-worker:
+    <<: *runtime
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [egress]
+    command: [node, server/push-worker.js]
+    environment:
+      <<: *environment
+      HEREME_PUSH_WORKER: "1"
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+networks:
+  ingress:
+    external: true
+    name: ${INSTANCE_PROJECT}_ingress
+  egress: {}
+volumes:
+  data:
+    external: true
+    name: ${DATA_VOLUME:?Supply this instance's existing Docker volume}
+  archive:
+    external: true
+    name: ${ARCHIVE_VOLUME:?Supply this instance's private Git volume}

@@ -18,9 +18,16 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   const port = env.PORT === undefined ? (preview ? 3001 : 3000) : Number(env.PORT);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535.');
   const host=env.HOST||(production?'127.0.0.1':'0.0.0.0');
-  const publicOrigin=env.HEREME_PUBLIC_ORIGIN||'';
+  const publicOrigin = env.HEREME_PUBLIC_ORIGIN || (production ? '' : `http://localhost:${port}`);
+  const databaseStart = env.HEREME_DATABASE_START ?? 'demo';
+  if (!['demo', 'empty', 'existing'].includes(databaseStart)) {
+    throw new Error('HEREME_DATABASE_START must be demo, empty or existing.');
+  }
   if(production){
-    if(!/^https:\/\/[^/]+$/.test(publicOrigin))throw new Error('Production HEREME_PUBLIC_ORIGIN must be an HTTPS origin without a path.');
+    const originUrl = URL.canParse(publicOrigin) ? new URL(publicOrigin) : null;
+    if (originUrl?.protocol !== 'https:' || originUrl.origin !== publicOrigin) {
+      throw new Error('Production HEREME_PUBLIC_ORIGIN must be an HTTPS origin without a path.');
+    }
     if(host!=='127.0.0.1'&&host!=='::1')throw new Error('Production HOST must be loopback behind the reverse proxy.');
   }
   const sessionDays=Number(env.HEREME_SESSION_DAYS||30);
@@ -42,8 +49,10 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   if(!Number.isInteger(pushPollMs)||pushPollMs<500||pushPollMs>60000)throw new Error('HEREME_PUSH_POLL_MS must be an integer from 500 to 60000.');
   if(webauthnEnabled&&(!/^(?:[a-z0-9-]+\.)*[a-z0-9-]+$/i.test(webauthnRpId)||webauthnOrigins.length!==1))throw new Error('Enabled WebAuthn requires one explicit WEBAUTHN_RP_ID and WEBAUTHN_ALLOWED_ORIGINS origin.');
   if(webauthnEnabled&&!/^https:\/\//.test(webauthnOrigins[0])&&!(environment!=='production'&&/^http:\/\/localhost(?::\d+)?$/.test(webauthnOrigins[0])))throw new Error('WebAuthn origin must use HTTPS except explicit localhost development.');
-  if(production&&webauthnEnabled&&(webauthnRpId!=='hereme.no'||webauthnOrigins[0]!=='https://hereme.no'||publicOrigin!=='https://hereme.no'))throw new Error('Production WebAuthn is gated to the canonical https://hereme.no origin.');
-  return {dataDir,port,preview,environment,production,host,publicOrigin,sessionDays,minFreeBytes,
+  if (production && webauthnEnabled && (webauthnOrigins[0] !== publicOrigin || webauthnRpId !== new URL(publicOrigin).hostname)) {
+    throw new Error('Production WebAuthn requires the configured instance hostname and its exact HTTPS origin.');
+  }
+  return {dataDir,databaseStart,port,preview,environment,production,host,publicOrigin,sessionDays,minFreeBytes,
     trustProxy:env.HEREME_TRUST_PROXY==='loopback',uploadsSuspended:env.HEREME_UPLOADS_SUSPENDED==='1',
     enableVideo:env.HEREME_ENABLE_VIDEO==='1',enableLocations:env.HEREME_ENABLE_LOCATIONS==='1',
     enableVerification:env.HEREME_ENABLE_VERIFICATION==='1',enableStaffPanel:true,enableWebPush,vapidPublicKey,vapidPrivateKey,vapidSubject,pushWorker:env.HEREME_PUSH_WORKER==='1',pushPollMs,

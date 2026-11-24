@@ -1,0 +1,26 @@
+services:
+  edge:
+    volumes:
+      - ./admin-route.caddy:/etc/hereme-extra/admin.caddy:ro
+    networks:
+      management:
+        aliases: ["hereme.no", "tanteulrikkesvei.hereme.no", "admin.hereme.no"]
+  platform:
+    image: sha256:${APP_IMAGE_ID:?}
+    pull_policy: never
+    restart: unless-stopped
+    command: ["node","server/platform/index.js"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [management]
+    volumes:
+      - ${REGISTRY_DIR:?}:/var/lib/platform
+      - ${POLICIES_DIR:?}:/etc/hereme-sites
+    healthcheck:
+      test: ["CMD","node","-e","require('http').get({host:'127.0.0.1',port:3100,path:'/live',headers:{Host:'admin.hereme.no'}},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+networks:
+  management:
+    internal: true

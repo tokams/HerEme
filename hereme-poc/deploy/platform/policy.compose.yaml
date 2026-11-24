@@ -1,0 +1,7 @@
+services:
+  app:
+    environment:
+      HEREME_REGISTRATION_POLICY: /etc/hereme-site/policy.json
+      HEREME_RELEASE: ${RELEASE_REVISION:?}
+    volumes:
+      - ${POLICY_DIR:?}:/etc/hereme-site:ro

@@ -1,0 +1,39 @@
+{
+	import /etc/caddy/{$TLS_POLICY}.options
+	servers {
+		strict_sni_host on
+	}
+}
+
+(community) {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	request_body {
+		max_size 2GB
+	}
+	reverse_proxy {args[0]} {
+		header_up X-Hereme-Client {remote_host}
+		transport http {
+			read_timeout 5m
+			write_timeout 5m
+		}
+	}
+}
+
+import /etc/hereme-extra/*.caddy
+
+hereme.no {
+	import community {$MAIN_UPSTREAM}
+}
+
+tanteulrikkesvei.hereme.no {
+	import community {$COMMUNITY_UPSTREAM}
+}
+
+www.hereme.no, hereme.46.251.249.110.nip.io {
+	redir https://hereme.no{uri} 307
+}
+
+http:// {
+	respond 421
+}

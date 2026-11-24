@@ -77,9 +77,13 @@ test('credential removal requires explicit confirmation and recovery-typed fresh
   assert.equal(S.passkeys.list(auth).length,0);
 });
 
-test('production configuration rejects noncanonical RP, origin, and invalid feature flags',()=>{
+test('production passkeys bind to exactly one approved instance origin',()=>{
   const {runtimeConfig}=require('../server/config'),base={HEREME_ENV:'production',HOST:'127.0.0.1',HEREME_PUBLIC_ORIGIN:'https://hereme.no',WEBAUTHN_ENABLED:'1'};
-  assert.throws(()=>runtimeConfig(process.cwd(),{...base,WEBAUTHN_RP_ID:'wrong.example',WEBAUTHN_ALLOWED_ORIGINS:'https://hereme.no'}),/canonical/);
-  assert.throws(()=>runtimeConfig(process.cwd(),{...base,WEBAUTHN_RP_ID:'hereme.no',WEBAUTHN_ALLOWED_ORIGINS:'https://www.hereme.no'}),/canonical/);
+  assert.equal(runtimeConfig(process.cwd(),{...base,WEBAUTHN_RP_ID:'hereme.no',WEBAUTHN_ALLOWED_ORIGINS:'https://hereme.no'}).webauthnEnabled,true);
+  const tante={...base,HEREME_PUBLIC_ORIGIN:'https://tanteulrikkesvei.hereme.no',WEBAUTHN_RP_ID:'tanteulrikkesvei.hereme.no',WEBAUTHN_ALLOWED_ORIGINS:'https://tanteulrikkesvei.hereme.no'};
+  assert.equal(runtimeConfig(process.cwd(),tante).webauthnRpId,'tanteulrikkesvei.hereme.no');
+  assert.throws(()=>runtimeConfig(process.cwd(),{...base,WEBAUTHN_RP_ID:'wrong.example',WEBAUTHN_ALLOWED_ORIGINS:'https://hereme.no'}),/instance hostname/);
+  assert.throws(()=>runtimeConfig(process.cwd(),{...base,WEBAUTHN_RP_ID:'hereme.no',WEBAUTHN_ALLOWED_ORIGINS:'https://www.hereme.no'}),/exact HTTPS origin/);
+  assert.throws(()=>runtimeConfig(process.cwd(),{...tante,WEBAUTHN_RP_ID:'hereme.no'}),/exact HTTPS origin/);
   assert.throws(()=>runtimeConfig(process.cwd(),{...base,WEBAUTHN_ENABLED:'yes'}),/must be/);
 });

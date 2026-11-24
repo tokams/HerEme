@@ -5,12 +5,19 @@ const fs=require('node:fs');
 const os=require('node:os');
 const path=require('node:path');
 const sharp=require('sharp');
+const shareMeta=require('../server/share-meta');
 const data=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-sharing-'));
-process.env.HEREME_DATA_DIR=data;process.env.HEREME_ENV='test';
+process.env.HEREME_DATA_DIR=data;process.env.HEREME_ENV='test';process.env.HEREME_PUBLIC_ORIGIN='https://hereme.no';
 const app=require('../server/index'),S=require('../server/services');
 let server,base;
 test.before(async()=>{server=await new Promise(resolve=>{const running=app.listen(0,'127.0.0.1',()=>resolve(running));});base=`http://127.0.0.1:${server.address().port}`;});
 test.after(async()=>{await new Promise(resolve=>server.close(resolve));S.db.close();fs.rmSync(data,{recursive:true,force:true});});
+test('shared post metadata stays on the configured instance',()=>{
+  const html=shareMeta.render('<head><title>HerEme</title><meta name="description" content="old"></head>',{id:42,title:'Local post',body:'Separate content'},'/share-previews/42/image.jpg','https://tanteulrikkesvei.hereme.no');
+  assert.match(html,/https:\/\/tanteulrikkesvei\.hereme\.no\/\?post=42/);
+  assert.match(html,/https:\/\/tanteulrikkesvei\.hereme\.no\/share-previews\/42\/image\.jpg/);
+  assert.doesNotMatch(html,/https:\/\/hereme\.no\//);
+});
 async function account(name){const response=await fetch(base+'/api/session',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name})});assert.equal(response.status,201);const result=await response.json();return {id:result.user.id,cookie:response.headers.getSetCookie().map(value=>value.split(';')[0]).join('; '),csrf:result.csrf_token};}
 async function request(route,{method='GET',user,body,form,headers={}}={}){const given={...headers};if(user){given.cookie=user.cookie;if(method!=='GET'&&method!=='HEAD')given['x-csrf-token']=user.csrf;}if(body!==undefined)given['content-type']='application/json';const response=await fetch(base+route,{method,headers:given,body:form||body===undefined?form:JSON.stringify(body)});const type=response.headers.get('content-type')||'';return {status:response.status,headers:response.headers,body:method==='HEAD'?null:type.includes('json')?await response.json():type.startsWith('text/html')?await response.text():await response.arrayBuffer()};}
 test('comment votes, minimal public reputation and share metadata follow public state',async()=>{

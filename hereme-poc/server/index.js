@@ -8,6 +8,8 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {DomainError}=require('./domain/errors');
 const {localizeError}=require('./error-localization');
+const {readPolicy}=require('./platform/policy');
+const registrationOpen=()=>!process.env.HEREME_REGISTRATION_POLICY || readPolicy(process.env.HEREME_REGISTRATION_POLICY).registrationOpen;
 const {themes}=require('../public/themes');
 const S=require('./services');
 if(S.config.environment!=='test')S.sharePreviews.backfill();
@@ -63,7 +65,7 @@ app.use(async(req,res,next)=>{
   if(post)await S.sharePreviews.queue(post);
   const image=post?S.sharePreviews.image(post):null;
   const shell=fs.readFileSync(path.resolve(__dirname,'..','public','index.html'),'utf8');
-  res.status(post?200:404).set('Content-Type','text/html; charset=utf-8').set('Cache-Control','no-store').send(shareMeta.render(shell,post,image));
+  res.status(post?200:404).set('Content-Type','text/html; charset=utf-8').set('Cache-Control','no-store').send(shareMeta.render(shell,post,image,S.config.publicOrigin));
 });
 app.use('/share-previews',(req,res,next)=>{
   if(!['GET','HEAD'].includes(req.method))return next();
@@ -100,6 +102,7 @@ app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
     S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=23').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    if(process.env.HEREME_REGISTRATION_POLICY){checks.registration_policy=false;registrationOpen();checks.registration_policy=true;}
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
     checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===23;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
@@ -113,12 +116,14 @@ app.get('/api/categories',(req,res)=>res.json({categories:themes}));
 app.get('/api/meta',(req,res)=>{
   const port=req.socket.localPort;
   const features={video:S.config.enableVideo,locations:S.config.enableLocations,verification:S.config.enableVerification,staff_panel:true,web_push:S.push.enabled()};
-  if(S.config.production)return res.json({port,public_origin:S.config.publicOrigin,connect_url:S.config.publicOrigin,features});
+  if(S.config.production)return res.json({port,public_origin:S.config.publicOrigin,connect_url:S.config.publicOrigin,features,release:process.env.HEREME_RELEASE||null});
   const ips=lanIps();res.json({port,connect_url:ips.length?`http://${ips[0].ip}:${port}`:`http://localhost:${port}`,addresses:ips.map(item=>({...item,url:`http://${item.ip}:${port}`})),features});
 });
 app.get('/api/connect-qr.svg',async(req,res,next)=>{if(S.config.production)return errors(res,404,'NOT_FOUND','Ikke tilgjengelig.');try{const ips=lanIps(),url=ips.length?`http://${ips[0].ip}:${req.socket.localPort}`:`http://localhost:${req.socket.localPort}`;res.type('svg').send(await qrcode.toString(url,{type:'svg',margin:2,width:260}));}catch(error){next(error);}});
 
 app.post('/api/session',(req,res)=>{
+  if(!registrationOpen())
+    return errors(res,403,'REGISTRATION_CLOSED','Registrering er stengt i dette fellesskapet.');
   S.rate.check('profile:'+ipKey(req),30);const result=S.identity.createProfile({name:req.body?.name,userAgent:req.headers['user-agent']});S.identity.setCookie(res,result.session);
   S.identity.markFresh(result.user.id,S.identity.sha256(result.session.raw),'new_account');
   recordSecurity(req,'session.created','allowed',result.user.id);

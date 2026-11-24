@@ -1,5 +1,7 @@
 # HerEme system specification
 
+The managed-release target runs `hereme.no` and `tanteulrikkesvei.hereme.no` on independent storage and worker stacks from one image. Each community keeps its existing local staff interface. `admin.hereme.no` uses separate MFA credentials and manages live health, release inventory and new registrations. The [architecture decision](adr/0015-independent-instances.md), [verification record](M1_PROGRESS.md) and [deployment procedure](runbooks/multi-instance.md) document the current target. The deployment and passkey statements below describe the earlier snapshot.
+
 **Passkeys:** additive WebAuthn authentication is implemented locally for
 canonical hereme.no. Production remains disabled pending domain/security/device
 verification. Existing user identities and recovery login remain authoritative.
