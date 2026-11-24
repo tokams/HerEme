@@ -72,6 +72,7 @@ async function refresh() {
   const sequence = ++refreshSequence;
   const data = await api('/api/sites');
   if (sequence !== refreshSequence) return;
+  byId('explorer').hidden = !data.canExplore;
   csrf = data.csrf;
   setSignedIn(true);
   byId('sites').replaceChildren(...data.sites.map(siteCard));

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-25 — Platform Database Explorer
+
+Authorized platform operators can browse approved community and registry data and run read-only SQL in Datasette at `/databases/`. The release creates an isolated browser and a projector that refreshes filtered tables from the live SQLite databases. See [ADR 0017](docs/adr/0017-database-explorer.md) for registration, permissions, query limits and rehearsal instructions.
+
 ## 2026-11-24 — SEC-01 contact address supplied
 
 The owner supplied `tom.gli@icloud.com` for the public legal contact. The assessment, ADR and release progress now record it. A candidate per-instance legal configuration is saved outside Git in `secrets/legal.proposed.json`, using the observed server network, authoritative DNS and supported browser push providers. That provider summary still needs owner review; the candidate was not installed on the production host and no deployment occurred.

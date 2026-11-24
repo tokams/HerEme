@@ -6,7 +6,8 @@ const qrcode=require('../qr');
 const {openRegistry,login,hash}=require('./operator');
 const {readPolicy,writePolicy}=require('./policy');
 
-function createPanel({registry,sites,origin='https://admin.hereme.no',health=siteHealth}) {
+function createPanel({registry,sites,origin='https://admin.hereme.no',health=siteHealth,
+  explorerOperators=[]}) {
   const app=web(),host=new URL(origin).host;
   const cookie='__Host-hereme_operator';
   const session=req=>{
@@ -43,11 +44,23 @@ function createPanel({registry,sites,origin='https://admin.hereme.no',health=sit
     res.set('Set-Cookie',cookie+'=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0');
     res.json({ok:true});
   });
+  app.get('/api/explorer-access',(req,res)=>{
+    if(!explorerOperators.includes(req.operator.operator))return reject(res,403,'Database Explorer access required.');
+    const target=new URL(req.headers['x-forwarded-uri'] || '/',origin);
+    if(target.origin!==origin || !target.pathname.startsWith('/databases/'))return reject(res,400,'Invalid explorer request.');
+    const query=target.searchParams.get('sql');
+    const site=target.pathname.slice('/databases/'.length).split(/[/.]/)[0];
+    registry.prepare('INSERT INTO audit(actor,action,site,detail) VALUES(?,?,?,?)')
+      .run(req.operator.operator,query===null?'database browse':'database query',site,
+        query===null?target.pathname.slice(0,512):'SQL SHA-256 '+hash(query));
+    res.set('X-Hereme-Operator',req.operator.operator).status(204).end();
+  });
   app.get('/api/sites',async(req,res)=>{
     const items=await Promise.all(sites.map(async site=>({
       id:site.id,hostname:site.hostname,label:site.label,...readPolicy(site.policy),...await health(site)
     })));
     res.json({operator:req.operator.operator,csrf:req.operator.csrf,sites:items,
+      canExplore:explorerOperators.includes(req.operator.operator),
       audit:registry.prepare('SELECT time,actor,action,site,detail FROM audit ORDER BY id DESC LIMIT 20').all()});
   });
   app.get('/api/sites/:id/qr.svg',async(req,res,next)=>{
@@ -107,6 +120,7 @@ function loadSites(dir) {
 }
 if(require.main===module) {
   const registry=openRegistry('/var/lib/platform/registry.sqlite');
-  createPanel({registry,sites:loadSites('/etc/hereme-sites')}).listen(3100,'0.0.0.0');
+  const explorerOperators=(process.env.HEREME_EXPLORER_OPERATORS || '').split(',').map(name=>name.trim()).filter(Boolean);
+  createPanel({registry,sites:loadSites('/etc/hereme-sites'),explorerOperators}).listen(3100,'0.0.0.0');
 }
 module.exports={createPanel,siteHealth,loadSites};

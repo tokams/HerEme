@@ -86,6 +86,8 @@ def compose(release, stack, *args, capture=False):
     if stack == "edge" and (release / "development-ca.yaml").exists():
         files.append(str(release / "development-ca.yaml"))
     flags = [v for file in files for v in ("-f", base / file)]
+    if stack == "edge" and (release / "explorer-mounts.json").is_file():
+        flags.extend(["-f", release / "explorer-mounts.json"])
     return docker("compose", "--env-file", release / (stack + ".env"), *flags, *args, capture=capture)
 
 
@@ -273,8 +275,14 @@ def deploy(release, legacy, base, revision, prefix, development):
         path.mkdir(exist_ok=True)
     inventory = policies / "sites.json"
     sites = json.loads((release / "deploy/platform/sites.json").read_text())
-    require({s["id"]: s["hostname"] for s in sites} == {"main": MAIN, "community": COMMUNITY} and len(sites) == 2,
-            "The inventory must match the two configured HTTPS routes")
+    prior_ids = {s["id"] for s in json.loads(inventory.read_text())} if inventory.exists() else set()
+    require(all(re.fullmatch(r"[a-z][a-z0-9_-]*", s["id"]) and s["id"] != "platform"
+                and re.fullmatch(r"(?:[a-z0-9-]+\.)?hereme\.no", s["hostname"])
+                and s["hostname"] != ADMIN and isinstance(s["label"], str) for s in sites)
+            and len({s["hostname"] for s in sites}) == len(sites), "Invalid registered community")
+    registered = {s["id"]: s["hostname"] for s in sites}
+    require(registered.get("main") == MAIN and registered.get("community") == COMMUNITY
+            and len(registered) == len(sites), "Invalid managed site inventory")
     pending_inventory = policies / "sites.next"
     pending_inventory.write_text(json.dumps(sites) + "\n")
     pending_inventory.replace(inventory)
@@ -283,7 +291,7 @@ def deploy(release, legacy, base, revision, prefix, development):
         folder.mkdir(exist_ok=True)
         policy = folder / "policy.json"
         if not policy.exists():
-            require(not previous, "Missing active policy for " + spec["id"])
+            require(not previous or spec["id"] not in prior_ids, "Missing active policy for " + spec["id"])
             policy.write_text('{"registrationOpen":true}\n')
     staff_file = secrets / "tanteulrikkesvei-staff-credentials.txt"
     operator_file = secrets / "platform-operator.txt"
@@ -337,6 +345,18 @@ def deploy(release, legacy, base, revision, prefix, development):
         "TLS_POLICY": "development" if development else "production", "HTTP_BIND": "127.0.0.1:18081" if development else "0.0.0.0:80",
         "HTTPS_BIND": "127.0.0.1:18444" if development else "0.0.0.0:443", "EDGE_DATA_VOLUME": tls,
         "EDGE_CONFIG_VOLUME": config, "REGISTRY_DIR": registry, "POLICIES_DIR": policies})
+    mounts, volumes = [], {}
+    for site in sites:
+        key = site["id"]
+        require(re.fullmatch(r"[a-z][a-z0-9_-]*", key) and key != "platform", "Invalid explorer database ID")
+        volume = {"main": data, "community": secondary_data}.get(key, site.get("dataVolume"))
+        require(volume and re.fullmatch(r"[A-Za-z0-9_-]+", volume), f"Set registered dataVolume for {key}")
+        inspect("volume", volume)
+        alias = "source_" + key
+        volumes[alias] = {"external": True, "name": volume}
+        mounts.append(f"{alias}:/sources/{key}:ro")
+    (release / "explorer-mounts.json").write_text(json.dumps({
+        "services": {"projector": {"volumes": mounts}}, "volumes": volumes}))
     if development:
         (release / "development-ca.yaml").write_text(f"services:\n  platform:\n    environment:\n      NODE_EXTRA_CA_CERTS: /public-ca/root.crt\n    volumes:\n      - {state}/ca:/public-ca:ro\n")
         (state / "ca").mkdir(exist_ok=True)
@@ -376,7 +396,7 @@ def deploy(release, legacy, base, revision, prefix, development):
         if development:
             docker("cp", container(edge, "edge")["Id"] + ":/data/caddy/pki/authorities/local/root.crt", state / "ca/root.crt")
         for stack in ("main", "community", "edge"):
-            args = ["platform"] if stack == "edge" else []
+            args = ["platform", "explorer"] if stack == "edge" else []
             compose(release, stack, "up", "-d", "--force-recreate", "--wait", "--wait-timeout", "150", *args)
         for project in (main, community):
             verify_image(project, SERVICES, candidate)

@@ -3,7 +3,27 @@ admin.hereme.no {
 	request_body {
 		max_size 8KB
 	}
-	reverse_proxy platform:3100 {
-		header_up X-Hereme-Client {remote_host}
+	redir /databases /databases/ 308
+	respond /api/explorer-access 404
+	handle /databases/* {
+		@unsupported not method GET HEAD
+		respond @unsupported 405
+		forward_auth platform:3100 {
+			uri /api/explorer-access
+			copy_headers X-Hereme-Operator
+		}
+		header Cache-Control "no-store"
+		header Referrer-Policy "no-referrer"
+		header X-Frame-Options "DENY"
+		reverse_proxy explorer:8001 {
+			header_up -Cookie
+			header_up -Authorization
+			header_down -Set-Cookie
+		}
+	}
+	handle {
+		reverse_proxy platform:3100 {
+			header_up X-Hereme-Client {remote_host}
+		}
 	}
 }

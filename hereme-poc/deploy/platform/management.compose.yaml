@@ -3,6 +3,7 @@ services:
     volumes:
       - ./admin-route.caddy:/etc/hereme-extra/admin.caddy:ro
     networks:
+      explorer: {}
       management:
         aliases: ["hereme.no", "tanteulrikkesvei.hereme.no", "admin.hereme.no"]
   platform:
@@ -10,6 +11,8 @@ services:
     pull_policy: never
     restart: unless-stopped
     command: ["node","server/platform/index.js"]
+    environment:
+      HEREME_EXPLORER_OPERATORS: operator
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     networks: [management]
@@ -21,6 +24,56 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+  projector:
+    image: &datasette datasetteproject/datasette:0.65.6@sha256:c14364f56a9b595a03b079d46ccc03efbbd2ec57bed0f8e921bb7088384f560e
+    user: "1000:1000"
+    restart: unless-stopped
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: ["python", "/integration/projector.py"]
+    volumes:
+      - ./explorer/projector.py:/integration/projector.py:ro
+      - ${POLICIES_DIR:?}/sites.json:/config/sites.json:ro
+      - ${REGISTRY_DIR:?}:/sources/platform:ro
+      - explorer_views:/views
+    healthcheck:
+      test: ["CMD","python","-c","import socket;s=socket.socket(socket.AF_UNIX);s.connect('/views/refresh.sock')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  explorer:
+    image: *datasette
+    user: "1000:1000"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    networks: [explorer]
+    depends_on:
+      projector:
+        condition: service_healthy
+    command: ["python", "/plugins/explorer.py"]
+    tmpfs: [/tmp]
+    volumes:
+      - ./explorer/explorer.py:/plugins/explorer.py:ro
+      - ${POLICIES_DIR:?}/sites.json:/config/sites.json:ro
+      - explorer_views:/views:ro
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request;urllib.request.urlopen('http://localhost:8001/databases/-/versions.json').read()"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  explorer_views:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=128m,uid=1000,gid=1000,mode=0700
 networks:
+  explorer:
+    internal: true
   management:
     internal: true
