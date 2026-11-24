@@ -2,7 +2,9 @@
 
 ## Language preferences
 
-The UI supports Norwegian Bokmål (`nb`) and English (`en`). A guest choice is
+Community sites open in Norwegian Bokmål (`nb`) until the visitor chooses
+English (`en`). Guest account prompts open on **Opprett konto** (Create account).
+Returning users can select **Logg inn** to sign in directly. A guest language choice is
 stored in that browser. An authenticated choice is saved on the account through
 `PUT /api/me/language` with CSRF protection, then applied on other devices at
 the next load. Migration 19 adds nullable `users.preferred_language`; existing

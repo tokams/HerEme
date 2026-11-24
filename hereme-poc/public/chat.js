@@ -30,7 +30,7 @@
     else if(state.selection?.type==='chat'){const row=selectedRow();if(row)await updateConversation(row);}
   }
   async function api(url,{method='GET',body,signal}={}){
-    const headers={};if(method!=='GET')headers['x-csrf-token']=state.csrf;if(body!==undefined)headers['content-type']='application/json';
+    const headers={'accept-language':i18n().getLanguage()};if(method!=='GET')headers['x-csrf-token']=state.csrf;if(body!==undefined)headers['content-type']='application/json';
     const response=await fetch(url,{method,headers,signal,body:body===undefined?undefined:JSON.stringify(body)});
     const value=await response.json();if(!response.ok){const error=Error(value.error?.message||t('error.request_failed'));error.status=response.status;throw error;}return value;
   }
@@ -239,7 +239,7 @@
     const saved=await api('/api/chat-uploads/'+encodeURIComponent(item.id));let offset=saved.received;if(saved.status==='staged'){item.status='staged';renderStage();return;}
     $('#uploadProgress').hidden=false;$('#pauseUpload').hidden=false;state.pauseUpload=false;
     while(offset<item.file.size){if(state.pauseUpload){item.status=t('upload.paused_short');renderStage();throw Error(t('upload.paused'));}
-      const response=await fetch('/api/chat-uploads/'+encodeURIComponent(item.id),{method:'PATCH',headers:{'x-csrf-token':state.csrf,'x-upload-offset':String(offset)},body:item.file.slice(offset,offset+4*1024*1024)});
+      const response=await fetch('/api/chat-uploads/'+encodeURIComponent(item.id),{method:'PATCH',headers:{'accept-language':i18n().getLanguage(),'x-csrf-token':state.csrf,'x-upload-offset':String(offset)},body:item.file.slice(offset,offset+4*1024*1024)});
       const result=await response.json();if(!response.ok)throw Error(result.error?.message||t('error.upload_failed'));offset=result.received;
       $('#uploadProgress').value=Math.round(((index-1)+offset/item.file.size)/total*100);$('#uploadStatus').textContent=t('upload.progress',{index,total,offset,size:item.file.size});
     }
@@ -323,6 +323,6 @@
   }
   async function resolveRoute(){const match=/^\/chat\/([0-9a-f-]{36})$/i.exec(location.pathname);if(!match){resetConversation();const userId=location.pathname==='/chat'?new URLSearchParams(location.search).get('user'):null;if(userId){if(!/^[A-Za-z0-9_-]{1,100}$/.test(userId)){history.replaceState({},'', '/chat');return;}try{const person=await api(`/api/users/${encodeURIComponent(userId)}/public`);await chooseUser({id:person.public_id,name:person.username,avatar_url:person.avatar_url},{fromRoute:true});}catch(error){if(error.status!==404)throw error;history.replaceState({},'', '/chat');setNotice(t('error.user_not_found'));}}return;}const value=new URLSearchParams(location.search).get('message'),targetMessage=value&&/^\d+$/.test(value)?Number(value):null,row=state.chats.find(item=>item.id===match[1]);if(row)await openChat(row,{route:false,targetMessage:Number.isSafeInteger(targetMessage)?targetMessage:null});else{resetConversation();setNotice(t('error.no_access'));}}
   function historyChanged(){if($('#attachmentViewer').open&&state.viewerHistory){state.viewerHistory=false;$('#attachmentViewer').close();return;}run(resolveRoute)();}
-  async function init(){try{translateStatic();window.addEventListener('hereme:language',()=>run(languageChanged)());const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();await resolveRoute();connectSocket();window.addEventListener('popstate',historyChanged);setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}catch(error){if(error.status===401||/aktiv sesjon/i.test(error.message)){window.HeremeAuth.open({message:t('auth.required'),onSuccess:()=>location.reload(),onCancel:()=>location.assign('/')});return;}throw error;}}
+  async function init(){try{translateStatic();window.addEventListener('hereme:language',()=>run(languageChanged)());const me=await api('/api/me');state.me=me.user.id;state.csrf=me.csrf_token||decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});await refresh();await resolveRoute();connectSocket();window.addEventListener('popstate',historyChanged);setInterval(()=>run(async()=>{await api('/api/chat/presence',{method:'PUT',body:{visible:state.visible}});if(state.socket?.readyState!==WebSocket.OPEN)await refresh();})(),30000);}catch(error){if(error.status===401||/aktiv sesjon/i.test(error.message)){window.HeremeAuth.open({messageKey:'chat.auth.required',onSuccess:()=>location.reload(),onCancel:()=>location.assign('/')});return;}throw error;}}
   i18n().ready.then(()=>run(init)());
 })();

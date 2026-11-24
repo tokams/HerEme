@@ -2,9 +2,7 @@
 (()=>{
   const storageKey='hereme_language';
   const dictionaries={nb:{},en:{}};
-  const browserLanguage=()=>navigator.languages?.find(value=>/^(nb|nn|no|en)(-|$)/i.test(value))?.toLowerCase().startsWith('en')?'en':'nb';
-  let language=localStorage.getItem(storageKey)||browserLanguage();
-  if(!['nb','en'].includes(language))language='nb';
+  let language=localStorage.getItem(storageKey)==='en'?'en':'nb';
   document.documentElement.lang=language;
   const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const t=(key,params={})=>{

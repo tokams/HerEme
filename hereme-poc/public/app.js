@@ -13,7 +13,7 @@
     loadRequest:0,loadedFeedKey:null,feedRendered:false,renderedPostSignatures:new Map(),routeRequest:0,profileRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
   };
   async function api(url,{method='GET',body,form}={}) {
-    const headers={};
+    const headers={'accept-language':HeremeI18n.getLanguage()};
     if(state.legacyToken)headers.authorization='Bearer '+state.legacyToken;
     if(!['GET','HEAD'].includes(method)&&state.csrf)headers['x-csrf-token']=state.csrf;
     if(body!==undefined)headers['content-type']='application/json';
@@ -142,7 +142,7 @@
     const publicMatch=/^\/u\/([A-Za-z0-9_-]{1,100})$/.exec(route);
     if(publicMatch){if(state.modal)closeModal({fromRoute:true});try{const profile=await api(`/api/users/${publicMatch[1]}/public`);if(request!==state.routeRequest)return;publicProfileView(profile);}catch(error){if(request!==state.routeRequest)return;if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
     if(route==='/me'){
-      if(!state.user){openAuth(t('account.login_for_profile'),async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
+      if(!state.user){openAuth('wall.account.login_for_profile',async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
       await loadProfile();return;
     }
     if(route!=='/'){document.title=t('route.not_found_title');$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('route.not_found'))}</h1><button class="btn btn-primary" data-action="profile-wall">${E(t('route.to_wall'))}</button></section>`;return;}
@@ -226,7 +226,7 @@
     const links=`<p class="account-links"><a href="/rules.html">${E(t('account.rules'))}</a> · <a href="/privacy.html">${E(t('account.privacy'))}</a></p>`;
     const connection=state.meta?.addresses?`<details class="connection-details"><summary>${t('connection.open_mobile')}</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="${t('connection.qr_alt')}"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">${t('connection.copy')}</button></details>`:'';
     if(state.user){const staff=state.user.capabilities?.includes('staff:read')?`<button class="btn btn-primary" data-action="staff-panel">${E(t('account.staff'))}</button>`:'';return wrapper(t('account.your_profile'),`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">${E(t('account.logged_in_as'))}</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} ${HeremeIcons.icon('arrow-right')} ${E(t('account.my_profile'))}</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="notifications">${E(t('account.notifications'))}</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-danger" data-action="logout">${E(t('account.logout'))}</button></div>${connection}${links}`);}
-    return wrapper(t('account.account'),`<p>${E(t('account.login_or_create'))}</p><button class="btn btn-primary" data-action="auth-login">${E(t('account.login'))}</button><button class="btn btn-secondary" data-action="auth-register">${E(t('account.create'))}</button>${connection}${links}`);
+    return wrapper(t('account.account'),`<p>${E(t('account.login_or_create'))}</p><button class="btn btn-primary" data-action="auth-register">${E(t('account.create'))}</button><button class="btn btn-secondary" data-action="auth-login">${E(t('account.login'))}</button>${connection}${links}`);
   }
   const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error(t('staff.reason_required'));state.staffReason=value;return value;};
   const reportReasonLabel=value=>{const key={personal:'personal',Personopplysninger:'personal',harassment:'harassment',Trakassering:'harassment',illegal:'illegal','Ulovlig innhold':'illegal',spam:'spam','Spam / svindel':'spam',other:'other',Annet:'other'}[value];return key?t(`report.${key}`):value;};
@@ -282,7 +282,7 @@
   const pushKey=value=>{const padding='='.repeat((4-value.length%4)%4),raw=atob((value+padding).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,char=>char.charCodeAt(0));};
   async function enablePush(){const config=state.notificationData.config;if(!config.enabled)throw new Error(t('notifications.web_push_off'));const permission=await Notification.requestPermission();if(permission!=='granted'){await loadNotifications();renderModal();if(permission==='default')toast(t('notifications.permission_not_granted'));return;}const registration=await window.HeremePwa.ready;if(!registration)throw new Error(t('notifications.worker_failed'));let subscription=await registration.pushManager.getSubscription();if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushKey(config.public_key)});try{const result=await api('/api/push/subscriptions',{method:'POST',body:{subscription:subscription.toJSON(),device_label:navigator.userAgent.slice(0,80)}});localStorage.setItem('hereme_push_subscription_id',result.subscription.id);}catch(error){await subscription.unsubscribe();throw error;}await loadNotifications();renderModal();toast(t('notifications.device_on'));}
   async function disablePush(){const id=localStorage.getItem('hereme_push_subscription_id');if(id)await api('/api/push/subscriptions/'+encodeURIComponent(id),{method:'DELETE'});const registration=await window.HeremePwa.ready,subscription=await registration?.pushManager?.getSubscription();await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');await loadNotifications();renderModal();}
-  function openAuth(message,onSuccess,mode='login'){window.HeremeAuth.open({mode,message,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast(t('recovery.store_safely'));}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
+  function openAuth(messageKey,onSuccess,mode){window.HeremeAuth.open({mode,messageKey,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast(t('recovery.store_safely'));}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
   function requireUser(action) {
     if(state.user)return true;
     openAuth('',async()=>action?.());return false;
@@ -503,7 +503,7 @@
       throw new Error(t('design.processing'));
     }finally{state.articleUploading=false;if($('#publishButton'))$('#publishButton').disabled=false;}
   }
-  function sendVideoChunk(url,blob,start,end,total){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();state.videoXhr=xhr;xhr.open('PATCH',url);xhr.setRequestHeader('x-csrf-token',state.csrf);xhr.setRequestHeader('Content-Range',`bytes ${start}-${end-1}/${total}`);xhr.onload=()=>{let result={};try{result=JSON.parse(xhr.responseText||'{}');}catch{}if(xhr.status>=200&&xhr.status<300)resolve(result);else reject(new Error(result.error?.message||t('validation.video_upload_failed')));};xhr.onerror=()=>reject(new Error(t('validation.video_upload_retry')));xhr.onabort=()=>reject(new Error(t('validation.video_cancelled')));xhr.send(blob);});}
+  function sendVideoChunk(url,blob,start,end,total){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();state.videoXhr=xhr;xhr.open('PATCH',url);xhr.setRequestHeader('Accept-Language',HeremeI18n.getLanguage());xhr.setRequestHeader('x-csrf-token',state.csrf);xhr.setRequestHeader('Content-Range',`bytes ${start}-${end-1}/${total}`);xhr.onload=()=>{let result={};try{result=JSON.parse(xhr.responseText||'{}');}catch{}if(xhr.status>=200&&xhr.status<300)resolve(result);else reject(new Error(result.error?.message||t('validation.video_upload_failed')));};xhr.onerror=()=>reject(new Error(t('validation.video_upload_retry')));xhr.onabort=()=>reject(new Error(t('validation.video_cancelled')));xhr.send(blob);});}
   async function imageToBlob(image) {
     const ratio=Math.min(1,1600/Math.max(image.naturalWidth,image.naturalHeight));
     const canvas=document.createElement('canvas');
@@ -648,7 +648,7 @@
     if(action==='profile'){if(state.user)await navigate('/me');else openAuth('',async()=>{});return;}
     if(action==='profile-avatar-edit'){avatarEditor.open(state.profile.profile,target);return;}
     if(action==='my-profile'){closeModal({fromRoute:true});await navigate('/me');return;}
-    if(action==='auth-login'){closeModal({fromRoute:true});openAuth('',async()=>{});return;}
+    if(action==='auth-login'){closeModal({fromRoute:true});openAuth('',async()=>{},'login');return;}
     if(action==='auth-register'){closeModal({fromRoute:true});openAuth('',async()=>{},'register');return;}
     if(action==='register'){openAuth('',async()=>{},'register');return;}
     if(action==='profile-post'){await openDetail(id);return;}

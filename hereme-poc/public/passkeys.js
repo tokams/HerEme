@@ -2,7 +2,7 @@
 (()=>{
   const t=(key,params)=>window.HeremeI18n?.t(`misc.passkeys.${key}`,params)||key;
   const csrf=()=>decodeURIComponent(document.cookie.match(/(?:^|; )hereme_csrf=([^;]+)/)?.[1]||'');
-  async function request(url,body,method='POST'){if(method==='DELETE')body={...body,confirm_recovery:true};const response=await fetch(url,{method,headers:{'content-type':'application/json','x-csrf-token':csrf()},body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json();if(!response.ok)throw Error(data.error?.message||t('verify_failed'));return data;}
+  async function request(url,body,method='POST'){if(method==='DELETE')body={...body,confirm_recovery:true};const response=await fetch(url,{method,headers:{'accept-language':HeremeI18n.getLanguage(),'content-type':'application/json','x-csrf-token':csrf()},body:body===undefined?undefined:JSON.stringify(body)}),data=await response.json();if(!response.ok)throw Error(data.error?.message||t('verify_failed'));return data;}
   const decode=value=>Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),char=>char.charCodeAt(0));
   const encode=value=>btoa(String.fromCharCode(...new Uint8Array(value))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   function serialize(credential){const response=credential.response,result={id:credential.id,rawId:encode(credential.rawId),type:credential.type,clientExtensionResults:credential.getClientExtensionResults(),response:{clientDataJSON:encode(response.clientDataJSON)}};for(const key of ['attestationObject','authenticatorData','signature','userHandle'])if(response[key])result.response[key]=encode(response[key]);if(response.getTransports)result.response.transports=response.getTransports();return result;}
