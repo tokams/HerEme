@@ -1,6 +1,8 @@
 'use strict';
 (() => {
   const $=selector=>document.querySelector(selector);
+  const mobileWall=matchMedia('(max-width:760px)');
+  const compactHeader=matchMedia('(max-width:899px)');
   const E=HeremePoster.escape;
   const t=(key,params)=>window.HeremeI18n.t(`wall.${key}`,params);
   const csrfCookie=()=>document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf='))?.slice(12)?decodeURIComponent(document.cookie.split(';').map(value=>value.trim()).find(value=>value.startsWith('hereme_csrf=')).slice(12)):'';
@@ -29,7 +31,7 @@
     clearTimeout(state.toastTimer);state.toastTimer=setTimeout(()=>$('#toastRoot').innerHTML='',4000);
   }
   function updateAppViewport(){
-    const viewport=window.visualViewport,mobile=window.matchMedia('(max-width:760px)').matches;
+    const viewport=window.visualViewport,mobile=mobileWall.matches;
     if(mobile&&viewport&&viewport.scale<=1.01){document.documentElement.style.setProperty('--app-viewport-height',`${Math.round(viewport.height)}px`);document.documentElement.style.setProperty('--app-viewport-offset',`${Math.round(viewport.offsetTop)}px`);}
     else{document.documentElement.style.removeProperty('--app-viewport-height');document.documentElement.style.removeProperty('--app-viewport-offset');}
   }
@@ -37,6 +39,11 @@
     $('#categoryFilters').innerHTML=HeremeFeed.filters(state.categories);
     $('#simpleCategories').innerHTML=HeremeFeed.categoryButtons(state.categories);
     $('#filterCount').textContent=state.categories.length===5?'':state.categories.length;
+  }
+  function placeSortControl() {
+    const control=$('#sortSelect').closest('label');
+    if(compactHeader.matches)$('#leftPanel').prepend(control);
+    else $('.header-actions').before(control);
   }
   function renderPreferences() {
     const {layout,theme}=document.documentElement.dataset;
@@ -62,7 +69,8 @@
     const feed=$('#feed'),current=new Map([...feed.querySelectorAll(':scope > .post-card')].map(card=>[card.dataset.postId,card]));
     const signatures=new Map(),created=[];
     let anchor=feed.firstElementChild;
-    for(const post of state.posts){
+    const posts=mobileWall.matches?HeremeFeed.mobileWallOrder(state.posts):state.posts;
+    for(const post of posts){
       const id=String(post.id),signature=JSON.stringify(post);
       let card=current.get(id);
       if(!card||state.renderedPostSignatures.get(id)!==signature){
@@ -160,7 +168,11 @@
       const activityParams=new URLSearchParams({categories:state.categories.join(','),sort:state.sort,q:state.query,limit:'50'});if(state.selectedAreas.length)activityParams.set('areas',state.selectedAreas.join(','));
       const [response,activity]=await Promise.all([api('/api/posts?'+params),api('/api/activity?'+activityParams)]);
       if(request!==state.loadRequest)return;
-      state.posts=append?[...state.posts,...response.posts]:response.posts;state.nextCursor=response.next_cursor;state.activity=activity;state.loadedFeedKey=feedKey();
+      if(append){
+        const seen=new Set(state.posts.map(post=>post.id));
+        state.posts.push(...response.posts.filter(post=>!seen.has(post.id)));
+      }else state.posts=response.posts;
+      state.nextCursor=response.next_cursor;state.activity=activity;state.loadedFeedKey=feedKey();
     } catch(error) {if(request!==state.loadRequest)return;state.loadError=error.message;state.loadedFeedKey=feedKey();}
     $('#feed').setAttribute('aria-busy','false');if(render)renderWall();else state.feedRendered=false;
   }
@@ -756,6 +768,11 @@
     if(['postVideoInput','postVideoCameraInput'].includes(input.id))await loadVideo(input.files?.[0]);
   }
   async function init() {
+    placeSortControl();
+    compactHeader.addEventListener('change',placeSortControl);
+    mobileWall.addEventListener('change',()=>{
+      if(state.feedRendered&&state.posts.length&&!state.loadError)renderFeedCards();
+    });
     window.addEventListener('beforeunload',event=>{if(state.modal==='compose'&&state.postMode==='article'&&state.articleDirty){event.preventDefault();event.returnValue='';}});
     updateAppViewport();window.visualViewport?.addEventListener('resize',updateAppViewport);window.visualViewport?.addEventListener('scroll',updateAppViewport);window.addEventListener('resize',updateAppViewport);window.addEventListener('orientationchange',updateAppViewport);
     renderPreferences();

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-24 — Mobile wall spacing and mixed rows
+
+The two-column wall pairs posters and gives each article a full row under all three sorts. Articles can pass a waiting poster without jumping ahead of completed pairs. Mobile Simple mode has 2px gaps and retains the original card widths. The existing sort selector is available in the mobile filter panel.
+
+Hot pagination uses the first page’s timestamp to calculate post age on subsequent pages, preventing a boundary post from repeating as it ages.
+
 ## 2026-11-24 — Account menu flicker
 
 Removed an older modal animation that faded the burger menu back to transparent just as its opening transition finished. The menu now opens once, and refreshing an open panel no longer triggers that fade.

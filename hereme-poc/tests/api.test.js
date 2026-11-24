@@ -346,8 +346,12 @@ test('stable post, pagination, search, vote, comment depth and report contracts'
   assert.equal((await request('/api/posts/'+id+'/comments',{method:'POST',session:actor,body:{body:'for dypt',parent_id:parent}})).status,400);
   const search=await request('/api/posts?q='+encodeURIComponent('Unik søkbar')+'&limit=1');assert.equal(search.body.posts[0].id,id);
   for(let index=0;index<30;index++)await S.posts.create({title:'Sidepost '+index,type:'text',category:'story'},actor.user);
-  const first=await request('/api/posts?limit=10');assert.equal(first.body.posts.length,10);assert.ok(first.body.next_cursor);
-  const second=await request('/api/posts?limit=10&cursor='+encodeURIComponent(first.body.next_cursor));assert.equal(second.body.posts.length,10);assert.equal(new Set([...first.body.posts,...second.body.posts].map(post=>post.id)).size,20);
+  for(const sort of ['new','top','hot']){
+    const route='/api/posts?q=Sidepost&limit=10&sort='+sort;
+    const first=await request(route);assert.equal(first.body.posts.length,10);assert.ok(first.body.next_cursor);
+    const second=await request(route+'&cursor='+encodeURIComponent(first.body.next_cursor));assert.equal(second.body.posts.length,10);
+    assert.equal(new Set([...first.body.posts,...second.body.posts].map(post=>post.id)).size,20,sort+' pages must not overlap');
+  }
   const people=[await profile('ReporterOne'),await profile('ReporterTwo')];for(const person of [actor,...people])assert.equal((await request('/api/posts/'+id+'/report',{method:'POST',session:person,body:{reason:'Annet'}})).status,201);
   assert.equal(S.db.prepare('select status from posts where id=?').get(id).status,'review');
   const local={id:'local-operator',capabilities:['moderate']};S.moderation.act(local,id,'publish','reviewed locally');assert.equal(S.db.prepare('select status from posts where id=?').get(id).status,'published');assert.ok(S.db.prepare("select id from audit_events where action='moderation.publish' and subject_id=?").get(String(id)));

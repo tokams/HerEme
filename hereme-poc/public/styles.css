@@ -363,7 +363,8 @@ details summary { min-height:44px; display:list-item; padding:12px 0; font-size:
   .poster-wall { columns:3; }
   .masthead-inner { gap:10px; }
   .header-search { max-width:230px; }
-  .sort-control { display:none; }
+  .masthead .sort-control { display:none; }
+  .left-panel .sort-control { width:fit-content; margin-bottom:12px; }
 }
 @media(max-width:699px) {
   .modal-open { overflow:visible; }
@@ -589,7 +590,18 @@ body,input,button,textarea,select{font-family:var(--font-reading)}
 .poster-media-expand{display:inline-flex;align-items:center;gap:7px;min-height:44px;margin:8px;padding:8px 10px;border:1px solid var(--muted);background:var(--panel2);color:var(--ink)}
 .poster-media-expand .icon{width:18px;height:18px}.poster-media-viewer img{width:auto;height:auto;max-width:100%;max-height:75dvh}
 @media(min-width:1700px){.poster-wall,[data-layout=simple] .poster-wall{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(max-width:760px){.poster-wall,[data-layout=simple] .poster-wall{grid-template-columns:repeat(2,minmax(0,1fr))}.article-open{min-height:215px}.article-summary{gap:6px;padding:12px}.article-summary strong{font-size:22px}.article-summary>span{font-size:12px}.article-summary b{font-size:10px}.article-hero{min-height:280px}.article-hero>div{padding:18px}.article-reader{padding:16px}}
+@media(max-width:760px){
+  .poster-wall,[data-layout=simple] .poster-wall { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  [data-layout=simple] .poster-wall { row-gap:2px; }
+  /* Bring each poster 4px into the 10px gutter while keeping both column widths. */
+  [data-layout=simple] .poster-wall > .post-card:not(.article-card) { margin-inline:4px -4px; }
+  [data-layout=simple] .poster-wall > :nth-child(even of .post-card:not(.article-card)) { margin-inline:-4px 4px; }
+  .poster-wall > .post-card:not(.article-card) { display:grid; grid-template-rows:auto 1fr auto; align-self:stretch; }
+  .poster-wall > .post-card:not(.article-card) > .tile-open { display:grid; }
+  .poster-wall .poster-surface { align-self:stretch; }
+  .poster-wall > .load-more { grid-column-start:1; }
+  .article-open{min-height:215px}.article-summary{gap:6px;padding:12px}.article-summary strong{font-size:22px}.article-summary>span{font-size:12px}.article-summary b{font-size:10px}.article-hero{min-height:280px}.article-hero>div{padding:18px}.article-reader{padding:16px}
+}
 
 /* E20 refinement: compact, accessible composer and shared article preview. */
 .design-composer .compose-fields{gap:14px}

@@ -41,14 +41,22 @@ function createPostService(db,{media,audit,articles,config={}}={}){
     if(areas!==undefined){if(!config.enableLocations)fail('LOCATIONS_DISABLED','Områder er ikke aktivert.',404);const chosen=String(areas).split(',').filter(Boolean);if(chosen.length){const placeholders=chosen.map(()=>'?').join(',');if(db.prepare(`SELECT count(*) n FROM areas WHERE active=1 AND id IN (${placeholders})`).get(...chosen).n!==chosen.length)fail('INVALID_AREAS','Ugyldig områdeutvalg.');where.push(`(pa.area_id IN (${placeholders}) OR pa.area_id IS NULL)`);params.push(...chosen);}}
     if(q){const terms=q.match(/[\p{L}\p{N}]+/gu)?.slice(0,8)||[];if(!terms.length)return {posts:[],next_cursor:null,has_more:false};where.push('p.id IN (SELECT rowid FROM post_search WHERE post_search MATCH ?)');params.push(terms.map(term=>`"${term.replaceAll('"','""')}"*`).join(' AND '));}
     const score='p.base_score+COALESCE((SELECT sum(v.value) FROM votes v WHERE v.post_id=p.id),0)';
-    const key=sort==='new'?'julianday(p.created_at)':sort==='top'?score:`(max(${score},0)+1.0)/(2.0+max((julianday('now')-julianday(p.created_at))*24.0,0))`;
-    if(cursor){const point=decode(cursor);if(point.sort!==sort)fail('INVALID_CURSOR','Sidepekeren tilhører en annen sortering.');where.push(`(${key}<? OR (${key}=? AND (p.created_at<? OR (p.created_at=? AND abs(p.id)<?))))`);params.push(point.key,point.key,point.time,point.time,point.id);}
+    const point=cursor?decode(cursor):null;
+    if(cursor&&point?.sort!==sort)fail('INVALID_CURSOR','Sidepekeren tilhører en annen sortering.');
+    // Age every page of a Hot feed at the same instant as its cursor boundary.
+    const rankedAt=point?.rankedAt??Date.now();
+    if(sort==='hot'){
+      if(!Number.isSafeInteger(rankedAt))fail('INVALID_CURSOR','Ugyldig sidepeker.');
+      params.unshift({rankedAt});
+    }
+    const key=sort==='new'?'julianday(p.created_at)':sort==='top'?score:`(max(${score},0)+1.0)/(2.0+max((julianday(:rankedAt/1000.0,'unixepoch')-julianday(p.created_at))*24.0,0))`;
+    if(point){where.push(`(${key}<? OR (${key}=? AND (p.created_at<? OR (p.created_at=? AND abs(p.id)<?))))`);params.push(point.key,point.key,point.time,point.time,point.id);}
     const rows=db.prepare(`${projection},${key} page_key ${joins} WHERE ${where.join(' AND ')}
       ORDER BY page_key DESC,p.created_at DESC,abs(p.id) DESC LIMIT ?`).all(...params,limit+1);
     const hasMore=rows.length>limit;if(hasMore)rows.pop();
     const votes=userId&&rows.length?new Map(db.prepare(`SELECT post_id,value FROM votes WHERE user_id=? AND post_id IN (${rows.map(()=>'?').join(',')})`).all(userId,...rows.map(r=>r.id)).map(r=>[r.post_id,r.value])):new Map();
     const posts=rows.map(row=>publicPost(row,votes.get(row.id)||0)),last=rows.at(-1);
-    return {posts,has_more:hasMore,next_cursor:hasMore?encode({sort,key:last.page_key,time:last.created_at,id:Math.abs(last.id)}):null};
+    return {posts,has_more:hasMore,next_cursor:hasMore?encode({sort,key:last.page_key,time:last.created_at,id:Math.abs(last.id),rankedAt:sort==='hot'?rankedAt:undefined}):null};
   }
   async function create(input,user,file){
     const modern=input.format==='poster',body=modern?V.text(input.body,{name:'Plakattekst',min:3,max:3000}):V.optionalText(input.body,{name:'Innlegg',max:3000});

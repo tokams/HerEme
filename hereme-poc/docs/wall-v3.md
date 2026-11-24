@@ -23,11 +23,14 @@ these are display preferences, not server-owned post state. Preferences load
 before the stylesheet to avoid a flash of the other layout/theme.
 
 At widths below 1280px the Advanced right panel disappears. Below 900px desktop
-mode controls disappear and categories collapse behind the filter control.
-Below 700px the wall has two columns, no side panels/search/toolbar, a compact
-header and full-screen detail. Below 359px it uses one column. Mobile has touching
-tiles regardless of the saved desktop layout. Desktop detail stays a wide focused
-overlay with poster and discussion side by side.
+mode controls disappear. Categories and the sort selector are available in the filter panel.
+At 760px and below, each wall row holds one article or two posters. An article
+can pass a single waiting poster. As soon as the next poster arrives, the pair
+takes the next row. A final unpaired poster stays half-width and can pair with a
+poster from the next page. This applies to Newest, Hot and Top. Simple mode
+uses 2px gaps between cards on mobile, and Advanced mode keeps its edge-to-edge cards.
+Below 700px the header is compact and post detail opens full-screen. Desktop detail
+shows the poster and discussion side by side.
 
 ## Shared poster system
 

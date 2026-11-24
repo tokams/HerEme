@@ -36,6 +36,22 @@
     const t=Themes.get(p.category);
     return `<div class="tile-header"><span class="category-name">${icon(t.id)}${E(t.label)}</span><time datetime="${E(p.created_at.replace(' ','T'))}Z">${ago(p.created_at)}</time></div>`;
   }
+  function mobileWallOrder(posts) {
+    const ordered = [];
+    let unpaired = null;
+    for (const post of posts) {
+      if (post.content_format === 'article') {
+        ordered.push(post);
+      } else if (unpaired) {
+        ordered.push(unpaired, post);
+        unpaired = null;
+      } else {
+        unpaired = post;
+      }
+    }
+    if (unpaired) ordered.push(unpaired);
+    return ordered;
+  }
   function card(p) {
     if(p.content_format==='article')return `<article class="post-card article-card theme-${p.category}" data-post-id="${p.id}" data-category="${p.category}">${header(p)}<button class="tile-open article-open" data-action="detail" data-id="${p.id}" aria-label="${E(t('post.open',{title:p.title}))}"><span class="article-cover">${Poster.image(p.image_url)?`<img src="${E(Poster.image(p.image_url))}" alt="" loading="lazy">`:''}</span><span class="article-summary"><small>${E(t('article.label'))}</small><strong>${E(p.title)}</strong><span>${E(p.article_abstract||p.body)}</span><b>${E(t('article.read'))} ${icon('arrow-right')}</b></span></button>${controls(p)}</article>`;
     return `<article class="post-card theme-${p.category} ${Poster.image(p.image_url)?'is-photo':'is-text'}" data-post-id="${p.id}" data-category="${p.category}">${header(p)}
@@ -48,6 +64,6 @@
   function categoryButtons(selected) {
     return Themes.themes.map(theme=>{const localized=Themes.get(theme.id);return `<button class="category-button theme-${theme.id}" data-action="category" data-category="${theme.id}" aria-pressed="${selected.includes(theme.id)}" title="${E(localized.description)}">${icon(theme.id)}<span>${E(localized.label)}</span></button>`;}).join('');
   }
-  const api={card,header,controls,updateVotes,filters,categoryButtons,ago,demo,escape:E,image:Poster.image};
+  const api={card,header,controls,updateVotes,filters,categoryButtons,mobileWallOrder,ago,demo,escape:E,image:Poster.image};
   if(node)module.exports=api;else root.HeremeFeed=api;
 })(globalThis);
