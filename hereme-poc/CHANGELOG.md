@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Deployment DNS preflight
+
+Removed the Cloudflare DNS lookup from the online deployment command. The plan prints locally. Deployment verifies both communities and the platform panel over HTTPS.
+
 ## 2026-11-24 — Managed communities and operator panel
 
 The online deploy command now migrates the observed legacy Docker project and rolls out one immutable release to two independent communities. Both have local staff panels. A separate operator MFA session provides live site status, release identity and audited registration controls at `admin.hereme.no`. Added verified snapshots, candidate checks on private copies, per-project recovery and a disposable Docker/browser deployment rehearsal. The confirmed additional hostname is `tanteulrikkesvei.hereme.no`. Follow the [deployment runbook](docs/runbooks/multi-instance.md).

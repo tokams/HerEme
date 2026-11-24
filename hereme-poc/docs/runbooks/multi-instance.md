@@ -6,14 +6,14 @@ Run from `hereme-poc`. Use a development Linux Docker engine (Docker Desktop in 
 
 Use a maintenance window for the first cutover. The active Docker project on the host is `docker`. Its main SQLite/media, private Git archive, TLS data and Caddy config volumes must be present. The script requires the existing SSH key, pinned SSH host key, a reviewed clean Git commit, Linux Docker Compose, Python 3.9+ and the deployment account with UID 1000. Allow disk space for retained backups, the build and a temporary copy of the largest site. Keep a verified off-host copy of the private deployment data.
 
-Set Uniweb A records for the apex, `tanteulrikkesvei` and `admin` to `46.251.249.110`. Keep the existing `www` CNAME. All four names must resolve at Cloudflare's resolver. From `hereme-poc/deploy` run:
+Set Uniweb A records for the apex, `tanteulrikkesvei` and `admin` to `46.251.249.110`. Keep the existing `www` CNAME. Run these commands from `hereme-poc/deploy`.
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy-online.ps1 -Plan
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\deploy-online.ps1
 ```
 
-The first command checks DNS. The second transfers the committed application tree over SSH, checks its SHA-256, builds or reuses the image for that commit and validates the gateway. On first cutover it stops the old writers, snapshots and verifies each site's SQLite and durable media, archives private Git content and starts the candidate on a disposable copy. The live main volumes and signing keys stay in place. The new site's independent staff accounts, keys and registry are provisioned before its public route opens. The operator receives both local staff panels plus a separate panel at `https://admin.hereme.no/`. The Windows command also verifies TLS, origin and release from the client network.
+The first command prints the deployment plan locally. The second transfers the committed application tree over SSH, checks its SHA-256, builds or reuses the image for that commit and validates the gateway. On first cutover it stops the old writers, snapshots and verifies each site's SQLite and durable media, archives private Git content and starts the candidate on a disposable copy. The live main volumes and signing keys stay in place. The new site's independent staff accounts, keys and registry are provisioned before its public route opens. The operator receives both local staff panels plus a separate panel at `https://admin.hereme.no/`. The Windows command also verifies TLS, origin and release from the client network.
 
 After the first release the deployer backs up and updates main, then the additional community, checking readiness and image IDs at each step. Each site has a brief maintenance interval. Updating the shared edge briefly affects both routes. The SSH-side release lock serializes operators. A failed site update stops progression and restarts that site's previous compatible release on its existing volume. A completed site's release is recorded separately. The current rollout supports schema 23 and checks candidate startup on copies before activation.
 

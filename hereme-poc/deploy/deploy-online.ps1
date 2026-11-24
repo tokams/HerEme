@@ -12,19 +12,10 @@ if ($HostName -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -or $UserName -notmatch '^[a-z
     $RemoteDirectory -notmatch '^(/[A-Za-z0-9_-]+)+$') { throw 'Invalid SSH address, account or legacy deployment path.' }
 $platform = "$RemoteDirectory-platform"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$hostsToCheck = @('hereme.no','www.hereme.no','tanteulrikkesvei.hereme.no','admin.hereme.no')
-if (-not $CredentialsOnly) {
-    foreach ($site in $hostsToCheck) {
-        try {
-            $ipv4 = @(Resolve-DnsName $site -Type A -Server 1.1.1.1 -DnsOnly -ErrorAction Stop |
-                Where-Object { $_.Type -eq 'A' } | ForEach-Object { $_.IPAddress })
-        } catch { throw "DNS preflight failed for $site. Expected A record $HostName. $($_.Exception.Message)" }
-        if (-not $ipv4 -or @($ipv4 | Where-Object { $_ -ne $HostName }).Count) { throw "Set the A record for $site to $HostName before deployment." }
-        $ipv6 = @(Resolve-DnsName $site -Type AAAA -Server 1.1.1.1 -DnsOnly -ErrorAction Stop | Where-Object { $_.Type -eq 'AAAA' })
-        if ($ipv6.Count) { throw "Unexpected IPv6 record for $site. Verify the target before cutover." }
-    }
+if ($Plan) {
+    Write-Output "Deploy the committed release to hereme.no, tanteulrikkesvei.hereme.no and admin.hereme.no. Preserve the main site's data, Git and certificate volumes. Retain backups under $platform and verify the deployed sites over HTTPS."
+    return
 }
-if ($Plan) { Write-Output "DNS preflight passed. A committed release will run both communities and admin.hereme.no. Main keeps its existing data, Git and certificate volumes. Private verified backups and previous releases are retained under $platform."; return }
 $connection = "$UserName@$HostName"
 $identity = (Resolve-Path $IdentityFile).Path
 $options = @('-i',$identity,'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','UpdateHostKeys=no')

@@ -110,7 +110,7 @@ cleanup eventually fails `/api/ready`.
 
 On Windows PowerShell, after reviewing and committing a clean release, run
 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy/deploy-online.ps1`
-from `hereme-poc`. It verifies DNS, uses strict SSH host-key checking and packages the committed tree. The first release preserves the observed legacy volumes. Later releases update one site at a time and retain a per-project release pointer. Read the platform runbook for credential retrieval, backups and recovery after a failed update.
+from `hereme-poc`. It packages the committed tree, uses strict SSH host-key checking and verifies the released sites over HTTPS. The first release preserves the observed legacy volumes. Later releases update one site at a time and retain a per-project release pointer. Read the platform runbook for credential retrieval, backups and recovery after a failed update.
 
 Use a supported Linux VM with Node 24+, Caddy, SQLite-compatible local storage
 and enough disk for retained originals plus derivatives. Create DNS only for a

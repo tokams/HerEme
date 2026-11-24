@@ -39,11 +39,11 @@ Removed the uncommitted configure-tante-env.js, its implementation-specific test
 
 ## Operator release handoff
 
-The active branch is `feature/tanteulerikkesvei`. The DNS name selected by the operator is `tanteulrikkesvei.hereme.no`. The production SSH account is UID 1000, the same UID as the Node containers. On November 24 the legacy project had one administrator and two moderator role assignments. Cloudflare resolved the two community names to `46.251.249.110`. The separate `admin` A record was outstanding during preparation.
+The active branch is `feature/tanteulerikkesvei`. The DNS name selected by the operator is `tanteulrikkesvei.hereme.no`. The production SSH account is UID 1000, the same UID as the Node containers. On November 24 the legacy project had one administrator and two moderator role assignments. Cloudflare resolved the two community names to `46.251.249.110`. Both authoritative nameservers subsequently confirmed the panel A record. The operator removed the Cloudflare preflight after its cached answer delayed deployment.
 
 | Files | Implemented responsibility |
 |---|---|
-| `deploy/deploy-online.ps1`, `deploy/platform/release.py`, `scripts/verify-release-clone.js` | DNS and clean-revision checks, checked SSH transfer, immutable image, provisioned credentials, per-site snapshots, clone and schema checks, ordered releases, code-only recovery and credential retrieval. |
+| `deploy/deploy-online.ps1`, `deploy/platform/release.py`, `scripts/verify-release-clone.js` | Clean-revision check, verified SSH transfer, immutable image, provisioned credentials, per-site snapshots, clone and schema checks, ordered releases, code-only recovery and credential retrieval. |
 | `deploy/platform/{sites.json,management.compose.yaml,policy.compose.yaml,admin-route.caddy,edge/Caddyfile}` | Two-site inventory, exact public routes, isolated operator service and separate registration policy mounts. |
 | `server/platform/{index.js,operator.js,policy.js,web/}`, `server/index.js`, `server/error-localization.js` | Separate operator auth with TOTP and host-only sessions, live readiness and revision, audited registration changes, backend enforcement, localized errors and readiness of the local policy. |
 | `deploy/platform/test-deployment.cjs`, `deploy/platform/tests/`, `tests/support/instance-contract.cjs`, `tests/platform-operator.test.js` | Real Docker cutover from commit 0a93b6c with disposable accounts and a pre-cutover post, browser sign-in/toggles, authenticator vectors and throttling, failure recovery, repeat release and durable isolation. |
