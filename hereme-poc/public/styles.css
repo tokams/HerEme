@@ -173,6 +173,14 @@ main { min-width:0; }
 .activity-totals { font-size:10px; color:var(--accent); border-top:1px solid #39413b; padding-top:16px; }
 .activity-totals span { color:var(--muted); }
 .empty-state { column-span:all; padding:45px 20px; text-align:center; }
+.poster-wall > .empty-state {
+  grid-column:1 / -1;
+  width:100%;
+  min-height:min(42dvh,420px);
+  display:grid;
+  align-content:center;
+  justify-items:center;
+}
 .load-more { column-span:all; width:calc(100% - 24px); margin:18px 12px; }
 .recovery-key { width:100%; min-width:0; padding:16px; border:2px solid var(--accent); background:var(--panel2); font-size:15px; }
 .credential-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:stretch; }

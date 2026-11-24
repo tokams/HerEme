@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Centered empty wall
+
+The empty wall message and its action now span the complete wall grid and remain centered on mobile and desktop. Poster and article widths are unchanged.
+
 ## 2026-11-24 — Mobile wall spacing and mixed rows
 
 The two-column wall pairs posters and gives each article a full row under all three sorts. Articles can pass a waiting poster without jumping ahead of completed pairs. Mobile Simple mode has 2px gaps and retains the original card widths. The existing sort selector is available in the mobile filter panel.

@@ -186,6 +186,17 @@ async function publish(page,title) {
   for(const input of await page.locator('#categoryFilters input').all())await input.uncheck();
   await settleWall(page);assert.equal(await page.locator('.post-card').count(),0);
   await page.getByText('Ingen kategorier valgt',{exact:true}).waitFor();
+  for(const width of [1440,390]){
+    await page.setViewportSize({width,height:844});
+    const emptyGeometry=await page.locator('#feed > .empty-state').evaluate(element=>{
+      const wall=element.parentElement.getBoundingClientRect(),empty=element.getBoundingClientRect(),button=element.querySelector('button').getBoundingClientRect();
+      return {wallCenter:wall.left+wall.width/2,emptyCenter:empty.left+empty.width/2,buttonCenter:button.left+button.width/2,emptyWidth:empty.width,wallWidth:wall.width};
+    });
+    assert.ok(Math.abs(emptyGeometry.emptyCenter-emptyGeometry.wallCenter)<1,'Empty state is centered in the wall.');
+    assert.ok(Math.abs(emptyGeometry.buttonCenter-emptyGeometry.wallCenter)<1,'Empty-state action is centered in the wall.');
+    assert.ok(Math.abs(emptyGeometry.emptyWidth-emptyGeometry.wallWidth)<1,'Empty state spans the wall.');
+  }
+  await page.setViewportSize({width:1440,height:1000});
   for(const category of ['question','alert'])await page.locator('#categoryFilters input[value="'+category+'"]').check();
   await settleWall(page);
   const categories=await page.locator('.post-card').evaluateAll(posts=>posts.map(p=>p.dataset.category));
