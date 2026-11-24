@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Early legal release preflight
+
+The first production attempt for SEC-01 stopped before image build or data cutover because the private per-instance `state/legal.json` was absent. The deployment script now checks for that file before transfer and reports the missing reviewed contact and processor settings directly. The previous release remains active. No legal values were invented or installed.
+
 ## 2026-11-24 — SEC-01 security events and legal transparency
 
 The shared community application now records thirteen fixed security event types in paired, instance-local structured and allowlisted raw SQLite tables. A local operator-only, audited staff view supports bounded searches and incident inspection. Authentication and restrictions write their security facts atomically; repeated rate-limit rejections are bounded per limiter window. Migration 24 preserves the former log as `security_events_legacy`.
