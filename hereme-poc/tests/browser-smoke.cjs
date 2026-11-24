@@ -168,8 +168,8 @@ async function publish(page,title) {
   // A new poster has text, category and optional media, without a separate title.
   await page.locator('.post-card img').first().evaluate(image=>window.__composeWallImage=image);
   await page.locator('.create-button').click();
-  assert.equal(await page.locator('[data-auth-form=login] input[name=name]').getAttribute('autocomplete'),'username');
-  await page.locator('[data-auth-mode=register]').click();
+  assert.equal(await page.getByRole('tab',{selected:true}).textContent(),'Opprett konto');
+  assert.equal(await page.locator('[data-auth-form=register] input[name=name]').getAttribute('autocomplete'),'username');
   await page.locator('[data-auth-form=register] input[name=name]').fill('VeggTester');
   await page.locator('[data-auth-form=register] button').click();
   const recovery=await page.locator('.auth-recovery input[name=password]').inputValue();assert.ok(recovery.length>=20);

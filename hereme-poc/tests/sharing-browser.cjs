@@ -11,6 +11,8 @@ const app=require('../server/index'),S=require('../server/services');
     browser=await chromium.launch({headless:true});
     const alice=await browser.newContext({viewport:{width:390,height:844},locale:'en-US'}),bob=await browser.newContext({viewport:{width:390,height:844},locale:'en-US'});
     const a=await alice.request.post(base+'/api/session',{data:{name:'ShareAlice'}}).then(r=>r.json()),b=await bob.request.post(base+'/api/session',{data:{name:'ShareBob'}}).then(r=>r.json());
+    const language=await bob.request.put(base+'/api/me/language',{headers:{'x-csrf-token':b.csrf_token},data:{preferred_language:'en'}});
+    assert.equal(language.status(),200);
     const post=await alice.request.post(base+'/api/articles',{headers:{'x-csrf-token':a.csrf_token},data:{title:'Sharing browser article',abstract:'A neighborhood update with context.',category:'story',chapters:[{heading:'Local news',markdown:'An article for the neighborhood.'}]}}).then(r=>r.json());
     const comment=await alice.request.post(base+`/api/posts/${post.id}/comments`,{headers:{'x-csrf-token':a.csrf_token},data:{body:'An author reply'}}).then(r=>r.json());
     const page=await bob.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));await page.goto(base+'/');
