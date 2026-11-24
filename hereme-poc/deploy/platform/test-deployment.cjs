@@ -36,6 +36,9 @@ async function browserPanel(credentials, code) {
     await page.getByRole('button',{name:'Sign in',exact:true}).click();
     await page.getByRole('heading',{name:'Communities'}).waitFor();
     const card=page.locator('article').filter({hasText:'Tante Ulrikkes vei'});
+    const qr=card.locator('img[alt="QR code for tanteulrikkesvei.hereme.no"]');
+    await qr.waitFor();
+    assert.equal(await qr.getAttribute('src'),'/api/sites/community/qr.svg');
     await card.getByRole('button',{name:'Close registration'}).waitFor();
     page.on('dialog',dialog=>dialog.accept());
     await card.getByRole('button',{name:'Close registration'}).click();

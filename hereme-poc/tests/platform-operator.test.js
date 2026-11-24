@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {openRegistry, login, totp} = require('../server/platform/operator');
+const qr = require('../server/qr');
 
 test('operator authenticator uses six-digit SHA-1 TOTP with big-endian time steps', () => {
   const secret = Buffer.from('12345678901234567890');
@@ -19,4 +20,13 @@ test('operator login throttling is scoped to the gateway peer and expires', () =
     assert.equal(login(registry,'peer-a',fields,301001),null);
     assert.equal(login(registry,'peer-a',null),null);
   } finally {registry.close();}
+});
+
+test('community QR codes encode the public HTTPS destination', async () => {
+  const main = await qr.toString('https://hereme.no/', {type:'svg', margin:2});
+  const community = await qr.toString('https://tanteulrikkesvei.hereme.no/', {type:'svg', margin:2});
+  assert.match(main, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+  assert.match(community, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+  assert.notEqual(main, community);
+  assert.equal(qr.matrix('https://hereme.no/').length, 29);
 });

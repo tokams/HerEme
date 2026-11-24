@@ -23,6 +23,7 @@ The candidate verifies the entire snapshot manifest on a private copy before sta
 
 - Use the existing main administrator and moderator logins on `https://hereme.no/`. For `https://tanteulrikkesvei.hereme.no/`, use the new `HerEmeAdmin` or `HerEmeModerator` from the repository-root `secrets/tanteulrikkesvei-staff-credentials.txt`. Open the staff panel from the signed-in account menu.
 - At `https://admin.hereme.no/`, use `secrets/platform-operator.txt` and enter its setup key into your authenticator as a time-based six-digit SHA-1 account. Protect these files as credentials. If SSH succeeded and the download was interrupted, rerun the Windows command with `-CredentialsOnly`. A conflicting local credential file requires operator review.
+- Each community card in the platform panel includes a QR code for its public HTTPS homepage. Scan the code with a phone camera to open that community directly. The QR endpoint requires the platform operator session.
 - Confirm both communities show **Ready** and the expected release. Close registration for the additional site, check a signed-out registration there and check an existing sign-in. Main should still accept registrations. Reopen the site and verify the audit entry. The panel's Refresh status button performs a fresh probe.
 - Check an existing main account, post URL, original image, chat, notification tap and passkey on a real device. Use two disposable accounts to check the additional site. Record public certificate issuance, device delivery and the first 24 hours of worker/queue health.
 

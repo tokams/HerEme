@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Community QR links
+
+Added authenticated QR endpoints and panel cards for each managed community. Codes open the corresponding HTTPS homepage and are available on mobile and desktop layouts.
+
 ## 2026-11-24 — Verify snapshots across article upload expiry
 
 The release verifier checks every file on a fresh snapshot copy before candidate startup. After startup it checks the original hashes again, allowing removal of the recorded files of an expired, unclaimed article upload. Drafts, posts and revision history retain their media. The failed main cutover was traced to one abandoned upload on the retained snapshot.

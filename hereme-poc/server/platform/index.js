@@ -2,6 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const web=require('../mini-web');
+const qrcode=require('../qr');
 const {openRegistry,login,hash}=require('./operator');
 const {readPolicy,writePolicy}=require('./policy');
 
@@ -48,6 +49,14 @@ function createPanel({registry,sites,origin='https://admin.hereme.no',health=sit
     })));
     res.json({operator:req.operator.operator,csrf:req.operator.csrf,sites:items,
       audit:registry.prepare('SELECT time,actor,action,site,detail FROM audit ORDER BY id DESC LIMIT 20').all()});
+  });
+  app.get('/api/sites/:id/qr.svg',async(req,res,next)=>{
+    const site=sites.find(item=>item.id===req.params.id);
+    if(!site)return reject(res,404,'Unknown community.');
+    try {
+      const svg=await qrcode.toString('https://'+site.hostname,{type:'svg',margin:2});
+      res.set('Content-Type','image/svg+xml; charset=utf-8').set('Content-Disposition','inline').send(svg);
+    } catch(error) { next(error); }
   });
   app.post('/api/sites/:id/registration',(req,res)=>{
     const site=sites.find(s=>s.id===req.params.id);

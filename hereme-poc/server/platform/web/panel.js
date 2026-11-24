@@ -41,9 +41,15 @@ function siteCard(site) {
   const card = document.createElement('article');
   const link = element('a',site.hostname);
   link.href = 'https://' + site.hostname + '/';
+  const qr = document.createElement('img');
+  qr.src = '/api/sites/' + encodeURIComponent(site.id) + '/qr.svg';
+  qr.alt = 'QR code for ' + site.hostname;
+  qr.width = 145;
+  qr.height = 145;
+  qr.loading = 'lazy';
   const status = [site.ready ? 'Ready' : 'Unavailable', new Date(site.checked).toLocaleString(), site.problem];
   if (site.release) status.push('Release ' + site.release.slice(0,12));
-  card.append(element('h2',site.label),link,element('p',status.filter(Boolean).join(' · ')));
+  card.append(element('h2',site.label),link,element('p',status.filter(Boolean).join(' · ')),qr);
   card.append(element('p','New registrations: ' + (site.registrationOpen ? 'Open' : 'Closed')));
   const toggle = element('button',site.registrationOpen ? 'Close registration' : 'Open registration');
   toggle.onclick = async () => {
