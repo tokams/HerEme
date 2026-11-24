@@ -1,6 +1,6 @@
 # SEC-01 controller assessment, version 1
 
-Status: engineering draft, not controller approval. Reviewed implementation: 2026-11-24. Review again before production activation and on material changes. Controller: Tomasz Gliniecki. Contact address: pending. Community processors and transfer details: pending.
+Status: engineering draft, not controller approval. Reviewed implementation: 2026-11-24. Review again before production activation and on material changes. Controller: Tomasz Gliniecki. Contact address supplied by the controller: tom.gli@icloud.com. Community processors and transfer details: pending review.
 
 ## Purposes and legitimate-interest balance
 

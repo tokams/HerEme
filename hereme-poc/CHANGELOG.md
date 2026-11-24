@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — SEC-01 contact address supplied
+
+The owner supplied `tom.gli@icloud.com` for the public legal contact. The assessment, ADR and release progress now record it. A candidate per-instance legal configuration is saved outside Git in `secrets/legal.proposed.json`, using the observed server network, authoritative DNS and supported browser push providers. That provider summary still needs owner review; the candidate was not installed on the production host and no deployment occurred.
+
 ## 2026-11-24 — Early legal release preflight
 
 The first production attempt for SEC-01 stopped before image build or data cutover because the private per-instance `state/legal.json` was absent. The deployment script now checks for that file before transfer and reports the missing reviewed contact and processor settings directly. The previous release remains active. No legal values were invented or installed.
