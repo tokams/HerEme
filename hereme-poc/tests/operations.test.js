@@ -4,11 +4,59 @@ const {applyMigrations}=require('../server/migrations');const {createVideoServic
 const {createLocationService}=require('../server/domain/locations');const {createVerificationService}=require('../server/domain/verification');
 const {createRateLimiter}=require('../server/domain/rate-limit');
 const {Readable}=require('node:stream');
+const {createHash}=require('node:crypto');
+const {createArticleService}=require('../server/domain/articles');
+const {createMediaService}=require('../server/domain/media');
 test('deployment push configuration creates persistent secrets without printing them',t=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-push-env-')),file=path.join(root,'.env');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));fs.writeFileSync(file,'HEREME_DOMAIN=forum.example.com\nWEB_PUSH_ENABLED=0\nVAPID_PUBLIC_KEY=\nVAPID_PRIVATE_KEY=\nVAPID_SUBJECT=\n');const script=path.join(__dirname,'../scripts/configure-push-env.js'),first=spawnSync(process.execPath,[script,file,'forum.example.com'],{encoding:'utf8'});assert.equal(first.status,0,first.stderr);const configured=fs.readFileSync(file,'utf8'),publicKey=/^VAPID_PUBLIC_KEY=(.+)$/m.exec(configured)[1],privateKey=/^VAPID_PRIVATE_KEY=(.+)$/m.exec(configured)[1];assert.match(configured,/^WEB_PUSH_ENABLED=1$/m);assert.match(configured,/^VAPID_SUBJECT=mailto:operator@forum\.example\.com$/m);assert.ok(publicKey.length>40&&privateKey.length>40);assert.equal(first.stdout.includes(publicKey)||first.stdout.includes(privateKey),false);const second=spawnSync(process.execPath,[script,file,'forum.example.com'],{encoding:'utf8'});assert.equal(second.status,0,second.stderr);assert.equal(fs.readFileSync(file,'utf8'),configured);});
 function database(t){
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-ops-')),data=path.join(root,'data');fs.mkdirSync(path.join(data,'uploads'),{recursive:true});fs.mkdirSync(path.join(data,'media'));fs.mkdirSync(path.join(data,'tmp'));
   const db=new DatabaseSync(path.join(data,'hereme.sqlite'));db.exec(fs.readFileSync(path.join(__dirname,'fixtures/legacy-schema.sql'),'utf8'));applyMigrations(db);t.after(()=>{db.close();fs.rmSync(root,{recursive:true,force:true});});return {root,data,db};
 }
+test('release verification accepts expired unused article uploads and preserves all protected checksums',async t=>{
+  const {root,data,db}=database(t);
+  db.prepare("INSERT INTO users(id,name,normalized_name,token_hash) VALUES('writer','Writer','writer','hash')").run();
+  for (const id of ['abandoned','draft-image','recent','revision-image']) {
+    const folder=path.join(data,'media',id);
+    fs.mkdirSync(folder);
+    const files=['original.jpg','display.jpg','thumbnail.jpg'].map(name=>`media/${id}/${name}`);
+    const bytes=Buffer.from('snapshot checksum fixture');
+    for (const relative of files) fs.writeFileSync(path.join(data,relative),bytes);
+    db.prepare(`INSERT INTO media(id,owner_id,kind,status,original_path,display_path,thumbnail_path,mime_type,bytes,sha256)
+      VALUES(?,'writer','image','ready',?,?,?,'image/jpeg',?,?)`).run(id,...files,bytes.length,createHash('sha256').update(bytes).digest('hex'));
+    db.prepare("INSERT INTO article_assets(media_id,owner_id,created_at) VALUES(?,'writer',datetime('now',?))")
+      .run(id,id==='recent'?'0 days':'-2 days');
+  }
+  db.prepare("INSERT INTO article_working_copies(id,owner_id,content_json) VALUES('draft','writer',?)")
+    .run(JSON.stringify({cover_media_id:'draft-image'}));
+  db.prepare("INSERT INTO posts(id,author_id,title,type,status) VALUES(99,'writer','Existing poster','text','published')").run();
+  require('../server/domain/content-revisions').insertRevision(db,{
+    id:99,format:'poster',editor:'writer',origin:'publish',snapshot:{text:'Existing poster'},mediaIds:['revision-image']
+  });
+  const snapshot=path.join(root,'snapshot');
+  await snapshotData(data,snapshot);
+  const check=()=>spawnSync(process.execPath,[path.join(__dirname,'../scripts/verify-release-clone.js'),snapshot],{encoding:'utf8'});
+  const result=check();
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(verifyBackup(snapshot).files,12);
+
+  createArticleService(db,data,{media:createMediaService(db,data)}).cleanup();
+  assert.deepEqual(db.prepare('SELECT id FROM media ORDER BY id').all().map(row=>row.id),['draft-image','recent','revision-image']);
+  // An unexpected file beside the expired upload is still protected by the snapshot manifest.
+  const extra='media/abandoned/other.jpg';
+  fs.writeFileSync(path.join(snapshot,extra),'retained file');
+  const manifestPath=path.join(snapshot,'snapshot.json');
+  const manifest=JSON.parse(fs.readFileSync(manifestPath));
+  manifest.checksums[extra]=createHash('sha256').update('retained file').digest('hex');
+  fs.writeFileSync(manifestPath,JSON.stringify(manifest));
+  const missing=check();
+  assert.notEqual(missing.status,0);
+  assert.match(missing.stderr,/other\.jpg/);
+  // Even an upload due for cleanup must pass its input checksum before candidate startup.
+  fs.writeFileSync(path.join(snapshot,'media/abandoned/display.jpg'),'corrupt');
+  const corrupt=check();
+  assert.notEqual(corrupt.status,0);
+  assert.match(corrupt.stderr,/Checksum mismatch: media\/abandoned\/display\.jpg/);
+});
 test('WAL-safe release backup verifies checksums and restores only to a new directory',async t=>{
   const {root,data,db}=database(t);db.prepare("insert into users(id,token_hash,name,normalized_name) values('backup-user','hash','Backup','backup')").run();db.prepare("insert into user_roles(user_id,role) values('backup-user','member')").run();
   const backup=path.join(root,'backup');await snapshotData(data,backup);const verified=verifyBackup(backup);assert.equal(verified.ok,true);assert.equal(verified.counts.users,1);

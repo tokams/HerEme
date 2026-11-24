@@ -17,6 +17,8 @@ The first command prints the deployment plan locally. The second transfers the c
 
 After the first release the deployer backs up and updates main, then the additional community, checking readiness and image IDs at each step. Each site has a brief maintenance interval. Updating the shared edge briefly affects both routes. The SSH-side release lock serializes operators. A failed site update stops progression and restarts that site's previous compatible release on its existing volume. A completed site's release is recorded separately. The current rollout supports schema 23 and checks candidate startup on copies before activation.
 
+The candidate verifies the entire snapshot manifest on a private copy before starting services. Startup can expire an unattached article upload after one day. The second check permits its recorded files to disappear only when the upload was unclaimed, its media row was removed, and the paths have no surviving media references. An unexpected missing file or checksum mismatch stops the rollout. Preserve the backup for diagnosis.
+
 ### Access and manual verification
 
 - Use the existing main administrator and moderator logins on `https://hereme.no/`. For `https://tanteulrikkesvei.hereme.no/`, use the new `HerEmeAdmin` or `HerEmeModerator` from the repository-root `secrets/tanteulrikkesvei-staff-credentials.txt`. Open the staff panel from the signed-in account menu.

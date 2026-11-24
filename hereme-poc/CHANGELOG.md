@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Verify snapshots across article upload expiry
+
+The release verifier checks every file on a fresh snapshot copy before candidate startup. After startup it checks the original hashes again, allowing removal of the recorded files of an expired, unclaimed article upload. Drafts, posts and revision history retain their media. The failed main cutover was traced to one abandoned upload on the retained snapshot.
+
 ## 2026-11-24 — Deployment DNS preflight
 
 Removed the Cloudflare DNS lookup from the online deployment command. The plan prints locally. Deployment verifies both communities and the platform panel over HTTPS.

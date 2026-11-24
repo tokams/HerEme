@@ -8,9 +8,23 @@ const {nextId}=require('../migrations');
 const markdown=require('./article-markdown');
 const {insertRevision}=require('./content-revisions');
 
+// Detached uploads can still belong to a working copy or an older published revision.
+function unclaimedArticleUploads(db, {expiredOnly = true} = {}) {
+  return db.prepare(`
+    SELECT a.media_id, m.original_path, m.display_path, m.thumbnail_path,
+           unixepoch(a.created_at, '+1 day') AS expires_at
+    FROM article_assets a JOIN media m ON m.id=a.media_id
+    WHERE a.post_id IS NULL AND (?=0 OR expires_at<unixepoch('now'))
+      AND NOT EXISTS (SELECT 1 FROM article_working_copies w WHERE instr(w.content_json,a.media_id)>0)
+      AND NOT EXISTS (SELECT 1 FROM content_media_references r WHERE r.media_id=a.media_id)
+      AND NOT EXISTS (SELECT 1 FROM post_media p WHERE p.media_id=a.media_id)
+      AND NOT EXISTS (SELECT 1 FROM articles t WHERE t.cover_media_id=a.media_id OR instr(t.chapters_json,a.media_id)>0)
+  `).all(Number(expiredOnly));
+}
+
 function createArticleService(db,dataDir,{media,audit,config}={}){
   function cleanup(){
-    const stale=db.prepare("SELECT a.media_id,m.original_path,m.display_path,m.thumbnail_path FROM article_assets a JOIN media m ON m.id=a.media_id WHERE a.post_id IS NULL AND a.created_at<datetime('now','-1 day') AND NOT EXISTS(SELECT 1 FROM article_working_copies w WHERE w.owner_id=a.owner_id AND w.content_json LIKE '%'||a.media_id||'%')").all();
+    const stale=unclaimedArticleUploads(db);
     for(const row of stale){db.prepare('DELETE FROM media WHERE id=?').run(row.media_id);for(const relative of [row.original_path,row.display_path,row.thumbnail_path].filter(Boolean))fs.rmSync(media.resolve(relative),{force:true});fs.rmSync(path.join(dataDir,'media',row.media_id),{recursive:true,force:true});}
   }
   async function uploadImage(file,user){
@@ -63,4 +77,4 @@ function createArticleService(db,dataDir,{media,audit,config}={}){
   }
   return {cleanup,uploadImage,asset,create,detail,validate};
 }
-module.exports={createArticleService};
+module.exports={createArticleService,unclaimedArticleUploads};
