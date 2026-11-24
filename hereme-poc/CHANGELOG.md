@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-24 — SEC-01 security events and legal transparency
+
+The shared community application now records thirteen fixed security event types in paired, instance-local structured and allowlisted raw SQLite tables. A local operator-only, audited staff view supports bounded searches and incident inspection. Authentication and restrictions write their security facts atomically; repeated rate-limit rejections are bounded per limiter window. Migration 24 preserves the former log as `security_events_legacy`.
+
+The install prompt has a 30-day red dismissal action while manual installation remains in the menu. Profile, settings and bilingual privacy, cookie and terms links are in the menu. Public legal pages use per-instance runtime controller, contact and processor values. The controller is Tomasz Gliniecki; the missing contact address and unreviewed processors, retention, LIA, storage exemptions and DPIA screen block production release. See ADR 0016 and `docs/SEC-01_PROGRESS.md`.
+
+Development verification passed 96 Node tests, source checks, focused browser flows, isolated two-instance HTTPS/WSS rehearsal and a synthetic legacy cutover with failed-update recovery and a second release. No live service or DNS was changed.
+
 ## 2026-11-24 — Centered empty wall
 
 The empty wall message and its action now span the complete wall grid and remain centered on mobile and desktop. Poster and article widths are unchanged.

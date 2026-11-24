@@ -88,6 +88,7 @@ async function test() {
   const communityStaff=await signin(community,file('platform/state/secrets/tanteulrikkesvei-staff-credentials.txt'));
   for(const [instance,user] of [[main,mainStaff],[community,communityStaff]]) {
     assert.equal((await instance.request('/api/admin/overview',{user})).status,200);
+    assert.equal((await instance.request('/api/admin/security-events',{user})).status,200);
     assert.equal((await panel.request('/api/sites',{user})).status,401);
   }
   assert.equal((await community.request('/api/admin/overview',{user:mainStaff})).status,401);

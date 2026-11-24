@@ -169,7 +169,7 @@ def probe(release, routes):
             time.sleep(4)
 
 
-def rolling_update(release, base, old_releases, sites, state, backup, candidate, edge):
+def rolling_update(release, base, old_releases, sites, state, backup, candidate, edge, old_version):
     old_edge = old_releases["edge"]
     # Freeze only the control plane while copying the registry and registration settings.
     compose(old_edge, "edge", "stop", "platform")
@@ -191,7 +191,7 @@ def rolling_update(release, base, old_releases, sites, state, backup, candidate,
             point(base / ("active-" + stack), release)
         except BaseException:
             compose(release, stack, "stop")
-            require(db_version(running["Image"], data) == "23", "Schema changed; hold this site for forward recovery")
+            require(db_version(running["Image"], data) == old_version, "Schema changed; hold this site for forward recovery")
             start(previous, stack)
             probe(old_edge, {host: "/api/ready"})
             raise
@@ -219,6 +219,25 @@ def deploy(release, legacy, base, revision, prefix, development):
     previous = current.resolve(strict=True) if current.is_symlink() else None
     require(previous or not current.exists(), "Current release pointer is invalid")
     state.mkdir(exist_ok=True)
+    legal_file = state / "legal.json"
+    if development and not legal_file.exists():
+        legal = {site: {"controller": "Rehearsal Operator", "contact": "operator@rehearsal.hereme.no",
+                        "processors": "Rehearsal environment"} for site in ("main", "community")}
+    else:
+        require(legal_file.is_file(), f"Create reviewed per-instance legal settings at {legal_file} before release")
+        legal = json.loads(legal_file.read_text())
+    require(isinstance(legal, dict), "Legal settings must map each instance to its public details")
+    for site in ("main", "community"):
+        require(isinstance(legal.get(site), dict), f"Missing legal settings for {site}")
+        details = legal[site]
+        require(all(isinstance(details.get(key), str) and details[key].strip() for key in
+                    ("controller", "contact", "processors")), f"Incomplete legal settings for {site}")
+        require(re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", details["contact"]),
+                f"Invalid legal contact for {site}")
+        if not development:
+            require(not re.search(r"\.(test|invalid|example)$", details["contact"], re.I) and
+                    not re.search(r"replace with", details["processors"], re.I),
+                    f"Replace example legal settings for {site} with verified values")
     legacy_name = prefix + "_legacy" if development else "docker"
     main, community, edge = [prefix + "_" + v for v in ("main", "community", "edge")]
     legacy_config = legacy / "deploy/docker/compose.yaml"
@@ -307,7 +326,10 @@ def deploy(release, legacy, base, revision, prefix, development):
         require(dynamic and ipaddress.IPv4Address(peer) not in ipaddress.IPv4Network(dynamic),
                 f"Trusted gateway address overlaps dynamic addresses on {project}")
         networks[site] = peer
-        write_env(release / (site + ".env"), {**common, **keys, "INSTANCE_PROJECT": project, "INSTANCE_HOST": host,
+        write_env(release / (site + ".env"), {**common, **keys,
+            "HEREME_LEGAL_CONTROLLER": legal[site]["controller"], "HEREME_LEGAL_CONTACT": legal[site]["contact"],
+            "HEREME_LEGAL_PROCESSORS": legal[site]["processors"],
+            "INSTANCE_PROJECT": project, "INSTANCE_HOST": host,
             "DATA_VOLUME": volumes[0], "ARCHIVE_VOLUME": volumes[1], "EDGE_PEER": peer, "DATABASE_START": "existing",
             "POLICY_DIR": policies / site, "WEBAUTHN_ENABLED": passkeys})
     write_env(release / "edge.env", {**common, "MAIN_PROJECT": main, "COMMUNITY_PROJECT": community,
@@ -329,7 +351,8 @@ def deploy(release, legacy, base, revision, prefix, development):
     backup.mkdir(parents=True)
     check_backup_space(candidate, backup, [(data, archive), (secondary_data, secondary_git)])
     old_version = db_version(old["Image"], data)
-    require(old_version == "23", "This cutover supports the rehearsed schema 23 only")
+    require(old_version in ("23", "24") if previous else old_version == "23",
+            "Expected schema 23 for the initial cutover or schema 23/24 for an upgrade")
     if previous:
         require(db_version(secondary["Image"], secondary_data) == old_version, "Secondary schema differs")
     if previous:
@@ -337,7 +360,7 @@ def deploy(release, legacy, base, revision, prefix, development):
         rolling_update(release, base, active, [
             ("main", main, MAIN, old, data, archive),
             ("community", community, COMMUNITY, secondary, secondary_data, secondary_git)
-        ], state, backup, candidate, edge)
+        ], state, backup, candidate, edge, old_version)
         print("Verified both communities and platform at", revision, "Backup:", backup)
         return
     activated = False

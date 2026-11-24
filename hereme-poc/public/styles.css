@@ -27,6 +27,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .skip-link:focus { top:10px; }
 .masthead { background:#0f1012; border-bottom:2px solid #000; }
 .install-button { display:flex; align-items:stretch; justify-content:space-between; padding:0; min-height:54px; border:1px solid #111714; background:#397c58; color:#f3f6f1; font-weight:800; font-size:15px; text-align:left; }
+.install-prompt { display:none; }
+.install-prompt .install-banner { flex:1; margin:0; width:auto; }
+.install-prompt .install-dismiss { min-height:54px; padding:0 12px; white-space:nowrap; }
 .install-button:hover { background:#448b65; }
 .install-button:active { background:#2d684a; }
 .install-button:focus-visible { outline:3px solid #f3f6f1; outline-offset:2px; }
@@ -42,7 +45,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .install-help h2 { margin-top:0; }
 .install-help li { margin:12px 0; }
 .install-help>div { display:flex; flex-wrap:wrap; gap:8px; }
-@media (max-width:699px) { .install-banner:not([hidden]) { display:flex; width:calc(100% - 20px); margin:10px 10px 0; } .install-reason:not([hidden]) { display:block; margin:6px 10px 10px; font-size:12px; color:var(--muted); } }
+@media (max-width:699px) { .install-prompt:not([hidden]) { display:flex; align-items:stretch; gap:8px; margin:10px 10px 0; } .install-prompt .install-banner:not([hidden]) { display:flex; } .install-reason:not([hidden]) { display:block; margin:6px 10px 10px; font-size:12px; color:var(--muted); } }
+.security-filters { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.security-filters label { display:grid; gap:4px; font-size:12px; }
+.security-filters input { width:160px; max-width:100%; }
+.security-raw { white-space:pre-wrap; overflow-wrap:anywhere; max-height:50dvh; overflow:auto; }
+.account-links { display:grid; gap:10px; margin-top:18px; }
 .utility-line { background:#16191a; color:#dfe5da; display:flex; justify-content:space-between; gap:12px; padding:5px 20px; font-size:9px; letter-spacing:.1em; border-bottom:1px solid #000; }
 .masthead-inner { display:flex; align-items:center; gap:22px; min-height:84px; max-width:1920px; margin:auto; padding:14px 20px; }
 .logo { display:flex; align-items:center; gap:12px; min-height:1.4em; font-weight:800; font-size:34px; letter-spacing:-.09em; padding:0; }
@@ -187,6 +195,9 @@ main { min-width:0; }
 .credential-row button { min-width:72px; }
 .recovery-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .policy-page { max-width:760px; margin:0 auto; padding:clamp(24px,6vw,80px) 20px; }
+.legal-copy[lang=en] { display:none; }
+html[lang=en] .legal-copy[lang=en] { display:block; }
+html[lang=en] .legal-copy[lang=nb] { display:none; }
 .policy-home { display:inline-flex; align-items:center; min-height:44px; color:var(--ink); text-decoration:none; }
 .policy-page h1 { font-size:clamp(28px,6vw,52px); letter-spacing:-.08em; }
 .policy-page h2 { margin-top:35px; color:var(--accent); }

@@ -25,6 +25,7 @@
   "auth.copied": "Code copied",
   "auth.device_saved": "Your device is ready for sign-in. Keep your sign-in code as a backup too.",
   "install.button": "INSTALL HEREME",
+  "install.menu": "Install HerEme",
   "install.reason": "Add the app to receive notifications about messages and post activity. You can choose which notifications to allow afterward.",
   "install.help_title": "Add HerEme to your Home Screen",
   "install.step_one": "Open the browser Share menu.",

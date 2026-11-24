@@ -32,6 +32,8 @@ test('two production processes isolate state and restore one community independe
     ], {cwd:path.resolve(__dirname,'..'), windowsHide:true, stdio:['ignore','ignore','pipe','ipc'], env:{
       ...process.env, HEREME_ENV:'production', HOST:'127.0.0.1', HEREME_DATABASE_START:mode,
       HEREME_DATA_DIR:directory, HEREME_PUBLIC_ORIGIN:'https://'+host, WEBAUTHN_ENABLED:'1',
+      HEREME_LEGAL_CONTROLLER:'Isolation Test Operator',HEREME_LEGAL_CONTACT:'operator@rehearsal.hereme.no',
+      HEREME_LEGAL_PROCESSORS:'Local test environment',
       WEBAUTHN_ALLOWED_ORIGINS:'https://'+host, WEBAUTHN_RP_ID:host, HEREME_MIN_FREE_BYTES:'0',
       WEB_PUSH_ENABLED:'1',VAPID_PUBLIC_KEY:pushKeys.get(host).publicKey,VAPID_SUBJECT:'mailto:operator@example.test'
     }});

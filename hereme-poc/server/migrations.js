@@ -35,7 +35,7 @@ function backfillContentRevisions(db){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 23) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 24) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -531,6 +531,49 @@ function applyMigrations(db) {
       );`);
       backfillContentRevisions(db);
       db.exec('INSERT INTO schema_migrations(version) VALUES(23); COMMIT;');
+    }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<24){
+    db.exec('BEGIN IMMEDIATE');
+    try{
+      db.exec(`ALTER TABLE security_events RENAME TO security_events_legacy;
+        CREATE TABLE security_events (
+          event_id TEXT PRIMARY KEY,
+          timestamp_utc TEXT NOT NULL,
+          event_type TEXT NOT NULL CHECK(event_type IN ('page_visit','registration_attempt','registration_success','registration_failure','login_attempt','login_success','login_failure','logout','session_expired','session_revoked','rate_limit_triggered','account_suspended','account_banned')),
+          instance_id TEXT NOT NULL, hostname TEXT, source TEXT NOT NULL CHECK(source IN ('http','system')),
+          user_id TEXT, username TEXT, subject_user_id TEXT, subject_username TEXT,
+          client_ip TEXT, browser_family TEXT, browser_version TEXT, os_family TEXT, os_version TEXT,
+          device_type TEXT, device_model TEXT, http_method TEXT, status_code INTEGER,
+          route_class TEXT, request_id TEXT, operation_id TEXT, auth_method TEXT, reason_code TEXT,
+          parser_version INTEGER NOT NULL
+        );
+        CREATE TABLE security_event_raw (
+          event_id TEXT PRIMARY KEY REFERENCES security_events(event_id) ON DELETE CASCADE,
+          captured_at_utc TEXT NOT NULL, schema_version INTEGER NOT NULL, raw_metadata_json TEXT
+        );
+        CREATE INDEX security_events_time ON security_events(timestamp_utc DESC,event_id DESC);
+        CREATE INDEX security_events_type ON security_events(event_type,timestamp_utc DESC);
+        CREATE INDEX security_events_actor ON security_events(user_id,timestamp_utc DESC);
+        CREATE INDEX security_events_subject ON security_events(subject_user_id,timestamp_utc DESC);
+        CREATE INDEX security_events_usernames ON security_events(username,subject_username);
+        CREATE INDEX security_events_ip ON security_events(client_ip,timestamp_utc DESC);
+        CREATE TABLE security_account_restrictions (
+          user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+          status TEXT NOT NULL CHECK(status IN ('suspended','banned')),
+          changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+          changed_by TEXT NOT NULL REFERENCES users(id),
+          reason TEXT NOT NULL
+        );
+        INSERT INTO audit_events(actor_id,action,subject_type,subject_id,reason)
+          SELECT u.id,'security.operator.bootstrap','user',u.id,'SEC-01 designated bootstrap administrator'
+          FROM users u JOIN user_roles r ON r.user_id=u.id AND r.role='admin'
+          WHERE u.normalized_name='heremeadmin' AND u.status='active'
+            AND NOT EXISTS(SELECT 1 FROM user_roles x WHERE x.user_id=u.id AND x.role='operator');
+        INSERT OR IGNORE INTO user_roles(user_id,role,granted_by)
+          SELECT u.id,'operator',u.id FROM users u JOIN user_roles r ON r.user_id=u.id AND r.role='admin'
+          WHERE u.normalized_name='heremeadmin' AND u.status='active';
+        INSERT INTO schema_migrations(version) VALUES(24); COMMIT;`);
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
 }

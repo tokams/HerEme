@@ -326,7 +326,7 @@ test('pseudonym creation, CSRF, recovery, rotation and session revocation',async
   assert.equal((await request('/api/session/recover',{method:'POST',body:{name:'ReleaseUser',recovery_key:first.recovery}})).status,401);
   assert.equal((await request('/api/session/revoke-all',{method:'POST',session:second})).status,200);assert.equal((await request('/api/me',{session:first})).status,401);
   const expiring=await profile('ExpiredUser'),raw=/hereme_session=([^;]+)/.exec(expiring.cookie)[1];S.db.prepare("update sessions set expires_at=datetime('now','-1 second') where id_hash=?").run(S.identity.sha256(decodeURIComponent(raw)));assert.equal((await request('/api/posts',{method:'POST',session:expiring,body:{title:'Skal ikke lagres',type:'text',category:'story'}})).status,401);
-  assert.ok(S.db.prepare("select id from security_events where event='recovery.failed' and result='denied'").get());
+  assert.ok(S.db.prepare("select event_id from security_events where event_type='login_failure' and reason_code='RECOVERY_FAILED'").get());
 });
 test('legacy bearer identity is upgraded once to a recoverable secure session',async()=>{
   const crypto=require('node:crypto'),token=crypto.randomBytes(32).toString('hex'),id='legacy-upgrade-user';

@@ -13,7 +13,8 @@
   const translate=key=>window.HeremeI18n.t(key);
   function localizeInstallUi(){
     if(!translationsReady)return;
-    for(const button of document.querySelectorAll('.install-button'))button.firstElementChild.textContent=translate('install.button');
+    for(const button of document.querySelectorAll('.install-button'))button.firstElementChild.textContent=translate(button.id==='installMenuButton'?'install.menu':'install.button');
+    const dismissButton=document.getElementById('installDismiss');if(dismissButton)dismissButton.textContent=translate('install.later');
     for(const reason of document.querySelectorAll('#installReason,#installMenuReason'))reason.textContent=translate('install.reason');
     const sheet=document.getElementById('installHelp');if(!sheet)return;
     sheet.querySelector('h2').textContent=translate('install.help_title');
@@ -23,7 +24,7 @@
   }
   function updateInstallUi(){
     const banner=document.getElementById('installBanner');
-    if(banner){banner.hidden=!bannerVisible()||location.pathname!=='/';document.getElementById('installReason').hidden=banner.hidden;}
+    if(banner){banner.hidden=!bannerVisible()||location.pathname!=='/';document.getElementById('installPrompt').hidden=banner.hidden;document.getElementById('installReason').hidden=banner.hidden;}
     const menu=document.getElementById('installMenuButton');
     if(menu){menu.hidden=!eligible();document.getElementById('installMenuReason').hidden=menu.hidden;}
     if(standalone())document.getElementById('installHelp')?.close();
@@ -37,11 +38,11 @@
   }
   function mountInstallUi(){
     if(!document.querySelector('.masthead')||document.getElementById('installBanner'))return;
-    const button=document.createElement('button');button.id='installBanner';button.type='button';button.className='install-button install-banner';button.innerHTML=installMarkup;button.onclick=installAction;const reason=document.createElement('p');reason.id='installReason';reason.className='install-reason';reason.textContent=installReason;document.querySelector('.masthead').after(button,reason);updateInstallUi();
+    const prompt=document.createElement('div');prompt.id='installPrompt';prompt.className='install-prompt';const button=document.createElement('button');button.id='installBanner';button.type='button';button.className='install-button install-banner';button.innerHTML=installMarkup;button.onclick=installAction;const later=document.createElement('button');later.id='installDismiss';later.type='button';later.className='btn btn-danger install-dismiss';later.textContent='Ikke nå';later.onclick=dismiss;prompt.append(button,later);const reason=document.createElement('p');reason.id='installReason';reason.className='install-reason';reason.textContent=installReason;document.querySelector('.masthead').after(prompt,reason);updateInstallUi();
   }
   function mountMenu(container){
     if(!container||container.querySelector('#installMenuButton'))return;
-    const button=document.createElement('button');button.id='installMenuButton';button.type='button';button.className='install-button install-menu-button';button.innerHTML=installMarkup;button.onclick=installAction;const reason=document.createElement('p');reason.id='installMenuReason';reason.className='install-menu-reason';reason.textContent=installReason;container.prepend(button,reason);updateInstallUi();
+    const button=document.createElement('button');button.id='installMenuButton';button.type='button';button.className='install-button install-menu-button';button.innerHTML=installMarkup;button.onclick=installAction;const reason=document.createElement('p');reason.id='installMenuReason';reason.className='install-menu-reason';reason.textContent=installReason;container.querySelector('.account-links')?.before(button,reason);updateInstallUi();
   }
   function installAction(){if(ios())help();else if(installPrompt)void install();}
   const ready='serviceWorker' in navigator&&window.isSecureContext?navigator.serviceWorker.register('/service-worker.js',{scope:'/'}).then(value=>registration=value).catch(()=>null):Promise.resolve(null);

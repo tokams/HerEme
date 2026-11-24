@@ -41,7 +41,8 @@ function tenant(label,host,appId,caddy) {
   const keys = require('web-push').generateVAPIDKeys();
   const settings = {INSTANCE_PROJECT:name,INSTANCE_HOST:host,EDGE_PEER:peer,APP_IMAGE_ID:appId,CADDY_IMAGE:caddy,
     DATA_VOLUME:data,ARCHIVE_VOLUME:archive,DATABASE_START:'empty',WEBAUTHN_ENABLED:'true',WEB_PUSH_ENABLED:'1',
-    VAPID_PRIVATE_KEY:keys.privateKey,VAPID_PUBLIC_KEY:keys.publicKey,VAPID_SUBJECT:'mailto:operator@example.test'};
+    VAPID_PRIVATE_KEY:keys.privateKey,VAPID_PUBLIC_KEY:keys.publicKey,VAPID_SUBJECT:'mailto:operator@example.test',
+    HEREME_LEGAL_CONTROLLER:'Rehearsal Operator',HEREME_LEGAL_CONTACT:'operator@rehearsal.hereme.no',HEREME_LEGAL_PROCESSORS:'Rehearsal environment'};
   const compose = project(name,'instance.compose.yaml',settings);
   return {name,host,peer,compose,data,archive,settings,ingress};
 }
@@ -68,7 +69,7 @@ function inspectTenant(tenant,image) {
 function auditPeer(tenant,requestId) {
   assert.match(requestId,/^[a-f0-9-]{36}$/);
   return tenant.compose('exec','-T','app','node','-e',
-    "const db=new (require('node:sqlite').DatabaseSync)('/var/lib/hereme/hereme.sqlite',{readOnly:true});console.log(db.prepare('select ip_hash from security_events where request_id=?').get(process.argv[1]).ip_hash)",requestId);
+    "const db=new (require('node:sqlite').DatabaseSync)('/var/lib/hereme/hereme.sqlite',{readOnly:true});console.log(db.prepare(\"select client_ip from security_events where request_id=? and event_type='registration_attempt'\").get(process.argv[1]).client_ip)",requestId);
 }
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(),'hereme-m1-'));
@@ -112,15 +113,15 @@ async function run() {
   await assert.rejects(site('unlisted.hereme.no',18443,ca).request('/api/meta'));
   assert.equal((await main.request('/api/meta',{headers:{host:b.host}})).status,421);
 
-  // Compare the app's audit hash to the actual TCP source of an external-to-ingress client.
+  // Compare the logged client address to the actual TCP source at the public ingress.
   const probe = docker(['run','--rm','--network',prefix+'_edge_public','-v',rootFile+':/probe-ca:ro',image,
     'node','-e',`const https=require('node:https'),fs=require('node:fs');
     const req=https.request({hostname:'edge',servername:'hereme.no',ca:fs.readFileSync('/probe-ca'),method:'POST',path:'/api/session',
-      headers:{Host:'hereme.no',Origin:'https://invalid.test','X-Forwarded-For':'192.0.2.1','X-Hereme-Client':'192.0.2.2'}},
-      res=>{if(res.statusCode!==403)throw Error('unexpected status '+res.statusCode);
-      console.log(JSON.stringify({ip:req.socket.localAddress,id:res.headers['x-request-id']}));res.resume()});req.end()`]);
+      headers:{Host:'hereme.no',Origin:'https://hereme.no','Content-Type':'application/json','X-Forwarded-For':'192.0.2.1','X-Hereme-Client':'192.0.2.2'}},
+      res=>{if(res.statusCode!==400)throw Error('unexpected status '+res.statusCode);
+      console.log(JSON.stringify({ip:req.socket.localAddress,id:res.headers['x-request-id']}));res.resume()});req.end(JSON.stringify({name:''}))`]);
   const {ip,id} = JSON.parse(probe);
-  assert.equal(auditPeer(a,id),crypto.createHash('sha256').update(ip).digest('hex').slice(0,20));
+  assert.equal(auditPeer(a,id),ip);
   const bId=b.compose('ps','-q','app');
   a.compose('down');
   assert.equal((await community.request('/api/me',{user:state.other})).status,200);

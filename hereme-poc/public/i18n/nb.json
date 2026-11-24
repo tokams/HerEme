@@ -25,6 +25,7 @@
   "auth.copied": "Koden er kopiert",
   "auth.device_saved": "Enheten er klar for innlogging. Ta også vare på innloggingskoden som reserve.",
   "install.button": "INSTALL HEREME",
+  "install.menu": "Installer HerEme",
   "install.reason": "Legg til appen for å kunne få varsler om meldinger og aktivitet på innlegg. Du velger selv hvilke varsler du vil tillate etterpå.",
   "install.help_title": "Legg HerEme til på Hjem-skjermen",
   "install.step_one": "Åpne Del-menyen i nettleseren.",

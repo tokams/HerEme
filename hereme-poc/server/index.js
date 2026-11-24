@@ -7,6 +7,7 @@ const crypto=require('node:crypto');
 const fs=require('node:fs');
 const path=require('node:path');
 const {DomainError}=require('./domain/errors');
+const {requestMetadata}=require('./domain/security-events');
 const {localizeError}=require('./error-localization');
 const {readPolicy}=require('./platform/policy');
 const registrationOpen=()=>!process.env.HEREME_REGISTRATION_POLICY || readPolicy(process.env.HEREME_REGISTRATION_POLICY).registrationOpen;
@@ -23,11 +24,9 @@ const imageUpload=upload({storage:upload.memoryStorage(),limits:{fileSize:12*102
 const avatarUpload=upload({storage:upload.memoryStorage(),limits:{fileSize:S.avatars.MAX_BYTES,files:1}});
 const errors=(res,status,code,message,details)=>res.status(status).json({error:{code,message:localizeError(res.request,code,message),details:details||undefined}});
 async function syncSharePreview(id){const post=S.posts.visible(Number(id));if(post)await S.sharePreviews.queue(post);else S.sharePreviews.invalidate(Number(id));}
-const loopback=value=>['127.0.0.1','::1','::ffff:127.0.0.1'].includes(value);
-const ip=req=>S.config.trustProxy&&loopback(req.socket.remoteAddress)?String(req.headers['x-forwarded-for']||req.socket.remoteAddress).split(',')[0].trim():req.socket.remoteAddress;
+const ip=req=>requestMetadata(req,S.config).fields.client_ip||'unknown-peer';
 const ipKey=req=>crypto.createHash('sha256').update(String(ip(req))).digest('hex').slice(0,20);
-const recordSecurity=(req,event,result,actorId=null)=>S.db.prepare('INSERT INTO security_events(event,result,actor_id,ip_hash,request_id) VALUES(?,?,?,?,?)').run(event,result,actorId,ipKey(req),req.id);
-S.db.prepare("DELETE FROM security_events WHERE created_at<datetime('now','-30 days')").run();
+const security=(req,event,details={})=>S.securityEvents.record(event,{req,routeClass:'authentication',...details});
 function lanIps(){
   const found=[];for(const [name,entries] of Object.entries(os.networkInterfaces()))for(const entry of entries||[])if(entry.family==='IPv4'&&!entry.internal&&!entry.address.startsWith('169.254.'))found.push({name,ip:entry.address});
   found.sort((a,b)=>{const score=x=>/vpn|virtual|docker|vethernet|veth|tailscale|wsl|hyper-v/i.test(x.name)?2:/wi-?fi|wireless|wlan|ethernet|eth\d/i.test(x.name)?0:1;return score(a)-score(b);});return found;
@@ -53,12 +52,19 @@ app.use((req,res,next)=>{
   res.set('Permissions-Policy','camera=(self), microphone=(self), geolocation=()');
   res.set('Content-Security-Policy',`default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'${S.config.production?'; upgrade-insecure-requests':''}`);
   if(S.config.production){
-    const expected=new URL(S.config.publicOrigin).host;if(req.headers.host!==expected){recordSecurity(req,'request.host','denied');return errors(res,421,'HOST_INVALID','Ugyldig vertsnavn.');}
-    if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.headers.origin!==S.config.publicOrigin){recordSecurity(req,'request.origin','denied');return errors(res,403,'ORIGIN_INVALID','Ugyldig forespørselsopprinnelse.');}
+    const expected=new URL(S.config.publicOrigin).host;if(req.headers.host!==expected)return errors(res,421,'HOST_INVALID','Ugyldig vertsnavn.');
+    if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.headers.origin!==S.config.publicOrigin)return errors(res,403,'ORIGIN_INVALID','Ugyldig forespørselsopprinnelse.');
   }
   next();
 });
 app.use(web.json({limit:'256kb'}));
+app.use((req,res,next)=>{
+  if(req.method==='GET'&&!req.headers['purpose']&&!req.headers['sec-purpose']&&req.headers.accept?.includes('text/html')&&
+    (req.pathname==='/'||['/chat','/me','/privacy.html','/rules.html','/cookies.html','/terms.html'].includes(req.pathname)||/^\/(?:u|chat)\/[^/]+$/.test(req.pathname))){
+    security(req,'page_visit',{actor:S.identity.readSession(req,res,{allowLegacy:false}),routeClass:'document',statusCode:200});
+  }
+  next();
+});
 app.use(async(req,res,next)=>{
   if(req.pathname!=='/'||!['GET','HEAD'].includes(req.method)||!Object.hasOwn(req.query,'post'))return next();
   const id=Number(req.query.post),post=Number.isSafeInteger(id)&&id>0?S.posts.visible(id):null;
@@ -88,6 +94,15 @@ app.use('/media',(req,res,next)=>{
   }
   req.pathname=req.pathname.slice(6)||'/';web.static(path.join(S.dataDir,'media'))(req,res,()=>{req.pathname=original;next();});
 });
+const legalEscape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+for(const [route,file] of [['/privacy.html','privacy.html'],['/cookies.html','cookies.html'],['/terms.html','terms.html']])app.get(route,(req,res)=>{
+  if(!S.config.legalReady)return errors(res,503,'LEGAL_CONFIG_REQUIRED','Juridisk kontaktinformasjon mangler.');
+  const html=fs.readFileSync(path.resolve(__dirname,'..','public',file),'utf8')
+    .replaceAll('{{CONTROLLER}}',legalEscape(S.config.legalController))
+    .replaceAll('{{CONTACT}}',legalEscape(S.config.legalContact))
+    .replaceAll('{{PROCESSORS}}',legalEscape(S.config.legalProcessors));
+  res.set('Content-Type','text/html; charset=utf-8').set('Cache-Control','no-store').send(html);
+});
 app.use(web.static(path.resolve(__dirname,'..','public'),{extensions:['html']}));
 function appShell(name,res){res.set('Content-Type','text/html; charset=utf-8').send(fs.readFileSync(path.resolve(__dirname,'..','public',name)));}
 app.get('/chat',(req,res)=>appShell('chat.html',res));
@@ -101,10 +116,11 @@ app.get('/api/admin/content-git/status',read('staff:read'),(req,res)=>res.json({
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=23').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=24').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     if(process.env.HEREME_REGISTRATION_POLICY){checks.registration_policy=false;registrationOpen();checks.registration_policy=true;}
+    checks.legal=S.config.legalReady;
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===23;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===24;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','avatars','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();})&&S.avatars.verify();
@@ -122,42 +138,55 @@ app.get('/api/meta',(req,res)=>{
 app.get('/api/connect-qr.svg',async(req,res,next)=>{if(S.config.production)return errors(res,404,'NOT_FOUND','Ikke tilgjengelig.');try{const ips=lanIps(),url=ips.length?`http://${ips[0].ip}:${req.socket.localPort}`:`http://localhost:${req.socket.localPort}`;res.type('svg').send(await qrcode.toString(url,{type:'svg',margin:2,width:260}));}catch(error){next(error);}});
 
 app.post('/api/session',(req,res)=>{
-  if(!registrationOpen())
-    return errors(res,403,'REGISTRATION_CLOSED','Registrering er stengt i dette fellesskapet.');
-  S.rate.check('profile:'+ipKey(req),30);const result=S.identity.createProfile({name:req.body?.name,userAgent:req.headers['user-agent']});S.identity.setCookie(res,result.session);
-  S.identity.markFresh(result.user.id,S.identity.sha256(result.session.raw),'new_account');
-  recordSecurity(req,'session.created','allowed',result.user.id);
-  res.status(201).json({user:result.user,csrf_token:result.session.csrf,recovery_key:result.recoveryKey,recovery_key_shown_once:true});
+  S.rate.check('profile:'+ipKey(req),30);
+  const operationId=S.securityEvents.operation(),actor=S.identity.readSession(req,res,{allowLegacy:false});security(req,'registration_attempt',{operationId,actor,statusCode:null});
+  try{
+    if(!registrationOpen())throw new DomainError('REGISTRATION_CLOSED','Registrering er stengt i dette fellesskapet.',403);
+    const result=S.identity.createProfile({name:req.body?.name,userAgent:req.headers['user-agent'],onCreated:({user,session})=>{
+      S.identity.markFresh(user.id,S.identity.sha256(session.raw),'new_account');
+      security(req,'registration_success',{operationId,actor:actor||user,subject:user,statusCode:201});
+    }});S.identity.setCookie(res,result.session);
+    res.status(201).json({user:result.user,csrf_token:result.session.csrf,recovery_key:result.recoveryKey,recovery_key_shown_once:true});
+  }catch(error){if(error.code!=='SECURITY_LOG_UNAVAILABLE')security(req,'registration_failure',{operationId,actor,reasonCode:error.code||'INVALID_INPUT',statusCode:error.status||500});throw error;}
 });
 app.post('/api/session/recover',(req,res)=>{
-  S.rate.check('recover:'+ipKey(req),10);const result=S.identity.recover({name:req.body?.name,recoveryKey:req.body?.recovery_key,userAgent:req.headers['user-agent']});S.identity.setCookie(res,result.session);
-  S.identity.markFresh(result.user.id,S.identity.sha256(result.session.raw),'recovery');
-  recordSecurity(req,'session.recovered','allowed',result.user.id);
-  res.json({user:result.user,csrf_token:result.session.csrf});
+  S.rate.check('recover:'+ipKey(req),10);
+  const operationId=S.securityEvents.operation(),actor=S.identity.readSession(req,res,{allowLegacy:false});security(req,'login_attempt',{operationId,actor,authMethod:'recovery'});
+  try{
+    S.db.exec('BEGIN IMMEDIATE');let result;
+    try{
+      result=S.identity.recover({name:req.body?.name,recoveryKey:req.body?.recovery_key,userAgent:req.headers['user-agent']});
+      S.identity.markFresh(result.user.id,S.identity.sha256(result.session.raw),'recovery');
+      security(req,'login_success',{operationId,actor:actor||result.user,subject:result.user,authMethod:'recovery',statusCode:200});
+      S.db.exec('COMMIT');
+    }catch(error){S.db.exec('ROLLBACK');throw error;}
+    S.identity.setCookie(res,result.session);
+    res.json({user:result.user,csrf_token:result.session.csrf});
+  }catch(error){if(error.code!=='SECURITY_LOG_UNAVAILABLE')security(req,'login_failure',{operationId,actor,authMethod:'recovery',reasonCode:error.code||'INVALID_INPUT',statusCode:error.status||500});throw error;}
 });
 app.post('/api/recovery/confirm',async(req,res,next)=>{try{
   const form=new URLSearchParams((await web.readBody(req,4096)).toString('utf8')),current=S.identity.requireUser(req,res);
   S.identity.requireCsrf(req,current,form.get('csrf_token'));
   if(form.get('username')!==current.name)return errors(res,400,'IDENTITY_MISMATCH','Pseudonymet samsvarer ikke med den aktive kontoen.');
-  S.identity.confirmRecovery(current,form.get('password'));recordSecurity(req,'recovery.confirmed','allowed',current.id);
+  S.identity.confirmRecovery(current,form.get('password'));
   res.status(303).set('Location','/?recovery-saved=1').send('');
 }catch(error){next(error);}});
 app.get('/api/me',(req,res)=>{const current=S.identity.readSession(req,res);if(!current)return errors(res,401,'AUTH_REQUIRED','Ingen aktiv sesjon.');res.json({user:current,csrf_token:current.csrf||null,legacy_migrated:Boolean(current.legacyMigrated),recovery_key:current.recoveryKey||null,recovery_key_shown_once:Boolean(current.recoveryKey)});});
 app.get('/api/avatars/:id/:version/:size',(req,res)=>{const file=S.avatars.file(req.params.id,req.params.version,req.params.size);res.set('Content-Type','image/webp').set('Cache-Control','private, no-store').send(fs.readFileSync(file));});
 app.post('/api/me/avatar',write(null,10),avatarUpload.single('image'),async(req,res)=>res.status(201).json(await S.avatars.save(req.auth,req.file,req.body)));
 app.delete('/api/me/avatar',write(null,10),(req,res)=>res.json(S.avatars.remove(req.auth)));
-app.post('/api/session/logout',write(null,20),(req,res)=>{S.push.disableDevice(req.auth,{id:req.body?.push_subscription_id,endpoint:req.body?.push_endpoint});S.identity.logout(req.auth,res);res.json({ok:true});});
-app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.push.disableAll(req.auth);S.identity.revokeAll(req.auth);S.identity.logout(req.auth,res);res.json({ok:true});});
+app.post('/api/session/logout',write(null,20),(req,res)=>{S.db.exec('BEGIN IMMEDIATE');try{S.push.disableDevice(req.auth,{id:req.body?.push_subscription_id,endpoint:req.body?.push_endpoint});S.identity.logout(req.auth);security(req,'logout',{actor:req.auth,statusCode:200});S.db.exec('COMMIT');}catch(error){S.db.exec('ROLLBACK');throw error;}S.identity.logout(null,res);res.json({ok:true});});
+app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.db.exec('BEGIN IMMEDIATE');try{S.push.disableAll(req.auth);const sessions=S.db.prepare("SELECT id_hash FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>datetime('now')").all(req.auth.id);S.identity.revokeAll(req.auth);for(const session of sessions)security(req,'session_revoked',{actor:req.auth,subject:req.auth,reasonCode:'USER_REVOKED',statusCode:200});S.db.exec('COMMIT');}catch(error){S.db.exec('ROLLBACK');throw error;}S.identity.logout(null,res);res.json({ok:true});});
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>{S.identity.requireFresh(req.auth);res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true});});
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
 app.get('/api/me/language',read(null),(req,res)=>res.json({preferred_language:req.auth.preferred_language}));
 app.put('/api/me/language',write(null,20),(req,res)=>res.json(S.identity.language(req.auth,req.body?.preferred_language)));
 app.get('/api/passkeys/config',(req,res)=>res.json(S.passkeys.configView()));
-app.post('/api/passkeys/step-up',write(null,10),(req,res)=>{const result=S.identity.stepUp(req.auth,req.body?.recovery_key);recordSecurity(req,'passkey.step_up','allowed',req.auth.id);res.json(result);});
+app.post('/api/passkeys/step-up',write(null,10),(req,res)=>res.json(S.identity.stepUp(req.auth,req.body?.recovery_key)));
 app.post('/api/passkeys/registration/options',write(null,10),async(req,res,next)=>{try{res.json(await S.passkeys.registrationOptions(req.auth,req.body?.label));}catch(error){next(error);}});
-app.post('/api/passkeys/registration/verify',write(null,10),async(req,res,next)=>{try{res.status(201).json(await S.passkeys.verifyRegistration(req.auth,req.body));}catch(error){recordSecurity(req,'passkey.registration','denied',req.auth.id);next(error);}});
+app.post('/api/passkeys/registration/verify',write(null,10),async(req,res)=>res.status(201).json(await S.passkeys.verifyRegistration(req.auth,req.body)));
 app.post('/api/passkeys/login/options',(req,res,next)=>{if(req.headers.origin!==S.config.webauthnOrigins[0])return errors(res,403,'ORIGIN_INVALID','Ugyldig forespørselsopprinnelse.');S.rate.check('passkey-options:'+ipKey(req),20);S.passkeys.loginOptions().then(result=>{res.set('Set-Cookie',`hereme_passkey_challenge=${encodeURIComponent(result.binding)}; Path=/api/passkeys/login; HttpOnly; SameSite=Strict; Max-Age=300${S.config.production?'; Secure':''}`);delete result.binding;res.json(result);},next);});
-app.post('/api/passkeys/login/verify',async(req,res,next)=>{try{if(req.headers.origin!==S.config.webauthnOrigins[0])return errors(res,403,'ORIGIN_INVALID','Ugyldig forespørselsopprinnelse.');S.rate.check('passkey-login:'+ipKey(req),10);const result=await S.passkeys.verifyLogin(req.body,req.headers['user-agent'],S.identity.parseCookies(req).hereme_passkey_challenge||'');S.identity.setCookie(res,result.session);recordSecurity(req,'passkey.login','allowed',result.user.id);res.json({user:result.user,csrf_token:result.session.csrf});}catch(error){recordSecurity(req,'passkey.login','denied');next(error);}});
+app.post('/api/passkeys/login/verify',async(req,res)=>{S.rate.check('passkey-login:'+ipKey(req),10);const operationId=S.securityEvents.operation(),actor=S.identity.readSession(req,res,{allowLegacy:false});security(req,'login_attempt',{operationId,actor,authMethod:'passkey'});try{if(req.headers.origin!==S.config.webauthnOrigins[0])throw new DomainError('ORIGIN_INVALID','Ugyldig forespørselsopprinnelse.',403);const result=await S.passkeys.verifyLogin(req.body,req.headers['user-agent'],S.identity.parseCookies(req).hereme_passkey_challenge||'',authenticated=>security(req,'login_success',{operationId,actor:actor||authenticated,subject:authenticated,authMethod:'passkey',statusCode:200}));S.identity.setCookie(res,result.session);res.json({user:result.user,csrf_token:result.session.csrf});}catch(error){if(error.code!=='SECURITY_LOG_UNAVAILABLE')security(req,'login_failure',{operationId,actor,authMethod:'passkey',reasonCode:error.code||'INVALID_INPUT',statusCode:error.status||500});throw error;}});
 app.get('/api/me/passkeys',read(null),(req,res)=>res.json({passkeys:S.passkeys.list(req.auth)}));
 app.patch('/api/me/passkeys/:id',write(null,10),(req,res)=>res.json(S.passkeys.rename(req.auth,req.params.id,req.body?.label)));
 app.delete('/api/me/passkeys/:id',write(null,10),(req,res)=>res.json(S.passkeys.remove(req.auth,req.params.id,req.body?.confirm_recovery)));
@@ -241,6 +270,31 @@ app.get('/api/rooms',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rom er historisk
 app.post('/api/rooms',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rom kan ikke opprettes i den nye veggen.'));
 app.post('/api/rooms/:id/membership',(req,res)=>errors(res,410,'ROOMS_RETIRED','Rommedlemskap er avviklet.'));
 app.get('/api/admin/overview',read('staff:read'),(req,res)=>res.json(S.administration.overview(req.auth)));
+app.get('/api/admin/security-events',read('security:read'),(req,res)=>res.set('Cache-Control','no-store').json(S.securityEvents.list(req.auth,req.query)));
+app.get('/api/admin/security-events/:id',read('security:read'),(req,res)=>res.set('Cache-Control','no-store').json(S.securityEvents.detail(req.auth,req.params.id)));
+app.post('/api/admin/users/:id/restriction',write('users:delete',10),(req,res)=>{
+  const status=req.body?.status,reason=String(req.body?.reason||'').trim();
+  if(!['active','suspended','banned'].includes(status)||reason.length<3||reason.length>300)throw new DomainError('INVALID_INPUT','Ugyldig begrensning eller begrunnelse.',400);
+  const subject=S.db.prepare("SELECT id,name FROM users WHERE id=? AND status='active'").get(req.params.id);
+  if(!subject)throw new DomainError('USER_NOT_FOUND','Brukeren finnes ikke.',404);
+  if(subject.id===req.auth.id)throw new DomainError('INVALID_ACTION','Du kan ikke begrense egen konto.',409);
+  S.db.exec('BEGIN IMMEDIATE');
+  try{
+    const existing=S.db.prepare('SELECT status FROM security_account_restrictions WHERE user_id=?').get(subject.id);
+    if(existing?.status===status||status==='active'&&!existing)throw new DomainError('INVALID_STATE','Begrensningen gjelder allerede.',409);
+    if(status==='active')S.db.prepare('DELETE FROM security_account_restrictions WHERE user_id=?').run(subject.id);
+    else{
+      S.db.prepare('INSERT INTO security_account_restrictions(user_id,status,changed_by,reason) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET status=excluded.status,changed_at=datetime(\'now\'),changed_by=excluded.changed_by,reason=excluded.reason').run(subject.id,status,req.auth.id,reason);
+      const sessions=S.db.prepare("SELECT id_hash FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>datetime('now')").all(subject.id);
+      S.db.prepare("UPDATE sessions SET revoked_at=datetime('now') WHERE user_id=? AND revoked_at IS NULL").run(subject.id);
+      security(req,status==='banned'?'account_banned':'account_suspended',{actor:req.auth,subject,reasonCode:status==='banned'?'BANNED':'SUSPENDED',routeClass:'moderation',statusCode:200});
+      for(const session of sessions)security(req,'session_revoked',{actor:req.auth,subject,reasonCode:status==='banned'?'BANNED':'SUSPENDED',routeClass:'moderation',statusCode:200});
+    }
+    S.audit.record({actorId:req.auth.id,action:'account.'+status,subjectType:'user',subjectId:subject.id,reason});
+    S.db.exec('COMMIT');
+  }catch(error){S.db.exec('ROLLBACK');throw error;}
+  res.json({ok:true,status});
+});
 app.get('/api/admin/queue',read('moderate'),(req,res)=>res.json({posts:S.moderation.queue()}));
 app.post('/api/admin/posts/:id/moderation',write('moderate',60),async(req,res)=>{const result=S.moderation.act(req.auth,req.params.id,req.body?.action,req.body?.reason);await syncSharePreview(req.params.id);res.json(result);});
 app.patch('/api/admin/posts/:id',write('content:manage',120),async(req,res)=>{const result=S.administration.updatePost(req.auth,req.params.id,req.body||{});await syncSharePreview(req.params.id);res.json(result);});
@@ -251,7 +305,7 @@ app.delete('/api/admin/users/:id',write('users:delete',20),(req,res)=>res.json(S
 app.use('/api',(req,res)=>errors(res,404,'NOT_FOUND','Ukjent API-endepunkt.'));
 app.use((error,req,res,next)=>{
   if(error instanceof upload.MulterError)return errors(res,error.code==='LIMIT_FILE_SIZE'?413:400,error.code,error.code==='LIMIT_FILE_SIZE'?'Bildet er for stort.':'Ugyldig bildeopplasting.');
-  if(error instanceof DomainError){if(error.status>=500)runtimeMetrics.errors++;if(error.code==='RATE_LIMITED')runtimeMetrics.rate_limited++;if(['AUTH_REQUIRED','CSRF_INVALID','FORBIDDEN','RATE_LIMITED','RECOVERY_FAILED'].includes(error.code))recordSecurity(req,error.code.toLowerCase().replaceAll('_','.'),'denied',req.auth?.id||null);if(error.status===429&&error.details?.retryAfter)res.set('Retry-After',String(error.details.retryAfter));return errors(res,error.status,error.code,error.message,error.details);}
+  if(error instanceof DomainError){if(error.status>=500)runtimeMetrics.errors++;if(error.code==='RATE_LIMITED'){runtimeMetrics.rate_limited++;if(error.firstTrigger)security(req,'rate_limit_triggered',{actor:req.auth,reasonCode:'RATE_LIMITED',routeClass:req.pathname.startsWith('/api/session')||req.pathname.startsWith('/api/passkeys')?'authentication':'other',statusCode:429});}if(error.status===429&&error.details?.retryAfter)res.set('Retry-After',String(error.details.retryAfter));return errors(res,error.status,error.code,error.message,error.details);}
   runtimeMetrics.errors++;console.error(JSON.stringify({level:'error',request_id:req.id,error:error.message,stack:S.config.production?undefined:error.stack}));errors(res,500,'INTERNAL','Noe gikk galt på serveren.');
 });
 

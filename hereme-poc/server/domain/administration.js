@@ -23,11 +23,11 @@ function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
       FROM posts p LEFT JOIN users u ON u.id=p.author_id LEFT JOIN post_presentation pp ON pp.post_id=p.id
       LEFT JOIN post_design d ON d.post_id=p.id ORDER BY p.created_at DESC,abs(p.id) DESC`).all();
     if(!actor.capabilities.includes('content:manage')){const moderatable=posts.filter(post=>['published','review','hidden'].includes(post.status));return {posts:moderatable,users:[],comments:[],reports:[],stats:{posts:moderatable.length}};}
-    const users=db.prepare(`SELECT u.id,u.name,u.status,u.created_at,group_concat(ur.role) roles,
+    const users=db.prepare(`SELECT u.id,u.name,COALESCE(sr.status,u.status) status,u.created_at,group_concat(ur.role) roles,
       (SELECT count(*) FROM posts p WHERE p.author_id=u.id) post_count,
       (SELECT count(*) FROM comments c WHERE c.author_id=u.id) comment_count,
       (SELECT count(*) FROM votes v WHERE v.user_id=u.id) vote_count
-      FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC`).all()
+      FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN security_account_restrictions sr ON sr.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC`).all()
       .map(user=>({...user,roles:user.roles?user.roles.split(','):[]}));
     const comments=db.prepare(`SELECT c.id,c.post_id,c.parent_id,c.body,c.depth,c.created_at,c.author_id,
       COALESCE(u.name,c.demo_author,'anonym') author,p.title post_title

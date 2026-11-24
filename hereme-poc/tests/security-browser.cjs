@@ -1,0 +1,43 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const os=require('node:os');
+const path=require('node:path');
+const {chromium}=require('playwright');
+const data=fs.mkdtempSync(path.join(os.tmpdir(),'hereme-security-browser-'));
+process.env.HEREME_DATA_DIR=data;
+process.env.HEREME_ENV='test';
+process.env.HEREME_DATABASE_START='empty';
+const app=require('../server/index');
+const S=require('../server/services');
+
+(async()=>{
+  const server=await new Promise(resolve=>{const running=app.listen(0,'127.0.0.1',()=>resolve(running));});
+  let browser;
+  try{
+    const origin=`http://127.0.0.1:${server.address().port}`;
+    const operator=S.identity.createProfile({name:'BrowserSecurityOperator'});
+    S.db.prepare("INSERT INTO user_roles(user_id,role) VALUES(?,'operator')").run(operator.user.id);
+    browser=await chromium.launch({headless:true});
+    const context=await browser.newContext({viewport:{width:390,height:844},userAgent:'<img src=x onerror=window.securityInjected=1>'});
+    await context.addCookies([{name:'hereme_session',value:operator.session.raw,url:origin},{name:'hereme_csrf',value:operator.session.csrf,url:origin}]);
+    const page=await context.newPage();
+    await page.goto(origin);
+    await page.locator('.menu-button').click();
+    await page.locator('[data-action="staff-panel"]').click();
+    await page.locator('[data-action="staff-tab"][data-tab="security"]').click();
+    await page.locator('[data-action="security-detail"]').first().click();
+    await page.locator('.security-raw').waitFor({state:'visible'});
+    assert.match(await page.locator('.security-raw').textContent(),/<img src=x onerror=window.securityInjected=1>/);
+    assert.equal(await page.evaluate(()=>window.securityInjected),undefined);
+    assert.equal(await page.locator('.security-raw img').count(),0);
+    assert.ok(S.db.prepare("SELECT 1 FROM audit_events WHERE action='security.event.inspect'").get());
+    await context.close();
+    console.log('Security explorer browser access and escaped raw details passed.');
+  }finally{
+    await browser?.close();
+    await new Promise(resolve=>server.close(resolve));
+    S.db.close();
+    fs.rmSync(data,{recursive:true,force:true});
+  }
+})().catch(error=>{console.error(error);process.exitCode=1;});
