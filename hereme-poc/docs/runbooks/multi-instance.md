@@ -21,6 +21,8 @@ The candidate verifies the entire snapshot manifest on a private copy before sta
 
 ### Access and manual verification
 
+The corner wordmark on `hereme.no` reads **hereme.**. On each subdomain the small label beneath it identifies the current site, including `tanteulrikkesvei` on the community and `admin` on the operator panel.
+
 - Use the existing main administrator and moderator logins on `https://hereme.no/`. For `https://tanteulrikkesvei.hereme.no/`, use the new `HerEmeAdmin` or `HerEmeModerator` from the repository-root `secrets/tanteulrikkesvei-staff-credentials.txt`. Open the staff panel from the signed-in account menu.
 - At `https://admin.hereme.no/`, use `secrets/platform-operator.txt` and enter its setup key into your authenticator as a time-based six-digit SHA-1 account. Protect these files as credentials. If SSH succeeded and the download was interrupted, rerun the Windows command with `-CredentialsOnly`. A conflicting local credential file requires operator review.
 - Each community card in the platform panel includes a QR code for its public HTTPS homepage. Scan the code with a phone camera to open that community directly. The QR endpoint requires the platform operator session.

@@ -14,6 +14,8 @@
   <link rel="apple-touch-icon" href="/assets/pwa/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="stylesheet" href="/assets/brand/wordmark.css">
+  <script src="/assets/brand/wordmark.js" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/motion.css">
   <script src="/motion.js" defer></script>
@@ -39,7 +41,7 @@
   <header class="masthead">
     <div class="utility-line"><span>HEREME / DET FOLK SNAKKER OM</span><span>STAVANGER + SANDNES / LOKAL DEMO</span></div>
     <div class="masthead-inner">
-      <button class="logo" data-action="home" aria-label="HerEme, vis hele veggen"><span class="brand-mark">H</span><span>hereme<em>.</em></span></button>
+      <button class="logo" data-action="home" aria-label="HerEme, vis hele veggen"><span class="brand-mark">H</span><hereme-wordmark>hereme<em>.</em></hereme-wordmark></button>
       <label class="header-search"><span class="sr-only">Søk i innlegg</span><input id="searchInput" type="search" maxlength="100" placeholder="Søk på veggen …"></label>
       <label class="sort-control"><span>Sorter</span><select id="sortSelect"><option value="new">Nyeste</option><option value="hot">På gang</option><option value="top">Topp</option></select></label>
       <div class="header-actions">
@@ -72,7 +74,7 @@
     <aside class="right-panel" id="rightPanel" aria-label="Samtaler og aktivitet"><div id="activityPanel"></div></aside>
   </div>
   <main id="profileRoot" class="profile-root" tabindex="-1" hidden></main>
-  <dialog id="avatarDialog" class="avatar-dialog" aria-labelledby="avatarDialogTitle"><form method="dialog"><header><h2 id="avatarDialogTitle"></h2><button type="button" id="avatarClose" aria-label="Close"><span data-icon="close"></span></button></header><p id="avatarPrivacy"></p><input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp"><canvas id="avatarPreview" width="256" height="256" hidden></canvas><div id="avatarCrop" hidden><label><span id="avatarZoomLabel"></span><input id="avatarZoom" type="range" min="1" max="3" step="0.05" value="1"></label><label><span id="avatarXLabel"></span><input id="avatarX" type="range" min="0" max="100" value="50"></label><label><span id="avatarYLabel"></span><input id="avatarY" type="range" min="0" max="100" value="50"></label></div><p id="avatarError" role="alert" hidden></p><footer><button type="button" id="avatarSave" class="btn btn-primary" disabled></button><button type="button" id="avatarRemove" class="btn btn-secondary"></button><button type="button" id="avatarCancel" class="btn btn-secondary"></button></footer></form></dialog>
+  <dialog id="avatarDialog" class="avatar-dialog" aria-labelledby="avatarDialogTitle"><form method="dialog"><header><hereme-wordmark>hereme<em>.</em></hereme-wordmark><h2 id="avatarDialogTitle"></h2><button type="button" id="avatarClose" aria-label="Close"><span data-icon="close"></span></button></header><p id="avatarPrivacy"></p><input id="avatarFile" type="file" accept="image/jpeg,image/png,image/webp"><canvas id="avatarPreview" width="256" height="256" hidden></canvas><div id="avatarCrop" hidden><label><span id="avatarZoomLabel"></span><input id="avatarZoom" type="range" min="1" max="3" step="0.05" value="1"></label><label><span id="avatarXLabel"></span><input id="avatarX" type="range" min="0" max="100" value="50"></label><label><span id="avatarYLabel"></span><input id="avatarY" type="range" min="0" max="100" value="50"></label></div><p id="avatarError" role="alert" hidden></p><footer><button type="button" id="avatarSave" class="btn btn-primary" disabled></button><button type="button" id="avatarRemove" class="btn btn-secondary"></button><button type="button" id="avatarCancel" class="btn btn-secondary"></button></footer></form></dialog>
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-container" aria-live="polite"></div>
 </body>

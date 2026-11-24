@@ -16,8 +16,8 @@ header {
   padding: .9rem clamp(1rem, 5vw, 4rem);
   border-bottom: 1px solid var(--line);
 }
-header strong {font-size: 1.4rem}
-header span, li {color: var(--muted)}
+header > span, li {color: var(--muted)}
+header > hereme-wordmark {margin-block: -.2rem}
 header button {margin-left: auto}
 main {max-width: 68rem; margin: 2.5rem auto; padding: 0 1.25rem}
 h1, h2 {line-height: 1.2}
@@ -38,6 +38,6 @@ li {margin: .45rem 0}
 #status {font-weight: 600}
 :focus-visible {outline: 3px solid #8fc5ff; outline-offset: 3px}
 @media (max-width: 32rem) {
-  header {flex-wrap: wrap; gap: .4rem .75rem}
+  header {gap: .4rem .75rem}
   main {margin-top: 1.5rem}
 }

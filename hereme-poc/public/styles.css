@@ -3,11 +3,6 @@
   src:url("/assets/fonts/CascadiaCode.ttf") format("truetype");
   font-style:normal; font-weight:200 900; font-display:swap;
 }
-@font-face {
-  font-family:"Source Sans 3";
-  src:url("/assets/fonts/SourceSans3-Regular.ttf.woff2") format("woff2");
-  font-style:normal; font-weight:400; font-display:swap;
-}
 :root {
   color-scheme:dark; --paper:#0f1113; --panel:#171a1d; --panel2:#23272b;
   --ink:#eceae3; --muted:#a5aaa7; --line:#000; --accent:#96b36a;
@@ -50,8 +45,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 @media (max-width:699px) { .install-banner:not([hidden]) { display:flex; width:calc(100% - 20px); margin:10px 10px 0; } .install-reason:not([hidden]) { display:block; margin:6px 10px 10px; font-size:12px; color:var(--muted); } }
 .utility-line { background:#16191a; color:#dfe5da; display:flex; justify-content:space-between; gap:12px; padding:5px 20px; font-size:9px; letter-spacing:.1em; border-bottom:1px solid #000; }
 .masthead-inner { display:flex; align-items:center; gap:22px; min-height:84px; max-width:1920px; margin:auto; padding:14px 20px; }
-.logo { display:flex; align-items:center; gap:12px; font-weight:800; font-size:34px; letter-spacing:-.09em; padding:0; }
-.logo em { font-style:normal; color:var(--accent); }
+.logo { display:flex; align-items:center; gap:12px; min-height:1.4em; font-weight:800; font-size:34px; letter-spacing:-.09em; padding:0; }
 .brand-mark { display:grid; place-items:center; width:36px; height:36px; border:2px solid var(--accent); color:var(--accent); font-size:26px; letter-spacing:-.15em; padding-right:4px; }
 .header-search { flex:1; min-width:130px; max-width:420px; margin-left:auto; }
 .sort-control { display:flex; flex-direction:column; gap:4px; }
@@ -67,6 +61,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .language-selector img { width:24px; height:16px; object-fit:contain; }
 .language-menu { margin-bottom:12px; }
 .auth-dialog header .language-label { display:none; }
+.auth-dialog hereme-wordmark,.install-help hereme-wordmark,#attachmentViewer hereme-wordmark {
+  --ink:#eceae3; --muted:#a5aaa7; --wordmark-dot:#96b36a;
+}
+.auth-dialog header > div:has(hereme-wordmark) { order:-1; }
 .auth-dialog header .language-selector { margin-left:auto; }
 .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:10px 14px; border:1px solid #58625c; font-size:12px; font-weight:700; text-decoration:none; cursor:pointer; }
 .btn-primary { background:var(--accent); border-color:var(--accent); color:#101510; }
@@ -181,6 +179,7 @@ main { min-width:0; }
 .credential-row button { min-width:72px; }
 .recovery-actions { display:flex; gap:10px; flex-wrap:wrap; }
 .policy-page { max-width:760px; margin:0 auto; padding:clamp(24px,6vw,80px) 20px; }
+.policy-home { display:inline-flex; align-items:center; min-height:44px; color:var(--ink); text-decoration:none; }
 .policy-page h1 { font-size:clamp(28px,6vw,52px); letter-spacing:-.08em; }
 .policy-page h2 { margin-top:35px; color:var(--accent); }
 .policy-page li,.policy-page p { line-height:1.75; }
@@ -205,6 +204,9 @@ main { min-width:0; }
 .modal-header { border-bottom:2px solid #000; }
 .modal-footer { border-top:2px solid #000; }
 .modal-header h2 { margin:0; font-size:20px; letter-spacing:-.06em; }
+.modal-header h2,.avatar-dialog header h2 { margin-right:auto; }
+.install-help header,.passkey-security header { display:flex; gap:12px; align-items:center; }
+.install-help header h2,.passkey-security header h2 { margin:0; }
 .modal-close { min-height:44px; min-width:44px; font-size:13px; text-transform:uppercase; white-space:nowrap; }
 .modal-content { padding:22px; overflow:auto; overscroll-behavior:contain; min-height:0; }
 .modal-content p { line-height:1.6; }
@@ -473,7 +475,7 @@ details summary { min-height:44px; display:list-item; padding:12px 0; font-size:
 [data-theme=light] .activity-item small { color:var(--theme-bg); }
 [data-theme=light] .vote-number.negative { color:#9e353d; }
 [data-theme=light] .vote-btn[aria-pressed=true] { outline-color:#fff; }
-[data-theme=light] .logo em,[data-theme=light] .brand-mark,[data-theme=light] .nav-link:first-of-type { color:#3d6028; }
+[data-theme=light] .brand-mark,[data-theme=light] .nav-link:first-of-type { color:#3d6028; }
 .notification-button{position:relative;width:44px;height:44px;padding:10px;border:1px solid var(--line);background:var(--panel);color:#8fdf9a}.notification-button svg,.notification-row svg{width:22px;height:22px}.notification-row svg{color:#8fdf9a}.notification-button span{position:absolute;right:-5px;top:-5px;min-width:20px;height:20px;padding:2px 4px;background:#8fdf9a;color:#0f1113;font-size:11px;font-weight:900;text-align:center}.notification-settings,.notification-inbox{padding:2px 0 18px}.notification-settings fieldset{display:grid;gap:10px;margin:18px 0 0;padding:14px;border:1px solid var(--line)}.notification-choice{display:flex;gap:9px;align-items:center}.notification-choice input{width:20px;height:20px}.notification-actions{display:flex;gap:8px;flex-wrap:wrap}.notification-inbox h3{margin:8px 0}.notification-row{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:center;width:100%;padding:12px;border:1px solid var(--line);border-bottom:0;background:var(--panel);color:var(--ink);text-align:left}.notification-row:last-child{border-bottom:1px solid var(--line)}.notification-row.unread{border-left:4px solid #8fdf9a;background:var(--panel2)}.notification-row span,.notification-row small{display:block}.notification-row small{margin-top:3px;color:var(--muted)}
 
 @media (display-mode: standalone) {
@@ -584,6 +586,7 @@ body,input,button,textarea,select{font-family:var(--font-reading)}
 .article-media-viewer{width:min(95vw,1100px);max-height:90dvh;padding:12px;background:var(--panel);color:var(--ink);border:1px solid var(--muted)}
 .article-media-viewer::backdrop{background:#000d}
 .article-media-viewer>button{display:block;margin-left:auto;min-height:44px}
+.article-media-viewer>hereme-wordmark{float:left}
 .article-media-viewer img,.article-media-viewer video{display:block;max-width:100%;max-height:75dvh;margin:auto;object-fit:contain}
 .poster-media-expand{display:inline-flex;align-items:center;gap:7px;min-height:44px;margin:8px;padding:8px 10px;border:1px solid var(--muted);background:var(--panel2);color:var(--ink)}
 .poster-media-expand .icon{width:18px;height:18px}.poster-media-viewer img{width:auto;height:auto;max-width:100%;max-height:75dvh}

@@ -58,3 +58,11 @@ html.chat-viewer-open,html.chat-viewer-open body{overflow:hidden}
 .viewer-media{display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain}.viewer-media[hidden],.viewer-icon-button[hidden]{display:none}
 .viewer-status,.viewer-file-panel{max-width:min(420px,100%);padding:16px;border:1px solid var(--line);background:var(--panel);text-align:center;overflow-wrap:anywhere}.viewer-file-panel .icon{display:block;width:48px;height:48px;margin:0 auto 10px}.viewer-error button{display:block;margin:12px auto 0;padding:8px 12px;border:1px solid #59605d}
 @media(max-width:480px){.viewer-stage{grid-template-columns:38px minmax(0,1fr) 38px}.viewer-nav{width:36px;height:44px}}
+
+.inbox-top .wall-link { width:auto; border:0; color:var(--ink); }
+.conversation-header > hereme-wordmark { display:none; }
+@media (max-width:760px) {
+  .conversation-header { grid-template-columns:auto 44px 28px minmax(0,1fr) 44px; }
+  .conversation-header > hereme-wordmark { display:inline-block; }
+}
+#attachmentViewer header { grid-template-columns:auto 44px minmax(0,1fr) 44px; }

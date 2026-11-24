@@ -14,6 +14,8 @@
   <script src="/passkeys.js" defer></script>
   <script src="/auth.js" defer></script>
   <script src="/pwa.js" defer></script>
+  <link rel="stylesheet" href="/assets/brand/wordmark.css">
+  <script src="/assets/brand/wordmark.js" defer></script>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/chat.css">
   <link rel="stylesheet" href="/motion.css">
@@ -28,7 +30,7 @@
   <main class="chat-shell" id="chatShell">
     <aside class="chat-inbox" aria-label="Chat-innboks">
       <header class="inbox-header">
-        <div class="inbox-top"><a class="wall-link" href="/" aria-label="Plakatveggen" title="Plakatveggen"><img src="/assets/icons/chat-back-arrow.svg" alt=""></a><div class="inbox-heading"><h1>Chat</h1><span id="unreadCount" class="unread-count" hidden></span></div></div>
+        <div class="inbox-top"><a class="wall-link" href="/" aria-label="Plakatveggen" title="Plakatveggen"><hereme-wordmark>hereme<em>.</em></hereme-wordmark></a><div class="inbox-heading"><h1>Chat</h1><span id="unreadCount" class="unread-count" hidden></span></div></div>
         <div class="search-line">
           <label class="sr-only" for="usernameSearch">Søk etter brukernavn</label>
           <input id="usernameSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Søk etter brukernavn…" aria-controls="searchResults" aria-expanded="false">
@@ -51,6 +53,7 @@
       <div id="conversationEmpty" class="conversation-empty">Velg en samtale eller søk etter en bruker.</div>
       <div id="conversationContent" class="conversation-content" hidden>
         <header class="conversation-header">
+          <hereme-wordmark>hereme<em>.</em></hereme-wordmark>
           <button id="backToInbox" class="back-button" type="button" aria-label="Tilbake til samtaler"><img src="/assets/icons/chat-back-arrow.svg" alt=""></button>
           <span id="conversationAvatar" class="conversation-avatar" aria-hidden="true"></span>
           <div class="conversation-heading"><h2 id="conversationTitle" tabindex="-1"></h2><span id="conversationSubtitle"></span></div>
@@ -82,6 +85,7 @@
   <dialog id="attachmentViewer" aria-labelledby="viewerTitle">
     <div class="viewer-shell">
       <header>
+        <hereme-wordmark>hereme<em>.</em></hereme-wordmark>
         <button id="closeViewer" class="viewer-icon-button" type="button"><span class="sr-only">Lukk</span></button>
         <div class="viewer-heading"><strong id="viewerTitle">Vedlegg</strong><span id="viewerCount"></span></div>
         <a id="viewerDownload" class="viewer-icon-button" download><span class="sr-only">Last ned</span></a>

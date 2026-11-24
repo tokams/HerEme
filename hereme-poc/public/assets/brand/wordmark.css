@@ -1,0 +1,42 @@
+@font-face {
+  font-family: "Source Sans 3";
+  src: url("/assets/fonts/SourceSans3-Regular.ttf.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+hereme-wordmark {
+  display: inline-block;
+  position: relative;
+  flex: none;
+  height: 40px;
+  vertical-align: middle;
+  white-space: nowrap;
+  color: var(--ink, inherit);
+  font: 800 34px/40px "Source Sans 3", Arial, sans-serif;
+  letter-spacing: -.09em;
+}
+hereme-wordmark em { color: var(--wordmark-dot, var(--accent)); font-style: normal; }
+[data-theme=light] { --wordmark-dot: #3d6028; }
+hereme-wordmark:has(small) { line-height: 29px; }
+hereme-wordmark small {
+  position: absolute;
+  inset: auto 0 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: normal;
+}
+@media (max-width: 699px) {
+  hereme-wordmark { font-size: 24px; }
+  hereme-wordmark small { font-size: 10px; bottom: 3px; }
+}
+@media (max-width: 359px) {
+  hereme-wordmark { font-size: 23px; }
+  hereme-wordmark small { font-size: 9.5px; }
+}

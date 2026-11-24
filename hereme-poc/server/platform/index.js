@@ -69,6 +69,10 @@ function createPanel({registry,sites,origin='https://admin.hereme.no',health=sit
     registry.prepare("UPDATE audit SET action='registration applied' WHERE id=?").run(change.lastInsertRowid);
     res.json(readPolicy(site.policy));
   });
+  const brandAssets=web.static(path.resolve(__dirname,'../../public'));
+  app.get('/assets/brand/wordmark.css',brandAssets);
+  app.get('/assets/brand/wordmark.js',brandAssets);
+  app.get('/assets/fonts/SourceSans3-Regular.ttf.woff2',brandAssets);
   app.use(web.static(path.join(__dirname,'web')));
   app.use((err,req,res,next)=>{
     if(!err.status)console.error('Platform request failed:',err.message);

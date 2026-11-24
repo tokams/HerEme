@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-24 — Instance wordmark
+
+Community pages, chat and the operator panel share the same corner wordmark. Each subdomain displays its name beneath the lettering, such as `tanteulrikkesvei` or `admin`. The main site uses the plain wordmark.
+
 ## 2026-11-24 — Community QR links
 
 Added authenticated QR endpoints and panel cards for each managed community. Codes open the corresponding HTTPS homepage and are available on mobile and desktop layouts.
