@@ -151,3 +151,33 @@ test('a raw-row write failure rolls back its structured event and rejects accoun
     assert.equal(S.db.prepare("SELECT count(*) n FROM users WHERE name='SecurityStorageFailure'").get().n,0);
   }finally{S.db.exec('DROP TRIGGER reject_security_raw');}
 });
+
+test('document URLs and completed status agree in both records and operator filters',async()=>{
+  const origin=S.config.publicOrigin;
+  const response=await request('/?post=9999999&session_id=secret&token=secret&sort=secret',{
+    headers:{accept:'text/html',referer:origin+'/me?recovery_key=secret#secret',
+      'x-forwarded-host':'false.example','x-forwarded-proto':'http'}
+  });
+  assert.equal(response.status,404);
+  const event=rows().at(-1);
+  const raw=S.db.prepare('SELECT * FROM security_event_raw WHERE event_id=?').get(event.event_id);
+  assert.equal(raw.schema_version,2);
+  const permitted={request_url:origin+'/?post=9999999',request_path:'/',http_method:'GET',referrer_url:origin+'/me',status_code:404};
+  for(const [column,expected] of Object.entries(permitted)){
+    assert.equal(event[column],expected);
+    assert.equal(JSON.parse(raw.raw_metadata_json)[column],expected);
+  }
+  const actor=S.identity.createProfile({name:'FilterOperator'}).user;
+  const filters={request_url:'post=9999999',request_path:'/',http_method:'get',referrer_url:'/me',status_code:'404'};
+  assert.deepEqual(S.securityEvents.list({...actor,roles:['operator']},filters).events.map(row=>row.event_id),[event.event_id]);
+});
+
+test('unsafe referrers and credential-bearing selectors never enter the URL snapshot',()=>{
+  const {securityUrls}=require('../server/domain/security-url');
+  const config={publicOrigin:'https://hereme.no'};
+  for(const referer of ['https://other.invalid/?secret=abc','https://user:password@hereme.no/me',
+    'https://hereme.no/reset/private-code','//hereme.no/me','']){
+    const urls=securityUrls({url:'/chat?message=12&message=abc&%74oken=private&custom=secret',headers:{referer}},config);
+    assert.deepEqual(urls,{request_path:'/chat',request_url:'https://hereme.no/chat?message=12',referrer_url:null});
+  }
+});

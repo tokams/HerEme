@@ -19,14 +19,14 @@ Proposed basis: GDPR Article 6(1)(f), separately assessed for the purposes above
 
 | Field group | Reason to keep | Limit |
 |---|---|---|
-| UTC time, fixed event type, source, result/status, route class, safe reason and auth method | Explain a known state transition. | No path, query, body or arbitrary exception. |
+| UTC time, fixed event type, source, result/status, route class, safe reason and auth method | Explain a known state transition. | Only the path and approved public query selectors are retained. Bodies and arbitrary exceptions are excluded. |
 | Instance ID and canonical hostname | Scope evidence to one community. | Host accepted only when matching the production origin; never cross-instance join. |
 | Verified actor and subject ID/name snapshots | Trace a known account and preserve history after rename. | Null for an unknown visitor; actor and affected account separate. |
 | Validated client IP and source | Distinguish a network connection in an incident. | One IPv4/IPv6 value from peer or the trusted loopback proxy; ignore a direct client's forwarded header. |
 | Bounded User-Agent plus derived browser/OS/version/device category | Interpret authentication compatibility and incident context. | At most 512 characters, no control characters; no device model or high-entropy hints. |
 | HTTP method, generated request/operation UUID | Relate an attempt and outcome. | Never a session, CSRF or credential value. |
 
-The raw snapshot permits only IP/source, bounded User-Agent and HTTP method. Cookies, authorization, recovery keys, passkey assertions, content, URLs, forwarded chains, unknown headers and browser/device probes are excluded. No tracking identifier or client telemetry was added.
+Raw schema 2 also records request path, canonical URL, safe same-origin referring URL and completed HTTP status alongside the method, IP/source and bounded User-Agent. Cookies, authorization, recovery keys, passkey assertions, content, unrestricted queries, forwarded chains, unknown headers and browser/device probes are excluded. No tracking identifier or client telemetry was added.
 
 ## Terminal storage and Norwegian ekomloven § 3-15
 

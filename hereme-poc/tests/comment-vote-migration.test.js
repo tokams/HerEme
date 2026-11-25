@@ -12,9 +12,9 @@ test('schema 21 posts, comments and votes survive the additive content-format mi
   db.prepare("INSERT INTO security_events_legacy(event,result,actor_id,ip_hash,request_id) VALUES('legacy_login','denied','kept','old-ip-hash','old-request')").run();
   db.prepare('INSERT INTO votes(post_id,user_id,value) VALUES(99,?,1)').run('kept');
   db.prepare("INSERT INTO comments(id,post_id,author_id,body,depth) VALUES(88,99,'kept','Existing reply',0)").run();
-  db.exec('DROP TABLE security_account_restrictions; DROP TABLE security_event_raw; DROP TABLE security_events; ALTER TABLE security_events_legacy RENAME TO security_events; DELETE FROM schema_migrations WHERE version=24; DROP TABLE content_media_purges; DROP TABLE content_git_purges; DROP TABLE content_publish_requests; DROP TABLE content_git_outbox; DROP TABLE content_media_references; DROP TABLE content_revisions; DROP TABLE article_working_copies; DELETE FROM schema_migrations WHERE version=23; DROP TABLE articles; DROP TABLE article_assets; DROP TABLE poster_content; DELETE FROM schema_migrations WHERE version=22');
+  db.exec('DROP TABLE security_account_restrictions; DROP TABLE security_event_raw; DROP TABLE security_events; ALTER TABLE security_events_legacy RENAME TO security_events; DELETE FROM schema_migrations WHERE version>=24; DROP TABLE content_media_purges; DROP TABLE content_git_purges; DROP TABLE content_publish_requests; DROP TABLE content_git_outbox; DROP TABLE content_media_references; DROP TABLE content_revisions; DROP TABLE article_working_copies; DELETE FROM schema_migrations WHERE version=23; DROP TABLE articles; DROP TABLE article_assets; DROP TABLE poster_content; DELETE FROM schema_migrations WHERE version=22');
   applyMigrations(db);
-  assert.equal(db.prepare('SELECT max(version) version FROM schema_migrations').get().version,24);
+  assert.equal(db.prepare('SELECT max(version) version FROM schema_migrations').get().version,25);
   assert.equal(db.prepare('SELECT text FROM poster_content WHERE post_id=99').get().text,'Existing\n\nOld body');
   const baseline=db.prepare('SELECT version,origin,created_at,revision_captured_at,snapshot FROM content_revisions WHERE post_id=99').get();
   assert.equal(baseline.version,1);assert.equal(baseline.origin,'legacy_snapshot');assert.equal(JSON.parse(baseline.snapshot).text,'Existing\n\nOld body');

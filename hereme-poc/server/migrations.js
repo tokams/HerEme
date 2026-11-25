@@ -35,7 +35,7 @@ function backfillContentRevisions(db){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 24) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 25) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -574,6 +574,15 @@ function applyMigrations(db) {
           SELECT u.id,'operator',u.id FROM users u JOIN user_roles r ON r.user_id=u.id AND r.role='admin'
           WHERE u.normalized_name='heremeadmin' AND u.status='active';
         INSERT INTO schema_migrations(version) VALUES(24); COMMIT;`);
+    }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<25){
+    db.exec('BEGIN IMMEDIATE');
+    try{
+      db.exec(`ALTER TABLE security_events ADD COLUMN request_url TEXT;
+        ALTER TABLE security_events ADD COLUMN request_path TEXT;
+        ALTER TABLE security_events ADD COLUMN referrer_url TEXT;
+        INSERT INTO schema_migrations(version) VALUES(25); COMMIT;`);
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
 }

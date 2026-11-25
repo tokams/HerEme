@@ -371,8 +371,8 @@ def deploy(release, legacy, base, revision, prefix, development):
     backup.mkdir(parents=True)
     check_backup_space(candidate, backup, [(data, archive), (secondary_data, secondary_git)])
     old_version = db_version(old["Image"], data)
-    require(old_version in ("23", "24") if previous else old_version == "23",
-            "Expected schema 23 for the initial cutover or schema 23/24 for an upgrade")
+    require(old_version in ("23", "24", "25") if previous else old_version == "23",
+            "Expected schema 23 for the initial cutover or schema 23/24/25 for an upgrade")
     if previous:
         require(db_version(secondary["Image"], secondary_data) == old_version, "Secondary schema differs")
     if previous:

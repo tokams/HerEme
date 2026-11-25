@@ -1,14 +1,15 @@
 'use strict';
 const crypto=require('node:crypto');
 const net=require('node:net');
+const {securityUrls}=require('./security-url');
 const {fail,DomainError}=require('./errors');
 
 const TYPES=new Set(['page_visit','registration_attempt','registration_success','registration_failure','login_attempt','login_success','login_failure','logout','session_expired','session_revoked','rate_limit_triggered','account_suspended','account_banned']);
 const REASONS=new Set(['REGISTRATION_CLOSED','NAME_TAKEN','INVALID_INPUT','RECOVERY_FAILED','PASSKEY_LOGIN_FAILED','PASSKEY_DISABLED','ORIGIN_INVALID','RATE_LIMITED','AUTH_REQUIRED','SUSPENDED','BANNED','USER_REVOKED']);
 // Version 1. Approved security fields: peer/client IP, method and bounded User-Agent.
 // Purpose: account/service security. Proposed basis: GDPR 6(1)(f), subject to controller review.
-// Additional hints, language, referer, device model and URL are intentionally excluded.
-const SCHEMA_VERSION=1;
+// URL policy is shared between the structured record and its raw snapshot.
+const SCHEMA_VERSION=2;
 const bounded=(value,max)=>typeof value==='string'&&value.length<=max&&!/[\u0000-\u001f\u007f]/.test(value)?value:null;
 const normalizedIp=value=>net.isIP(value)?value:null;
 function requestMetadata(req,config){
@@ -31,7 +32,20 @@ function requestMetadata(req,config){
 }
 function createSecurityEvents(db,config,{audit}={}){
   const instanceId=config.instanceId||'development';
-  const insert=db.prepare(`INSERT INTO security_events(event_id,timestamp_utc,event_type,instance_id,hostname,source,user_id,username,subject_user_id,subject_username,client_ip,browser_family,browser_version,os_family,os_version,device_type,device_model,http_method,status_code,route_class,request_id,operation_id,auth_method,reason_code,parser_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const insert=db.prepare(`INSERT INTO security_events(event_id,timestamp_utc,event_type,instance_id,hostname,source,user_id,username,subject_user_id,subject_username,client_ip,browser_family,browser_version,os_family,os_version,device_type,device_model,http_method,status_code,route_class,request_id,operation_id,auth_method,reason_code,parser_version,request_url,request_path,referrer_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const pending=new WeakMap();
+  const setStatus=db.prepare('UPDATE security_events SET status_code=? WHERE event_id=?');
+  const setRawStatus=db.prepare("UPDATE security_event_raw SET raw_metadata_json=json_set(raw_metadata_json,'$.status_code',?) WHERE event_id=?");
+  function finish(req,status){
+    const ids=pending.get(req);
+    if(!ids)return;
+    db.exec('SAVEPOINT response_status');
+    try {
+      for(const id of ids){setStatus.run(status,id);setRawStatus.run(status,id);}
+      db.exec('RELEASE response_status');
+    }catch(error){db.exec('ROLLBACK TO response_status; RELEASE response_status');throw error;}
+    pending.delete(req);
+  }
   const rawInsert=db.prepare('INSERT INTO security_event_raw(event_id,captured_at_utc,schema_version,raw_metadata_json) VALUES(?,?,?,?)');
   const account=db.prepare('SELECT id,name FROM users WHERE id=?');
   const operation=()=>crypto.randomUUID();
@@ -39,22 +53,33 @@ function createSecurityEvents(db,config,{audit}={}){
     if(!TYPES.has(type))throw Error('Unknown security event type');
     if(reasonCode&&!REASONS.has(reasonCode))reasonCode='INVALID_INPUT';
     const timestamp=new Date().toISOString(),id=crypto.randomUUID(),metadata=requestMetadata(req,config);
+    const urls=req?securityUrls(req,config):{};
+    if(metadata.raw)Object.assign(metadata.raw,urls,{status_code:null});
     let savepoint=false;
     try{
       const actorRow=actor?.id?account.get(actor.id):null,subjectRow=subject?.id?account.get(subject.id):null;
       db.exec('SAVEPOINT security_event');savepoint=true;
       insert.run(id,timestamp,type,instanceId,metadata.fields.hostname||null,source,actorRow?.id||null,actorRow?.name||null,subjectRow?.id||null,subjectRow?.name||null,
         metadata.fields.client_ip||null,metadata.fields.browser_family||null,metadata.fields.browser_version||null,metadata.fields.os_family||null,metadata.fields.os_version||null,metadata.fields.device_type||null,null,
-        metadata.fields.http_method||null,statusCode,routeClass,metadata.fields.request_id||null,operationId,authMethod,reasonCode,1);
+        metadata.fields.http_method||null,req?null:statusCode,routeClass,metadata.fields.request_id||null,operationId,authMethod,reasonCode,1,
+        urls.request_url??null,urls.request_path??null,urls.referrer_url??null);
       rawInsert.run(id,timestamp,SCHEMA_VERSION,metadata.raw?JSON.stringify(metadata.raw):null);
       db.exec('RELEASE security_event');
     }catch(error){if(savepoint){db.exec('ROLLBACK TO security_event');db.exec('RELEASE security_event');}console.error(JSON.stringify({level:'error',component:'security_events',event_type:type,code:'PERSISTENCE_FAILED'}));throw new DomainError('SECURITY_LOG_UNAVAILABLE','Sikkerhetsloggen er utilgjengelig.',503);}
+    if(req){if(!pending.has(req))pending.set(req,[]);pending.get(req).push(id);}
     return id;
   }
   function list(actor,filters={}){
     if(!actor?.roles?.includes('operator'))fail('FORBIDDEN','Sikkerhetsadministrator kreves.',403);
     const allowed={event_type:'event_type',user_id:'user_id',username:'username',ip:'client_ip',browser:'browser_family',browser_version:'browser_version',os:'os_family',os_version:'os_version',device:'device_type',event_id:'event_id',operation_id:'operation_id'};
     const where=[],values=[];
+    for(const column of ['request_url','request_path','referrer_url','http_method','status_code']){
+      const value=filters[column];
+      if(!value)continue;
+      if(typeof value!=='string'||value.length>8704)fail('INVALID_FILTER','Ugyldig filter.',400);
+      if(column==='http_method'||column==='status_code'){where.push(column+'=?');values.push(value.toUpperCase());}
+      else{where.push('instr('+column+',?)>0');values.push(value);}
+    }
     for(const [key,column] of Object.entries(allowed))if(filters[key]){
       const value=String(filters[key]);if(value.length>255)fail('INVALID_FILTER','Ugyldig filter.',400);
       if(key==='user_id'){where.push('(user_id=? OR subject_user_id=?)');values.push(value,value);}
@@ -78,6 +103,6 @@ function createSecurityEvents(db,config,{audit}={}){
     audit.record({actorId:actor.id,action:'security.event.inspect',subjectType:'security_event',subjectId:id,reason:'Security event detail'});
     return {...event,raw_metadata:event.raw_metadata_json?JSON.parse(event.raw_metadata_json):null,raw_metadata_json:undefined};
   }
-  return {record,operation,list,detail};
+  return {record,finish,operation,list,detail};
 }
 module.exports={createSecurityEvents,requestMetadata};

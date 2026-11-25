@@ -1,5 +1,7 @@
 # ADR 0016: Instance-local security events
 
+Schema 25 extends the existing thirteen hooks. Request URLs use the instance's configured public origin and retain public numeric selectors (post, message, version, from, to, page, limit), the history flag and recognized sort modes. Unknown parameters, fragments and invalid selector values are dropped. Referrers must be absolute URLs for recognized pages on the same origin without embedded credentials. Raw schema 2 uses these same values. The server records the final HTTP status on response completion under the existing event UUID. Requests that never finish have an unknown status. Migration leaves historical URLs and raw snapshots untouched.
+
 Status: Implemented in development, production activation pending controller review (2026-11-24).
 
 SEC-01 adds an instance-local event trail to the existing community application. The current platform registry at `admin.hereme.no` has operational data but no community account database. Security events therefore live beside the account and session facts in each community's SQLite database. The local `operator` role alone receives `security:read`; moderators and ordinary content administrators do not. This differs from presenting all community events in the central platform panel. It preserves per-instance isolation and avoids a cross-community identity database. The platform panel can remain unavailable without disabling community security logging.

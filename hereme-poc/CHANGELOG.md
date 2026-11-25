@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-25 — Request URLs in security events
+
+Schema 25 adds request URL, path and safe referring URL to the existing security events. Operators can filter these fields, HTTP method and completed response status. Raw records use the same sanitization as the searchable fields. Older events retain their original evidence.
+
 ## 2026-11-25 — Community staff page and notification counts
 
 The community menu opens administration and moderation at `/staff`. The bell refreshes when notifications are read in another tab, when a conversation is marked read and when the wall returns to view. The wall header no longer displays the local demo banner.

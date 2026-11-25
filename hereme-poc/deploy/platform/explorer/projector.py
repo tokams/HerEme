@@ -14,7 +14,7 @@ COMMUNITY = {
     "posts": "id author_id status type created_at",
     "comments": "id post_id parent_id author_id created_at",
     "votes": "post_id user_id value",
-    "security_events": "event_id timestamp_utc event_type instance_id hostname source user_id username subject_user_id subject_username client_ip browser_family browser_version os_family os_version device_type device_model http_method status_code route_class request_id operation_id auth_method reason_code parser_version",
+    "security_events": "event_id timestamp_utc event_type instance_id hostname source user_id username subject_user_id subject_username client_ip browser_family browser_version os_family os_version device_type device_model http_method status_code route_class request_id operation_id auth_method reason_code parser_version request_url request_path referrer_url",
     "security_event_raw": "event_id captured_at_utc schema_version raw_metadata_json",
 }
 PLATFORM = {"operators": "name", "audit": "id time actor action site detail"}
