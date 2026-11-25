@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-25 — Community staff page and notification counts
+
+The community menu opens administration and moderation at `/staff`. The bell refreshes when notifications are read in another tab, when a conversation is marked read and when the wall returns to view. The wall header no longer displays the local demo banner.
+
 ## 2026-11-25 — Platform Database Explorer
 
 Authorized platform operators can browse approved community and registry data and run read-only SQL in Datasette at `/databases/`. The release creates an isolated browser and a projector that refreshes filtered tables from the live SQLite databases. See [ADR 0017](docs/adr/0017-database-explorer.md) for registration, permissions, query limits and rehearsal instructions.

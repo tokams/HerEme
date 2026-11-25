@@ -51,7 +51,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .security-filters input { width:160px; max-width:100%; }
 .security-raw { white-space:pre-wrap; overflow-wrap:anywhere; max-height:50dvh; overflow:auto; }
 .account-links { display:grid; gap:10px; margin-top:18px; }
-.utility-line { background:#16191a; color:#dfe5da; display:flex; justify-content:space-between; gap:12px; padding:5px 20px; font-size:9px; letter-spacing:.1em; border-bottom:1px solid #000; }
 .masthead-inner { display:flex; align-items:center; gap:22px; min-height:84px; max-width:1920px; margin:auto; padding:14px 20px; }
 .logo { display:flex; align-items:center; gap:12px; min-height:1.4em; font-weight:800; font-size:34px; letter-spacing:-.09em; padding:0; }
 .brand-mark { display:grid; place-items:center; width:36px; height:36px; border:2px solid var(--accent); color:var(--accent); font-size:26px; letter-spacing:-.15em; padding-right:4px; }
@@ -263,7 +262,9 @@ textarea { min-height:100px; resize:vertical; }
 input[type=range] { width:100%; accent-color:var(--accent); min-height:30px; }
 .form-stack { display:grid; gap:18px; }
 .notice { background:#202724; padding:15px; font-size:12px; }
-.staff-modal { width:min(1400px,100%); }
+.profile-root:has(.staff-page) { max-width:none; padding:clamp(12px,3vw,40px); }
+.staff-page { min-width:0; }
+.staff-page h1 { margin:16px 0; font-size:clamp(24px,4vw,40px); }
 .staff-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
 .staff-tabs [aria-pressed=true] { border-color:var(--accent); color:var(--accent); }
 .staff-table-wrap { overflow:auto; margin-top:14px; border:1px solid var(--line); }
@@ -388,7 +389,7 @@ details summary { min-height:44px; display:list-item; padding:12px 0; font-size:
 @media(max-width:699px) {
   .modal-open { overflow:visible; }
   .modal-overlay { overscroll-behavior:contain; }
-  .utility-line,.header-search,.profile-chip,.create-label { display:none; }
+  .header-search,.profile-chip,.create-label { display:none; }
   .masthead-inner { min-height:58px; padding:7px 10px; }
   .logo { font-size:24px; gap:0; flex:none; min-height:44px; }
   .brand-mark { display:none; }
@@ -473,7 +474,6 @@ details summary { min-height:44px; display:list-item; padding:12px 0; font-size:
   [data-layout=simple] .poster-wall { columns:3; column-gap:10px; }
   [data-layout=simple] .post-card { margin-bottom:10px; }
   [data-layout=simple] .wall-toolbar { padding-inline:0; }
-  [data-layout=simple] .utility-line { display:none; }
 }
 @media(max-width:899px) { .display-preferences { display:none; } }
 
@@ -481,7 +481,7 @@ details summary { min-height:44px; display:list-item; padding:12px 0; font-size:
 :root[data-theme=light] { color-scheme:light; --paper:#f2f1eb; --panel:#fafaf6; --panel2:#e4e8df; --ink:#202724; --muted:#546058; --accent:#b5cb91; }
 [data-theme=light] a,[data-theme=light] .text-button,[data-theme=light] .reply-button,[data-theme=light] .discussion h2,[data-theme=light] .activity-section h2,[data-theme=light] .activity-totals { color:#3d6028; }
 [data-theme=light] .masthead,[data-theme=light] .left-panel,[data-theme=light] .right-panel,[data-theme=light] .modal-panel { background:var(--panel); }
-[data-theme=light] .utility-line,[data-theme=light] .modal-header,[data-theme=light] .modal-footer,[data-theme=light] .detail-toolbar,[data-theme=light] .notice,[data-theme=light] .reply-context { background:var(--panel2); color:var(--ink); }
+[data-theme=light] .modal-header,[data-theme=light] .modal-footer,[data-theme=light] .detail-toolbar,[data-theme=light] .notice,[data-theme=light] .reply-context { background:var(--panel2); color:var(--ink); }
 @media(max-width:700px){.profile-root{padding:14px 10px 40px}.profile-header{display:block}.profile-actions{margin-top:14px}.profile-stats{grid-template-columns:repeat(2,1fr)}.profile-post-row{grid-template-columns:1fr auto;gap:4px}.profile-post-row .profile-date,.profile-post-row .profile-category{display:none}}
 [data-theme=light] input:not([type=radio]):not([type=checkbox]):not([type=range]):not([type=file]),[data-theme=light] textarea,[data-theme=light] select { background:#fff; }
 [data-theme=light] .category-choice span,[data-theme=light] .tile-actions,[data-theme=light] .vote-number { background:var(--panel2); }

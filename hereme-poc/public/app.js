@@ -58,7 +58,7 @@
     const text=(selector,key)=>{const node=$(selector);if(node)node.textContent=t(key);};
     const attr=(selector,name,key)=>{const node=$(selector);if(node)node.setAttribute(name,t(key));};
     text('.skip-link','chrome.skip');text('.sort-control span','chrome.sort');text('#sortSelect option[value=new]','chrome.newest');text('#sortSelect option[value=hot]','chrome.hot');text('#sortSelect option[value=top]','chrome.top');
-    text('.utility-line span:first-child','chrome.utility_topic');text('.utility-line span:last-child','chrome.utility_demo');attr('.display-preferences','aria-label','chrome.display_options');attr('.view-switch','aria-label','chrome.desktop_view');attr('#leftPanel','aria-label','chrome.nav_categories');attr('.desktop-navigation','aria-label','chrome.explore');attr('.category-filters','aria-label','chrome.categories');attr('#simpleCategories','aria-label','chrome.categories');attr('#rightPanel','aria-label','chrome.activity');
+    attr('.display-preferences','aria-label','chrome.display_options');attr('.view-switch','aria-label','chrome.desktop_view');attr('#leftPanel','aria-label','chrome.nav_categories');attr('.desktop-navigation','aria-label','chrome.explore');attr('.category-filters','aria-label','chrome.categories');attr('#simpleCategories','aria-label','chrome.categories');attr('#rightPanel','aria-label','chrome.activity');
     document.title=t('chrome.page_title');attr('meta[name=description]','content','chrome.description');text('.header-search .sr-only','chrome.search_label');attr('#searchInput','placeholder','chrome.search_placeholder');attr('.logo','aria-label','chrome.logo_label');attr('#notificationButton','aria-label','account.notifications');attr('#filterToggle','aria-label','chrome.show_filters');text('#areaButton','chrome.areas');text('.create-label','chrome.new_poster');attr('.create-button','aria-label','feed.create');attr('.profile-chip','aria-label','account.your_profile');attr('.menu-button','aria-label','chrome.open_menu');
     text('.view-switch [data-layout=simple]','chrome.simple');text('.view-switch [data-layout=advanced]','chrome.advanced');text('.desktop-navigation .eyebrow','chrome.neighbourhood');
     const nav=document.querySelectorAll('.desktop-navigation .nav-link');if(nav[0])nav[0].lastChild.textContent=' '+t('chrome.whole_wall');if(nav[1])nav[1].lastChild.textContent=' '+t('feed.create');
@@ -101,6 +101,7 @@
     state.renderedPostSignatures=signatures;
   }
   function renderWall({preserveFeed=false,force=false}={}) {
+    if(location.pathname==='/staff' && state.user?.capabilities?.includes('staff:read'))return;
     $('#forumShell').hidden=false;$('#profileRoot').hidden=true;
     $('#profileLabel').textContent=state.user?.name||t('profile.join');
     $('#profileMonogram').textContent=state.user?.name[0].toUpperCase()||'○';
@@ -148,6 +149,22 @@
     const request=++state.routeRequest,route=location.pathname,params=new URLSearchParams(location.search);
     window.HeremePwa?.updateInstallUi();
     const publicMatch=/^\/u\/([A-Za-z0-9_-]{1,100})$/.exec(route);
+    if(route==='/staff'){
+      if(state.modal)closeModal({fromRoute:true});
+      if(!state.user?.capabilities?.includes('staff:read'))return navigate('/',{replace:true});
+      state.staff=null;
+      state.staffTab='posts';
+      state.staffReason='';
+      state.securityFilters={};
+      state.securityPage=null;
+      state.securityDetail=null;
+      renderStaffPage();
+      try {
+        await loadStaff();
+      } catch(error){if(request===state.routeRequest)renderStaffPage(error.message);return;}
+      if(request===state.routeRequest){renderStaffPage();$('#profileRoot').focus({preventScroll:true});}
+      return;
+    }
     if(publicMatch){if(state.modal)closeModal({fromRoute:true});try{const profile=await api(`/api/users/${publicMatch[1]}/public`);if(request!==state.routeRequest)return;publicProfileView(profile);}catch(error){if(request!==state.routeRequest)return;if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
     if(route==='/me'){
       if(!state.user){openAuth('wall.account.login_for_profile',async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
@@ -252,7 +269,7 @@
     [...document.querySelectorAll('.staff-table tbody tr')].forEach((row,index)=>{const user=state.staff.users[index],cells=row.cells;if(!user||!cells)return;cells[0].querySelector('small').textContent=statusLabel(user.status);cells[1].textContent=rolesLabel(user.roles);});
   }
   function staffPanel(){
-    if(!state.staff)return wrapper(t('staff.title'),`<p class="loading-card">${E(t('staff.loading'))}</p>`,'','staff-modal');
+    if(!state.staff)return `<p role="status">${E(t('staff.loading'))}</p>`;
     const admin=state.user.capabilities.includes('content:manage'),tabs=admin?['posts','users','comments','reports']:['posts'];
     if(state.user.capabilities.includes('security:read'))tabs.push('security');
     const labels={posts:t('staff.posts'),users:t('staff.users'),comments:t('staff.comments'),reports:t('staff.reports'),security:t('security.title')};
@@ -270,18 +287,28 @@
       rows=`${filters}<p class="muted-note">${E(t('security.caution'))}</p><div class="staff-table-wrap"><table class="staff-table"><thead><tr><th>${E(t('security.time'))}</th><th>${E(t('security.event_type'))}</th><th>${E(t('security.username'))}</th><th>IP</th><th>${E(t('security.browser'))} / ${E(t('security.os'))} / ${E(t('security.device'))}</th><th>${E(t('security.reason'))}</th></tr></thead><tbody>${events.map(event=>`<tr><td>${E(event.timestamp_utc)}</td><td><button class="text-button" data-action="security-detail" data-id="${E(event.event_id)}">${E(event.event_type)}</button></td><td>${E(event.subject_username||event.username||'—')}</td><td><button class="text-button" data-action="security-filter-ip" data-ip="${E(event.client_ip||'')}">${E(event.client_ip||'—')}</button></td><td>${E([event.browser_family,event.os_family,event.device_type].filter(Boolean).join(' / '))}</td><td>${E(event.reason_code||event.status_code||'—')}</td></tr>`).join('')}</tbody></table></div>${state.securityPage?.has_more?`<button class="btn btn-secondary" data-action="security-more">${E(t('security.more'))}</button>`:''}${state.securityDetail?`<details open><summary>${E(t('security.detail'))}</summary><pre class="security-raw">${E(JSON.stringify(state.securityDetail,null,2))}</pre></details>`:''}`;
     }
     const summary=admin?t('staff.summary',state.staff.stats):`${state.staff.stats.posts} ${t('staff.posts').toLowerCase()}`;
-    return wrapper(t('staff.title'),`<p class="notice">${summary}. ${t('staff.audit_notice')}</p>${state.staffTab==='security'?'':`<label class="field"><span>${t('staff.next_reason')}</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="${t('staff.reason_placeholder')}"></label>`}${nav}<div class="staff-table-wrap">${rows}</div>`,'','staff-modal');
+    return `<p class="notice">${summary}. ${t('staff.audit_notice')}</p>${state.staffTab==='security'?'':`<label class="field"><span>${t('staff.next_reason')}</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="${t('staff.reason_placeholder')}"></label>`}${nav}<div class="staff-table-wrap">${rows}</div>`;
   }
   async function loadStaff(){state.staff=await api('/api/admin/overview');if(!state.user.capabilities.includes('content:manage'))state.staffTab='posts';}
   async function loadSecurity(page=0){const params=new URLSearchParams({...state.securityFilters,page:String(page)});const result=await api('/api/admin/security-events?'+params);state.securityPage=page?{...result,events:[...state.securityPage.events,...result.events]}:result;}
-  async function openStaffPanel(){state.staff=null;openModal('staff');await loadStaff();renderModal();}
-  async function refreshStaff(message){await loadStaff();renderModal({preserve:true});await loadPosts();if(message)toast(message);}
+  function renderStaffPage(error){
+    if(location.pathname!=='/staff')return;
+    const root=$('#profileRoot');
+    $('#forumShell').hidden=true;
+    root.hidden=false;
+    document.title=t('staff.title')+' | HerEme';
+    root.innerHTML=`<section class="staff-page"><a href="/">${E(t('route.to_wall'))}</a><h1>${E(t('staff.title'))}</h1>${error?'<p role="alert">'+E(error)+'</p>':staffPanel()}</section>`;
+    if(state.staff&&!error)localizeStaffIdentifiers();
+  }
+  async function refreshStaff(message){await loadStaff();renderStaffPage();state.loadedFeedKey=null;if(message)toast(message);}
   async function refreshIdentity(){const current=await api('/api/me');state.user=current.user;await window.HeremeI18n.applyAccountLanguage?.(current.user);state.csrf=current.csrf_token||csrfCookie();state.legacyToken='';localStorage.removeItem('hereme_token');}
-  async function loadNotificationBadge(){const userId=state.user?.id;if(!userId)return;const result=await api('/api/notifications');if(state.user?.id!==userId)return;$('#notificationButton').hidden=false;$('#notificationBadge').textContent=String(result.unread);$('#notificationBadge').hidden=!result.unread;}
+  let badgeRequest=0;
+  function displayBadge(unread){$('#notificationButton').hidden=false;$('#notificationBadge').textContent=String(unread);$('#notificationBadge').hidden=!unread;}
+  async function loadNotificationBadge(){const request=++badgeRequest;const userId=state.user?.id;if(!userId)return;const result=await api('/api/notifications');if(state.user?.id===userId&&request===badgeRequest)displayBadge(result.unread);}
   async function refreshNotificationsLive(){await loadNotificationBadge();if(state.modal==='notifications'){await loadNotifications();renderModal({preserve:true});}}
   function scheduleNotificationRefresh(){clearTimeout(state.notificationRefresh);state.notificationRefresh=setTimeout(()=>refreshNotificationsLive().catch(()=>{}),100);}
   function connectNotificationSocket(){if(!state.user||state.notificationSocket)return;const url=new URL('/api/chat-socket',location.href);url.protocol=location.protocol==='https:'?'wss:':'ws:';const socket=new WebSocket(url);state.notificationSocket=socket;
-    socket.onopen=()=>{state.notificationReconnect=0;};socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.type==='notification.created')scheduleNotificationRefresh();};
+    socket.onopen=()=>{state.notificationReconnect=0;scheduleNotificationRefresh();};socket.onmessage=event=>{const message=JSON.parse(event.data);if(['notification.created','notification.read','conversation.updated'].includes(message.type))scheduleNotificationRefresh();};
     socket.onclose=()=>{if(state.notificationSocket!==socket)return;state.notificationSocket=null;if(!state.user)return;const delay=Math.min(30000,1000*2**Math.min(state.notificationReconnect++,5));setTimeout(connectNotificationSocket,delay);};socket.onerror=()=>socket.close();}
   async function loadNotifications(){const [config,devices,settings,inbox]=await Promise.all([api('/api/push/config'),api('/api/push/subscriptions'),api('/api/notification-settings'),api('/api/notifications')]);state.notificationData={config,devices:devices.subscriptions,settings:settings.settings,inbox:inbox.notifications,unread:inbox.unread};}
   function notificationPanel(){
@@ -334,7 +361,6 @@
     if(state.modal==='poster-edit')html=wrapper(t('e21.edit_text'),`<form id="posterEditForm" class="form-stack"><label class="field"><span>${t('e21.poster_text')}</span><textarea id="posterEditText" maxlength="3000" required>${E(state.posterEdit?.text||'')}</textarea></label><label class="field"><span>${t('e21.change_summary')}</span><input id="posterEditSummary" maxlength="300"></label><button class="btn btn-primary" type="submit">${t('e21.save_edit')}</button></form>`);
     if(state.modal==='report')html=wrapper(t('report.title'),`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>${t('report.problem')}</span><select id="reportReason">${['personal','harassment','illegal','spam','other'].map(reason=>`<option value="${reason}">${t(`report.${reason}`)}</option>`).join('')}</select></label><p class="notice">${t('report.notice')}</p><button class="btn btn-primary" type="submit">${t('report.send')}</button></form>`);
     if(state.modal==='menu')html=accountMenu();
-    if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
     if(firstOpen&&!['detail','compose'].includes(state.modal))window.HeremeMotion?.enter($('#modalRoot .modal-overlay'),'motion-backdrop-enter');
@@ -344,7 +370,6 @@
     if(state.modal==='history'&&state.historyData?.total>state.historyData.revisions.length)$('.modal-content .revision-list')?.insertAdjacentHTML('afterend',`<button class="btn btn-secondary" data-action="history-more">${t('e21.more')}</button>`);
     if(state.modal==='history'&&state.historyData){const available=state.historyData.revisions.filter(row=>row.visibility==='public').map(row=>row.version).sort((a,b)=>a-b);if(available.length>1){const options=available.map(v=>`<option value="${v}">v${v}</option>`).join('');$('.modal-content')?.insertAdjacentHTML('afterbegin',`<div class="history-compare-controls"><label>${t('e21.from')} <select id="historyFrom">${options}</select></label><label>${t('e21.to')} <select id="historyTo">${options}</select></label><button class="btn btn-secondary" data-action="history-custom-compare">${t('e21.compare')}</button></div>`);$('#historyFrom').value=String(state.historyComparison?.from||available.at(-2));$('#historyTo').value=String(state.historyComparison?.to||available.at(-1));}}
     if(state.modal==='detail'&&state.detailPost?.version>1){const label=document.createElement('span');label.className='revision-edited';label.textContent=' · '+t('e21.edited');$('#modalRoot .detail-meta')?.append(label);}
-    if(state.modal==='staff')localizeStaffIdentifiers();
     if(state.modal==='menu'&&state.user){const roles=$('.account-summary .muted-note');if(roles)roles.textContent=rolesLabel(state.user.roles);}
     if(state.modal==='menu')window.HeremePwa?.mountMenu($('.modal-content'));
     if(state.modal==='menu')window.HeremeLanguage?.mount($('.modal-content'),{menu:true});
@@ -640,11 +665,11 @@
     if(action==='discussion'){await openDetail(id);$('#discussion')?.scrollIntoView({block:'start',behavior:'smooth'});return;}
     if(action==='retry-feed'){await loadPosts();return;}
     if(action==='load-more'){await loadPosts({append:true});return;}
-    if(action==='staff-panel'){await openStaffPanel();return;}
-    if(action==='staff-tab'){state.staffReason=$('#staffReason')?.value||state.staffReason;state.staffTab=target.dataset.tab;if(state.staffTab==='security')await loadSecurity();renderModal();return;}
-    if(action==='security-detail'){state.securityDetail=await api('/api/admin/security-events/'+encodeURIComponent(target.dataset.id));renderModal({preserve:true});return;}
-    if(action==='security-filter-ip'){state.securityFilters={ip:target.dataset.ip};await loadSecurity();state.securityDetail=null;renderModal({preserve:true});return;}
-    if(action==='security-more'){await loadSecurity(state.securityPage.page+1);renderModal({preserve:true});return;}
+    if(action==='staff-panel'){await navigate('/staff');return;}
+    if(action==='staff-tab'){state.staffReason=$('#staffReason')?.value||state.staffReason;state.staffTab=target.dataset.tab;if(state.staffTab==='security')await loadSecurity();renderStaffPage();return;}
+    if(action==='security-detail'){state.securityDetail=await api('/api/admin/security-events/'+encodeURIComponent(target.dataset.id));renderStaffPage();return;}
+    if(action==='security-filter-ip'){state.securityFilters={ip:target.dataset.ip};await loadSecurity();state.securityDetail=null;renderStaffPage();return;}
+    if(action==='security-more'){await loadSecurity(state.securityPage.page+1);renderStaffPage();return;}
     if(action==='staff-restrict-user'){const userId=$('#restrictionUserId').value.trim(),status=$('#restrictionStatus').value;if(!state.staff.users.some(user=>user.id===userId))throw Error(t('security.select_user'));await api('/api/admin/users/'+encodeURIComponent(userId)+'/restriction',{method:'POST',body:{status,reason:staffReason()}});await refreshStaff(t('security.saved'));return;}
     if(action==='staff-moderate'){await api(`/api/admin/posts/${id}/moderation`,{method:'POST',body:{action:target.dataset.mode,reason:staffReason()}});await refreshStaff(target.dataset.mode==='hide'?'Innlegget er sensurert.':'Innlegget er gjenopprettet.');return;}
     if(action==='staff-save-post'){
@@ -665,7 +690,7 @@
     if(action==='push-disable'){await disablePush();return;}
     if(action==='pwa-install'){await window.HeremePwa.install();await loadNotifications();renderModal();return;}
     if(action==='pwa-install-help'){toast(t('notifications.safari_install_help'));return;}
-    if(action==='notification-open'){await api('/api/notifications/'+encodeURIComponent(target.dataset.id)+'/read',{method:'POST'});location.assign(target.dataset.route);return;}
+    if(action==='notification-open'){const result=await api('/api/notifications/'+encodeURIComponent(target.dataset.id)+'/read',{method:'POST'});++badgeRequest;displayBadge(result.unread);location.assign(target.dataset.route);return;}
     if(action==='areas'){state.draftAreas=[...state.selectedAreas];openModal('areas');return;}
     if(action==='area-toggle'){const area=target.dataset.areaId;state.draftAreas=state.draftAreas.includes(area)?state.draftAreas.filter(id=>id!==area):[...state.draftAreas,area];for(const item of document.querySelectorAll(`[data-area-id="${CSS.escape(area)}"]`))item.setAttribute('aria-pressed',state.draftAreas.includes(area));return;}
     if(action==='save-areas'){const result=await api('/api/me/areas',{method:'PUT',body:{area_ids:state.draftAreas}});state.selectedAreas=result.areas.map(area=>area.id);closeModal();await loadPosts();return;}
@@ -679,7 +704,7 @@
     if(action==='draft-open'){await openArticleDraft(await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId)));return;}
     if(action==='draft-delete'){if(!confirm(t('e21.delete_confirm')))return;await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId),{method:'DELETE'});await loadProfile();return;}
     if(action==='profile-more'){await loadProfile({append:true});return;}
-    if(action==='logout'){const pushId=localStorage.getItem('hereme_push_subscription_id'),registration=await window.HeremePwa?.ready,subscription=await registration?.pushManager?.getSubscription();await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');state.notificationSocket?.close();state.notificationSocket=null;$('#notificationButton').hidden=true;closeModal();await loadPosts();return;}
+    if(action==='logout'){const pushId=localStorage.getItem('hereme_push_subscription_id'),registration=await window.HeremePwa?.ready,subscription=await registration?.pushManager?.getSubscription();await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');state.notificationSocket?.close();state.notificationSocket=null;$('#notificationButton').hidden=true;closeModal();if(location.pathname==='/staff')await navigate('/',{replace:true});else await loadPosts();return;}
     if(action==='rotate-recovery'){const result=await api('/api/recovery/rotate',{method:'POST'});state.recoveryKey=result.recovery_key;openModal('recovery-key');return;}
     if(action==='toggle-recovery'){const input=$('#recoveryPassword'),show=input.type==='password';input.type=show?'text':'password';target.textContent=t(show?'recovery.hide':'recovery.show');input.focus();return;}
     if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast(t('recovery.copied'));return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast(t('recovery.copied'));return;}}window.prompt(t('recovery.copy_prompt'),state.recoveryKey);return;}
@@ -736,7 +761,7 @@
   }
   async function handleSubmit(event) {
     const id=event.target.id;
-    if(id==='securityFilters'){event.preventDefault();state.securityFilters=Object.fromEntries(new FormData(event.target));state.securityDetail=null;await loadSecurity();renderModal({preserve:true});return;}
+    if(id==='securityFilters'){event.preventDefault();state.securityFilters=Object.fromEntries(new FormData(event.target));state.securityDetail=null;await loadSecurity();renderStaffPage();return;}
     if(!['profileForm','recoverForm','composeForm','commentForm','reportForm','posterEditForm'].includes(id))return;
     event.preventDefault();
     if(id==='posterEditForm'){const edit=state.posterEdit;const result=await api(`/api/posts/${edit.id}/text`,{method:'PATCH',body:{text:$('#posterEditText').value,change_summary:$('#posterEditSummary').value,base_version:edit.base_version,request_key:crypto.randomUUID()}});closeModal();await loadPosts();await openDetail(result.post_id);toast(t('e21.saved'));return;}
@@ -782,6 +807,8 @@
     if(['postVideoInput','postVideoCameraInput'].includes(input.id))await loadVideo(input.files?.[0]);
   }
   async function init() {
+    window.addEventListener('pageshow',event=>{if(event.persisted&&state.user)scheduleNotificationRefresh();});
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state.user)scheduleNotificationRefresh();});
     placeSortControl();
     compactHeader.addEventListener('change',placeSortControl);
     mobileWall.addEventListener('change',()=>{
@@ -797,7 +824,7 @@
       if(state.modal==='compose')saveDraft();
       const y=scrollY;
       localizeChrome();renderPreferences();renderFilters();
-      if(location.pathname==='/me')profileView();else renderWall({force:true});
+      if(location.pathname==='/staff')renderStaffPage();else if(location.pathname==='/me')profileView();else renderWall({force:true});
       if(state.modal)renderModal({preserve:true});
       requestAnimationFrame(()=>scrollTo(0,y));
     });
@@ -832,7 +859,7 @@
       catch(error){if(error.status!==401)throw error;state.legacyToken='';state.csrf='';localStorage.removeItem('hereme_token');}
       if(state.meta.features?.locations){$('#areaButton').hidden=false;const [available,geometry,subscribed]=await Promise.all([api('/api/areas'),api('/api/areas/geometry'),state.user?api('/api/me/areas'):Promise.resolve({areas:[]})]);state.areas=available.areas;state.areaGeometry=geometry;state.selectedAreas=subscribed.areas.map(area=>area.id);}
       if(state.user){await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='notification.created')scheduleNotificationRefresh();});}
-      localizeChrome();await loadPosts();
+      localizeChrome();if(location.pathname!=='/staff')await loadPosts();
       if(new URLSearchParams(location.search).get('recovery-saved')==='1'){history.replaceState({},'',location.pathname);toast(t('recovery.confirmed'));}
       state.routeReady=true;await applyRoute({fromPop:true});
     } catch(error) {state.loadError=error.message;renderWall();}

@@ -107,6 +107,7 @@ app.use(web.static(path.resolve(__dirname,'..','public'),{extensions:['html']}))
 function appShell(name,res){res.set('Content-Type','text/html; charset=utf-8').send(fs.readFileSync(path.resolve(__dirname,'..','public',name)));}
 app.get('/chat',(req,res)=>appShell('chat.html',res));
 app.get('/chat/:id',(req,res)=>appShell('chat.html',res));
+app.get('/staff',(req,res)=>appShell('index.html',res));
 app.get('/me',(req,res)=>appShell('index.html',res));
 app.get('/u/:id',(req,res)=>appShell('index.html',res));
 
@@ -198,7 +199,7 @@ app.delete('/api/push/subscriptions/:id',write(null,20),(req,res)=>res.json(S.pu
 app.get('/api/notification-settings',read(null),(req,res)=>res.json({settings:S.push.preferences(req.auth)}));
 app.put('/api/notification-settings',write(null,20),(req,res)=>res.json({settings:S.push.setPreferences(req.auth,req.body)}));
 app.get('/api/notifications',read(null),(req,res)=>res.json({notifications:S.notifications.list(req.auth,req.query.before),unread:S.notifications.unread(req.auth)}));
-app.post('/api/notifications/:id/read',write(null,60),(req,res)=>res.json(S.notifications.read(req.auth,req.params.id)));
+app.post('/api/notifications/:id/read',write(null,60),(req,res)=>{const result=S.notifications.read(req.auth,req.params.id);req.socket.server.emit('notification-read',req.auth.id);res.json({...result,unread:S.notifications.unread(req.auth)});});
 app.get('/api/admin/push/health',read('staff:read'),(req,res)=>res.json({worker:S.db.prepare('SELECT * FROM push_worker_state WHERE id=1').get()||null,subscriptions:S.db.prepare('SELECT count(*) count FROM push_subscriptions WHERE disabled_at IS NULL').get().count,states:S.db.prepare('SELECT state,count(*) count FROM push_deliveries GROUP BY state').all()}));
 app.get('/api/me/summary',read(null),(req,res)=>res.json(S.profile.summary(req.auth,req.query)));
 app.get('/api/users/:id/public',(req,res)=>res.set('Cache-Control','no-store').json(S.publicProfiles.read(req.params.id)));
