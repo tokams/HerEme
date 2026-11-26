@@ -30,6 +30,8 @@ services:
     restart: unless-stopped
     network_mode: none
     read_only: true
+    # SQLite spills large statement journals here while replacing projection tables.
+    tmpfs: ["/tmp:size=128m,mode=1777,noexec,nosuid,nodev"]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     command: ["python", "/integration/projector.py"]

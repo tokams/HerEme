@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-26 — Database Explorer refresh
+
+The projector now has a private, size-limited temporary directory for SQLite statement journals. This fixes HTTP 500 responses during refreshes of larger tables on the Database Explorer landing page.
+
 ## 2026-11-26 — Wall navigation
 
 The wall router renders post details, version history, profiles and staff pages from the current URL on direct visits, navigation and browser history traversal. Closing a directly shared post returns to the wall. Closing a post opened inside HerEme returns to its originating view, including after browsing revisions or refreshing.

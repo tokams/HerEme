@@ -142,7 +142,17 @@ async function test() {
   const signupClosed=()=>community.request('/api/session',{method:'POST',body:{name:'ClosedSignup'}});
   assert.equal((await signupClosed()).status,403);
   assert.equal((await community.request('/api/me',{user:state.other})).status,200);
+  // Force a projected table beyond SQLite's in-memory statement journal threshold.
+  run('exec',cid('main','app'),'node','-e',`
+    const db=new (require('node:sqlite').DatabaseSync)('/var/lib/hereme/hereme.sqlite');
+    const changed=db.prepare('UPDATE security_event_raw SET raw_metadata_json=? WHERE rowid=(SELECT min(rowid) FROM security_event_raw)')
+      .run(JSON.stringify({fixture:'x'.repeat(512*1024)}));
+    if(changed.changes!==1)throw Error('Missing security event fixture');
+    db.close();
+  `);
+  assert.ok((await query('main','SELECT max(length(raw_metadata_json)) FROM security_event_raw')).body.rows[0][0]>512*1024);
   await register(main,'OpenOnMain');
+  assert.equal((await panel.request('/databases/',{headers:{cookie}})).status,200);
   assert.deepEqual((await query('main','SELECT name FROM users WHERE name=\'OpenOnMain\'')).body.rows,[['OpenOnMain']]);
   run('stop',cid('edge','platform'));
   assert.equal((await signupClosed()).status,403);

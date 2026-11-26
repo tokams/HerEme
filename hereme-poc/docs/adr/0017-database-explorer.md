@@ -30,6 +30,8 @@ LIMIT 50;
 
 ## Deployment and scale
 
+The projector has a private 128 MiB tmpfs at `/tmp`. SQLite can spill statement journals there when replacing large projection tables. The root filesystem and source database mounts remain read-only. The deployment rehearsal refreshes a projection containing a 512 KiB raw event, commits another source change, then opens the authenticated explorer index and checks the new data.
+
 The release resolves the existing main and community volume names from the deployment and builds the read-only mounts from `deploy/platform/sites.json`. For an additional provisioned community, add its id, hostname, label and existing Docker dataVolume to this inventory, then release. The volume must contain a compatible hereme.sqlite. Provision the community and its HTTPS routing separately. Registration adds explorer access to that database. Initial cutover and updates start the projector and explorer with health checks.
 
 The refresh cost scales with the selected rows in the changed database. SQLite WAL allows normal writers to continue. A five-second refresh deadline and bounded temporary storage make oversized projections fail visibly. Confirm capacity against production-sized copies before enabling large new datasets. Security event inspection from this central operator account is an additional access path to the existing instance-local staff explorer described in ADR 0016.
