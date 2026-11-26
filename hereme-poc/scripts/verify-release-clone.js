@@ -1,5 +1,5 @@
 'use strict';
-// The cutover contract is code-only on schema 23. Run candidate startup on a private copy first.
+// Run candidate startup and schema migration on a private copy first.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -39,7 +39,7 @@ try {
       }
     }
     verifyChecksums(clone,expected);
-    if(db.prepare('SELECT max(version) AS v FROM schema_migrations').get().v!==23)
+    if(db.prepare('SELECT max(version) AS v FROM schema_migrations').get().v!==26)
       throw Error('Candidate needs a separately reviewed database migration.');
     for(const table of ['users','rooms','posts','votes','comments','reports']) {
       const {count} = db.prepare('SELECT count(*) AS count FROM '+table).get();

@@ -10,7 +10,7 @@ const S=require('../server/services');
 const created=[];
 try{
   const specifications=[
-    {name:'HerEmeAdmin',roles:['moderator','admin']},
+    {name:'HerEmeAdmin',roles:['moderator','admin','operator']},
     {name:'HerEmeModerator',roles:['moderator']}
   ];
   for(const specification of specifications){

@@ -23,11 +23,11 @@ function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
       FROM posts p LEFT JOIN users u ON u.id=p.author_id LEFT JOIN post_presentation pp ON pp.post_id=p.id
       LEFT JOIN post_design d ON d.post_id=p.id ORDER BY p.created_at DESC,abs(p.id) DESC`).all();
     if(!actor.capabilities.includes('content:manage')){const moderatable=posts.filter(post=>['published','review','hidden'].includes(post.status));return {posts:moderatable,users:[],comments:[],reports:[],stats:{posts:moderatable.length}};}
-    const users=db.prepare(`SELECT u.id,u.name,u.status,u.created_at,group_concat(ur.role) roles,
+    const users=db.prepare(`SELECT u.id,u.name,COALESCE(sr.status,u.status) status,u.created_at,group_concat(ur.role) roles,
       (SELECT count(*) FROM posts p WHERE p.author_id=u.id) post_count,
       (SELECT count(*) FROM comments c WHERE c.author_id=u.id) comment_count,
       (SELECT count(*) FROM votes v WHERE v.user_id=u.id) vote_count
-      FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC`).all()
+      FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN security_account_restrictions sr ON sr.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC`).all()
       .map(user=>({...user,roles:user.roles?user.roles.split(','):[]}));
     const comments=db.prepare(`SELECT c.id,c.post_id,c.parent_id,c.body,c.depth,c.created_at,c.author_id,
       COALESCE(u.name,c.demo_author,'anonym') author,p.title post_title
@@ -129,6 +129,8 @@ function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
       db.prepare("UPDATE comments SET author_id=NULL,demo_author='slettet bruker' WHERE author_id=?").run(userId);
       db.prepare('UPDATE rooms SET created_by=NULL WHERE created_by=?').run(userId);db.prepare('UPDATE media SET owner_id=NULL WHERE owner_id=?').run(userId);db.prepare('DELETE FROM reports WHERE user_id=?').run(userId);
       audit.record({actorId:actor.id,action:'admin.user.deleted',subjectType:'user',subjectId:userId,previous:user,next:{deleted:true,posts_deleted:withPosts,post_count:postIds.length},reason:why});
+      db.prepare(`INSERT INTO deleted_session_notices(session_hash,username,reason,expires_at)
+        SELECT id_hash,?,?,expires_at FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>datetime('now')`).run(user.name,why,userId);
       db.prepare('DELETE FROM users WHERE id=?').run(userId);db.exec('COMMIT');staged.commit();avatars.purgeUser(userId);return {ok:true,posts_deleted:postIds.length};
     }catch(error){if(db.isTransaction){db.exec('ROLLBACK');staged.rollback();}throw error;}
   }

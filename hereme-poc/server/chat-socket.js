@@ -4,6 +4,7 @@ const {WebSocketServer,WebSocket}=require('ws');
 function attachChatSocket(server,{db,identity,config}){
   const wss=new WebSocketServer({noServer:true,maxPayload:1024,perMessageDeflate:false});
   const clients=new Set();
+  server.on('notification-read',userId=>{for(const client of clients)if(client.user.id===userId)client.readChanged=true;});
   const reject=(socket,status)=>{socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);socket.destroy();};
   server.on('upgrade',(req,socket,head)=>{
     if(new URL(req.url,'http://localhost').pathname!=='/api/chat-socket')return reject(socket,'404 Not Found');
@@ -25,6 +26,7 @@ function attachChatSocket(server,{db,identity,config}){
       if(client.ws.readyState!==WebSocket.OPEN)continue;
       const active=db.prepare("SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id_hash=? AND s.revoked_at IS NULL AND s.expires_at>datetime('now') AND u.status='active'").get(client.user.sessionHash);
       if(!active){client.ws.close(1008,'Session ended');continue;}
+      if(client.readChanged){client.readChanged=false;client.ws.send(JSON.stringify({type:'notification.read'}));}
       const events=db.prepare('SELECT id,chat_id,kind FROM chat_events WHERE recipient_id=? AND id>? ORDER BY id LIMIT 100').all(client.user.id,client.cursor);
       for(const event of events){client.cursor=event.id;const allowed=db.prepare("SELECT 1 FROM chat_members WHERE chat_id=? AND user_id=? UNION SELECT 1 FROM chat_requests WHERE chat_id=? AND recipient_id=? AND state='pending' UNION SELECT 1 FROM chat_invites WHERE chat_id=? AND recipient_id=? AND state='pending'").get(event.chat_id,client.user.id,event.chat_id,client.user.id,event.chat_id,client.user.id);client.ws.send(JSON.stringify(allowed?{type:event.kind,id:event.id,chat_id:event.chat_id}:{type:'sync',id:event.id}));}
       const notifications=db.prepare('SELECT id,notification_id FROM notification_events WHERE recipient_id=? AND id>? ORDER BY id LIMIT 100').all(client.user.id,client.notificationCursor);

@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-11-26 — Database Explorer refresh
+
+The projector now has a private, size-limited temporary directory for SQLite statement journals. This fixes HTTP 500 responses during refreshes of larger tables on the Database Explorer landing page.
+
+## 2026-11-26 — Wall navigation
+
+The wall router renders post details, version history, profiles and staff pages from the current URL on direct visits, navigation and browser history traversal. Closing a directly shared post returns to the wall. Closing a post opened inside HerEme returns to its originating view, including after browsing revisions or refreshing.
+
+## 2026-11-26 — Shared links and deleted accounts
+
+The security table displays the sanitized full request URL. Schema 26 preserves a private deletion notice for each active session when staff delete an account. The wall and chat show the username and staff reason on the next authenticated request. Acknowledgement clears the session cookies.
+
+## 2026-11-25 — Request URLs in security events
+
+Schema 25 adds request URL, path and safe referring URL to the existing security events. Operators can filter these fields, HTTP method and completed response status. Raw records use the same sanitization as the searchable fields. Older events retain their original evidence.
+
+## 2026-11-25 — Community staff page and notification counts
+
+The community menu opens administration and moderation at `/staff`. The bell refreshes when notifications are read in another tab, when a conversation is marked read and when the wall returns to view. The wall header no longer displays the local demo banner.
+
+## 2026-11-25 — Platform Database Explorer
+
+Authorized platform operators can browse approved community and registry data and run read-only SQL in Datasette at `/databases/`. The release creates an isolated browser and a projector that refreshes filtered tables from the live SQLite databases. See [ADR 0017](docs/adr/0017-database-explorer.md) for registration, permissions, query limits and rehearsal instructions.
+
+## 2026-11-24 — SEC-01 contact address supplied
+
+The owner supplied `tom.gli@icloud.com` for the public legal contact. The assessment, ADR and release progress now record it. A candidate per-instance legal configuration is saved outside Git in `secrets/legal.proposed.json`, using the observed server network, authoritative DNS and supported browser push providers. That provider summary still needs owner review; the candidate was not installed on the production host and no deployment occurred.
+
+## 2026-11-24 — Early legal release preflight
+
+The first production attempt for SEC-01 stopped before image build or data cutover because the private per-instance `state/legal.json` was absent. The deployment script now checks for that file before transfer and reports the missing reviewed contact and processor settings directly. The previous release remains active. No legal values were invented or installed.
+
+## 2026-11-24 — SEC-01 security events and legal transparency
+
+The shared community application now records thirteen fixed security event types in paired, instance-local structured and allowlisted raw SQLite tables. A local operator-only, audited staff view supports bounded searches and incident inspection. Authentication and restrictions write their security facts atomically; repeated rate-limit rejections are bounded per limiter window. Migration 24 preserves the former log as `security_events_legacy`.
+
+The install prompt has a 30-day red dismissal action while manual installation remains in the menu. Profile, settings and bilingual privacy, cookie and terms links are in the menu. Public legal pages use per-instance runtime controller, contact and processor values. The controller is Tomasz Gliniecki; the missing contact address and unreviewed processors, retention, LIA, storage exemptions and DPIA screen block production release. See ADR 0016 and `docs/SEC-01_PROGRESS.md`.
+
+Development verification passed 96 Node tests, source checks, focused browser flows, isolated two-instance HTTPS/WSS rehearsal and a synthetic legacy cutover with failed-update recovery and a second release. No live service or DNS was changed.
+
 ## 2026-11-24 — Centered empty wall
 
 The empty wall message and its action now span the complete wall grid and remain centered on mobile and desktop. Poster and article widths are unchanged.

@@ -12,7 +12,7 @@
     category:'story',postMode:'poster',composeStep:'edit',draft:{title:'',body:'',link:''},articleDraft:{title:'',abstract:'',cover:null,chapters:[{heading:'',markdown:'',alt:'',media_id:null}]},articleDraftRecord:null,articleDrafts:[],articleDraftCreateId:null,articlePublishKey:null,articlePublishPrepared:false,articleDirty:false,historyData:null,historyComparison:null,historyVersion:null,articleUploading:false,editorImage:null,editorFile:null,
     editorZoom:1,editorX:50,editorY:50,editorSynthetic:false,tempUrl:null,editorVideo:false,videoDuration:0,videoThumbnail:'',videoProgress:0,videoUploading:false,videoPaused:false,videoCancelled:false,videoUpload:null,
     pending:null,recoveryKey:'',areas:[],areaGeometry:null,selectedAreas:[],draftAreas:[],postArea:'',
-    loadRequest:0,loadedFeedKey:null,feedRendered:false,renderedPostSignatures:new Map(),routeRequest:0,profileRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
+    loadRequest:0,loadedFeedKey:null,feedRendered:false,renderedPostSignatures:new Map(),routeRequest:0,profileRequest:0,detailRequest:0,imageRequest:0,voting:new Map(),commentVoting:new Set(),staff:null,staffTab:'posts',staffReason:'',securityPage:null,securityFilters:{},securityDetail:null,profile:null,profileSort:'new',profileCursor:null,routeReady:false,notificationData:null,notificationSocket:null,notificationReconnect:0,notificationRefresh:null
   };
   async function api(url,{method='GET',body,form}={}) {
     const headers={'accept-language':HeremeI18n.getLanguage()};
@@ -23,7 +23,7 @@
     try{response=await fetch(url,{method,headers,body:form||(body===undefined?undefined:JSON.stringify(body))});}
     catch{throw new Error(t('error.offline'));}
     const data=await response.json();
-    if(!response.ok){const error=new Error(data.error?.message||data.error||t('error.http',{status:response.status}));error.status=response.status;error.code=data.error?.code;throw error;}
+    if(!response.ok){if(data.error?.code==='ACCOUNT_DELETED')HeremeAuth.showDeletion(data.error.details);const error=new Error(data.error?.message||data.error||t('error.http',{status:response.status}));error.status=response.status;error.code=data.error?.code;throw error;}
     return data;
   }
   function toast(message) {
@@ -58,7 +58,7 @@
     const text=(selector,key)=>{const node=$(selector);if(node)node.textContent=t(key);};
     const attr=(selector,name,key)=>{const node=$(selector);if(node)node.setAttribute(name,t(key));};
     text('.skip-link','chrome.skip');text('.sort-control span','chrome.sort');text('#sortSelect option[value=new]','chrome.newest');text('#sortSelect option[value=hot]','chrome.hot');text('#sortSelect option[value=top]','chrome.top');
-    text('.utility-line span:first-child','chrome.utility_topic');text('.utility-line span:last-child','chrome.utility_demo');attr('.display-preferences','aria-label','chrome.display_options');attr('.view-switch','aria-label','chrome.desktop_view');attr('#leftPanel','aria-label','chrome.nav_categories');attr('.desktop-navigation','aria-label','chrome.explore');attr('.category-filters','aria-label','chrome.categories');attr('#simpleCategories','aria-label','chrome.categories');attr('#rightPanel','aria-label','chrome.activity');
+    attr('.display-preferences','aria-label','chrome.display_options');attr('.view-switch','aria-label','chrome.desktop_view');attr('#leftPanel','aria-label','chrome.nav_categories');attr('.desktop-navigation','aria-label','chrome.explore');attr('.category-filters','aria-label','chrome.categories');attr('#simpleCategories','aria-label','chrome.categories');attr('#rightPanel','aria-label','chrome.activity');
     document.title=t('chrome.page_title');attr('meta[name=description]','content','chrome.description');text('.header-search .sr-only','chrome.search_label');attr('#searchInput','placeholder','chrome.search_placeholder');attr('.logo','aria-label','chrome.logo_label');attr('#notificationButton','aria-label','account.notifications');attr('#filterToggle','aria-label','chrome.show_filters');text('#areaButton','chrome.areas');text('.create-label','chrome.new_poster');attr('.create-button','aria-label','feed.create');attr('.profile-chip','aria-label','account.your_profile');attr('.menu-button','aria-label','chrome.open_menu');
     text('.view-switch [data-layout=simple]','chrome.simple');text('.view-switch [data-layout=advanced]','chrome.advanced');text('.desktop-navigation .eyebrow','chrome.neighbourhood');
     const nav=document.querySelectorAll('.desktop-navigation .nav-link');if(nav[0])nav[0].lastChild.textContent=' '+t('chrome.whole_wall');if(nav[1])nav[1].lastChild.textContent=' '+t('feed.create');
@@ -101,6 +101,7 @@
     state.renderedPostSignatures=signatures;
   }
   function renderWall({preserveFeed=false,force=false}={}) {
+    if(location.pathname==='/staff' && state.user?.capabilities?.includes('staff:read'))return;
     $('#forumShell').hidden=false;$('#profileRoot').hidden=true;
     $('#profileLabel').textContent=state.user?.name||t('profile.join');
     $('#profileMonogram').textContent=state.user?.name[0].toUpperCase()||'○';
@@ -116,7 +117,7 @@
     $('#activityPanel').innerHTML=HeremeShell.activity(state.activity,state.loadError);
     state.feedRendered=true;
   }
-  function rememberWall(){history.replaceState({...history.state,wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',location.href);}
+  function wallSnapshot(){return {categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY};}
   function profileView(){
     const root=$('#profileRoot');$('#forumShell').hidden=true;root.hidden=false;
     if(!state.profile){root.innerHTML=`<p class="loading-card">${E(t('profile.loading'))}</p>`;return;}
@@ -144,11 +145,27 @@
     document.title=`${profile.username} · HerEme`;
   }
   const avatarEditor=HeremeAvatarEditor.setup({api,t,onSaved:result=>{Object.assign(state.profile.profile,result);Object.assign(state.user,result);profileView();toast(t('profile.avatar_saved'));}});
-  async function applyRoute({fromPop=false}={}){
+  async function applyRoute({fromPop=false,initial=false}={}){
     const request=++state.routeRequest,route=location.pathname,params=new URLSearchParams(location.search);
+    if(!initial&&state.modal)closeModal({fromRoute:true});
     window.HeremePwa?.updateInstallUi();
     const publicMatch=/^\/u\/([A-Za-z0-9_-]{1,100})$/.exec(route);
-    if(publicMatch){if(state.modal)closeModal({fromRoute:true});try{const profile=await api(`/api/users/${publicMatch[1]}/public`);if(request!==state.routeRequest)return;publicProfileView(profile);}catch(error){if(request!==state.routeRequest)return;if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
+    if(route==='/staff'){
+      if(!state.user?.capabilities?.includes('staff:read'))return navigate('/',{replace:true});
+      state.staff=null;
+      state.staffTab='posts';
+      state.staffReason='';
+      state.securityFilters={};
+      state.securityPage=null;
+      state.securityDetail=null;
+      renderStaffPage();
+      try {
+        await loadStaff();
+      } catch(error){if(request===state.routeRequest)renderStaffPage(error.message);return;}
+      if(request===state.routeRequest){renderStaffPage();$('#profileRoot').focus({preventScroll:true});}
+      return;
+    }
+    if(publicMatch){try{const profile=await api(`/api/users/${publicMatch[1]}/public`);if(request!==state.routeRequest)return;publicProfileView(profile);}catch(error){if(request!==state.routeRequest)return;if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
     if(route==='/me'){
       if(!state.user){openAuth('wall.account.login_for_profile',async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
       await loadProfile();return;
@@ -157,9 +174,33 @@
     if(history.state?.wall){const wall=history.state.wall;state.categories=wall.categories||state.categories;state.sort=wall.sort||state.sort;state.query=wall.query||'';$('#searchInput').value=state.query;$('#sortSelect').value=state.sort;renderFilters();}
     if(state.loadedFeedKey!==feedKey())await loadPosts({render:false});
     if(request!==state.routeRequest)return;
-    renderWall({preserveFeed:true});const id=Number(params.get('post'));if(id&&params.has('history'))await openHistory(id,{route:false,from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
+    renderWall({preserveFeed:true});const id=Number(params.get('post'));if(id&&params.has('history'))await renderHistoryRoute(id,{from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await renderDetailRoute(id);else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
   }
-  async function navigate(url,{replace=false}={}){rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);await applyRoute();}
+  async function navigate(url,{replace=false}={}){
+    const next=new URL(url,location.origin);
+    if(next.href!==location.href){
+      const current=history.state||{},wall=location.pathname==='/'&&!location.search?wallSnapshot():current.wall||wallSnapshot();
+      if(!replace)history.replaceState({...current,wall},'',location.href);
+      const entry={wall,inApp:!replace||Boolean(current.inApp)};
+      if(next.pathname==='/'&&next.searchParams.has('post')){
+        if(replace)entry.postDepth=current.postDepth||0;
+        else if(!new URLSearchParams(location.search).has('post'))entry.postDepth=1;
+        else entry.postDepth=current.postDepth?current.postDepth+1:0;
+      }
+      history[replace?'replaceState':'pushState'](entry,'',next.href);
+    }
+    return applyRoute();
+  }
+  function leavePost(){
+    const depth=history.state?.postDepth;
+    if(depth)history.go(-depth);
+    else return navigate('/',{replace:true});
+  }
+  function openDetail(id){return navigate('/?post='+id);}
+  function openHistory(id,options={}){
+    const params=new URLSearchParams({post:id,history:1,...options});
+    return navigate('/?'+params);
+  }
   async function loadPosts({append=false,render=true}={}) {
     const request=++state.loadRequest;state.loadError='';
     $('#feed').setAttribute('aria-busy','true');
@@ -226,8 +267,7 @@
       document.querySelector(`[data-post-id="${state.detailPost?.id}"] .tile-open`)||$('.logo');
     returnTarget.focus({preventScroll:true});
     removeModalVisual({immediate:fromRoute||closingHistory||closingType==='compose'||closingType==='detail'||location.search.includes('post=')});
-    if(closingHistory){history.replaceState(history.state,'','/');renderWall();return;}
-    if(location.search.includes('post=')&&!fromRoute){history.back();return;}
+    if(!fromRoute&&new URLSearchParams(location.search).has('post'))return leavePost();
   }
   function profileModal() {
     if(state.user)return wrapper(t('account.your_profile'),`<h3>${E(t('account.greeting',{name:state.user.name}))}</h3><p>${E(t('account.pseudonym_help'))}</p><button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-secondary" data-action="logout">${E(t('account.logout'))}</button><p><a href="/privacy.html">${E(t('account.privacy'))}</a> · <a href="/rules.html">${E(t('account.rules'))}</a></p>`);
@@ -235,14 +275,14 @@
   }
   function loginForm(){return `<form id="recoverForm" class="form-stack account-login" autocomplete="on"><label class="field" for="recoverName"><span>${E(t('account.pseudonym'))}</span><input id="recoverName" name="username" minlength="2" maxlength="24" autocomplete="username" required></label><label class="field" for="recoverKey"><span>${E(t('account.recovery_key'))}</span><input id="recoverKey" name="password" type="password" autocomplete="current-password" required></label><button class="btn btn-primary" type="submit">${E(t('account.login'))} ${HeremeIcons.icon('arrow-right')}</button></form>`;}
   function accountMenu(){
-    const links=`<p class="account-links"><a href="/rules.html">${E(t('account.rules'))}</a> · <a href="/privacy.html">${E(t('account.privacy'))}</a></p>`;
+    const links=`<nav class="account-links" aria-label="${E(t('account.legal'))}"><hr><a href="/privacy.html">${E(t('account.privacy'))}</a><a href="/cookies.html">${E(t('account.cookies'))}</a><a href="/terms.html">${E(t('account.terms'))}</a></nav>`;
     const connection=state.meta?.addresses?`<details class="connection-details"><summary>${t('connection.open_mobile')}</summary><img src="/api/connect-qr.svg" width="180" height="180" alt="${t('connection.qr_alt')}"><p>${E(state.meta?.connect_url)}</p><button class="text-button" data-action="copy-connect">${t('connection.copy')}</button></details>`:'';
-    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?`<button class="btn btn-primary" data-action="staff-panel">${E(t('account.staff'))}</button>`:'';return wrapper(t('account.your_profile'),`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">${E(t('account.logged_in_as'))}</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} ${HeremeIcons.icon('arrow-right')} ${E(t('account.my_profile'))}</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="notifications">${E(t('account.notifications'))}</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-danger" data-action="logout">${E(t('account.logout'))}</button></div>${connection}${links}`);}
+    if(state.user){const staff=state.user.capabilities?.includes('staff:read')?`<button class="btn btn-primary" data-action="staff-panel">${E(t('account.staff'))}</button>`:'';return wrapper(t('account.your_profile'),`<section class="account-summary"><span class="account-avatar" aria-hidden="true">${E(state.user.name[0].toUpperCase())}</span><div><p class="eyebrow">${E(t('account.logged_in_as'))}</p><button class="text-button account-profile-link" data-action="my-profile">${E(state.user.name)} ${HeremeIcons.icon('arrow-right')} ${E(t('account.my_profile'))}</button><p class="muted-note">${E(state.user.roles.join(', '))}</p></div></section><div class="account-actions"><button class="btn btn-secondary" data-action="my-profile">${E(t('account.my_profile'))}</button><button class="btn btn-secondary" data-action="notifications">${E(t('account.settings'))}</button>${staff}<button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-danger" data-action="logout">${E(t('account.logout'))}</button></div>${connection}${links}`);}
     return wrapper(t('account.account'),`<p>${E(t('account.login_or_create'))}</p><button class="btn btn-primary" data-action="auth-register">${E(t('account.create'))}</button><button class="btn btn-secondary" data-action="auth-login">${E(t('account.login'))}</button>${connection}${links}`);
   }
   const staffReason=()=>{const value=($('#staffReason')?.value||state.staffReason).trim();if(value.length<3)throw new Error(t('staff.reason_required'));state.staffReason=value;return value;};
   const reportReasonLabel=value=>{const key={personal:'personal',Personopplysninger:'personal',harassment:'harassment',Trakassering:'harassment',illegal:'illegal','Ulovlig innhold':'illegal',spam:'spam','Spam / svindel':'spam',other:'other',Annet:'other'}[value];return key?t(`report.${key}`):value;};
-  const statusLabel=value=>['published','review','hidden','rejected','active','deactivated','deleted'].includes(value)?t(`status.${value}`):value;
+  const statusLabel=value=>['published','review','hidden','rejected','active','deactivated','deleted'].includes(value)?t(`status.${value}`):value==='suspended'?t('security.suspended'):value==='banned'?t('security.banned'):value;
   const roleLabel=value=>['member','moderator','admin','operator'].includes(value)?t(`role.${value}`):value;
   const rolesLabel=values=>values.map(roleLabel).join(', ');
   function localizeStaffIdentifiers(){
@@ -252,27 +292,46 @@
     [...document.querySelectorAll('.staff-table tbody tr')].forEach((row,index)=>{const user=state.staff.users[index],cells=row.cells;if(!user||!cells)return;cells[0].querySelector('small').textContent=statusLabel(user.status);cells[1].textContent=rolesLabel(user.roles);});
   }
   function staffPanel(){
-    if(!state.staff)return wrapper(t('staff.title'),`<p class="loading-card">${E(t('staff.loading'))}</p>`,'','staff-modal');
+    if(!state.staff)return `<p role="status">${E(t('staff.loading'))}</p>`;
     const admin=state.user.capabilities.includes('content:manage'),tabs=admin?['posts','users','comments','reports']:['posts'];
-    const labels={posts:t('staff.posts'),users:t('staff.users'),comments:t('staff.comments'),reports:t('staff.reports')};
+    if(state.user.capabilities.includes('security:read'))tabs.push('security');
+    const labels={posts:t('staff.posts'),users:t('staff.users'),comments:t('staff.comments'),reports:t('staff.reports'),security:t('security.title')};
     const nav=`<nav class="staff-tabs">${tabs.map(tab=>`<button class="btn btn-secondary" data-action="staff-tab" data-tab="${tab}" aria-pressed="${state.staffTab===tab}">${labels[tab]}</button>`).join('')}</nav>`;
     let rows='';
     if(state.staffTab==='posts')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>${t('staff.content')}</th><th>${t('staff.author')}</th><th>${t('staff.status')}</th><th>${t('staff.score')}</th><th>${t('staff.action')}</th></tr></thead><tbody>${state.staff.posts.map(post=>`<tr><td>${post.id}</td><td>${admin?`<input data-staff-field="title" data-id="${post.id}" value="${E(post.title)}" maxlength="160"><textarea data-staff-field="body" data-id="${post.id}" maxlength="3000">${E(post.body)}</textarea><select data-staff-field="category" data-id="${post.id}">${HeremeThemes.ids.map(id=>`<option value="${id}"${id===post.category?' selected':''}>${E(HeremeThemes.get(id).label)}</option>`).join('')}</select>`:`<b>${E(post.title)}</b>`}</td><td>${E(post.author)}</td><td>${admin?`<select data-staff-field="status" data-id="${post.id}">${['published','review','hidden','rejected'].map(value=>`<option${value===post.status?' selected':''}>${value}</option>`).join('')}</select>`:E(post.status)}</td><td>${admin?`<input type="number" data-staff-field="score" data-id="${post.id}" value="${post.score}" min="-1000000" max="1000000">`:post.score}</td><td class="staff-actions">${admin?`<button class="btn btn-primary" data-action="staff-save-post" data-id="${post.id}">${t('staff.save')}</button><button class="btn btn-danger" data-action="staff-delete-post" data-id="${post.id}">${t('staff.delete')}</button>`:''}<button class="btn btn-secondary" data-action="staff-moderate" data-mode="${post.status==='hidden'?'publish':'hide'}" data-id="${post.id}">${t(post.status==='hidden'?'staff.restore':'staff.hide')}</button></td></tr>`).join('')}</tbody></table>`;
     if(state.staffTab==='users')rows=`<table class="staff-table"><thead><tr><th>${t('staff.pseudonym')}</th><th>${t('staff.roles')}</th><th>${t('staff.content')}</th><th>${t('staff.delete')}</th></tr></thead><tbody>${state.staff.users.map(user=>`<tr><td>${E(user.name)}<br><small>${E(user.status)}</small></td><td>${E(user.roles.join(', '))}</td><td>${t('staff.user_content',{posts:user.post_count,comments:user.comment_count,votes:user.vote_count})}</td><td><label><input type="checkbox" data-delete-posts="${E(user.id)}"> ${t('staff.delete_posts')}</label><button class="btn btn-danger" data-action="staff-delete-user" data-user-id="${E(user.id)}"${user.id===state.user.id?' disabled':''}>${t('staff.delete_user')}</button></td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='users'&&admin)rows+=`<div class="security-filters"><label>${E(t('security.user_id'))}<input id="restrictionUserId" list="restrictionUsers"></label><datalist id="restrictionUsers">${state.staff.users.map(user=>`<option value="${E(user.id)}">${E(user.name)}</option>`).join('')}</datalist><label>${E(t('security.restriction'))}<select id="restrictionStatus"><option value="suspended">${E(t('security.suspended'))}</option><option value="banned">${E(t('security.banned'))}</option><option value="active">${E(t('security.restore'))}</option></select></label><button class="btn btn-danger" data-action="staff-restrict-user">${E(t('security.apply'))}</button></div>`;
     if(state.staffTab==='comments')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>${t('staff.post')}</th><th>${t('staff.author')}</th><th>${t('staff.comment')}</th><th>${t('staff.action')}</th></tr></thead><tbody>${state.staff.comments.map(comment=>`<tr><td>${comment.id}</td><td>${E(comment.post_title)}</td><td>${E(comment.author)}</td><td><textarea data-comment-body="${comment.id}" maxlength="1200">${E(comment.body)}</textarea></td><td class="staff-actions"><button class="btn btn-primary" data-action="staff-save-comment" data-id="${comment.id}">${t('staff.save')}</button><button class="btn btn-danger" data-action="staff-delete-comment" data-id="${comment.id}">${t('staff.delete_thread')}</button></td></tr>`).join('')}</tbody></table>`;
     if(state.staffTab==='reports')rows=`<table class="staff-table"><thead><tr><th>ID</th><th>${t('staff.post')}</th><th>${t('staff.reporter')}</th><th>${t('staff.reason')}</th><th>${t('staff.status')}</th></tr></thead><tbody>${state.staff.reports.map(report=>`<tr><td>${report.id}</td><td>${E(report.post_title)}</td><td>${E(report.reporter||t('staff.deleted'))}</td><td>${E(reportReasonLabel(report.reason))}</td><td>${t(report.resolved?'staff.resolved':'staff.open')}</td></tr>`).join('')}</tbody></table>`;
+    if(state.staffTab==='security'){
+      const fields=['from','to','event_type','user_id','username','ip','browser','browser_version','os','os_version','device','event_id','operation_id','request_url','request_path','http_method','referrer_url','status_code'];
+      const filters=`<form id="securityFilters" class="security-filters">${fields.map(field=>`<label>${E(t(`security.${field}`))}<input name="${field}" value="${E(state.securityFilters[field]||'')}"></label>`).join('')}<button class="btn btn-primary">${E(t('security.search'))}</button></form>`;
+      const events=state.securityPage?.events||[];
+      rows=`${filters}<p class="muted-note">${E(t('security.caution'))}</p><div class="staff-table-wrap"><table class="staff-table"><thead><tr><th>${E(t('security.time'))}</th><th>${E(t('security.event_type'))}</th><th>${E(t('security.username'))}</th><th>IP</th><th>${E(t('security.browser'))} / ${E(t('security.os'))} / ${E(t('security.device'))}</th><th>${E(t('security.request_url'))}</th><th>${E(t('security.reason'))}</th></tr></thead><tbody>${events.map(event=>`<tr><td>${E(event.timestamp_utc)}</td><td><button class="text-button" data-action="security-detail" data-id="${E(event.event_id)}">${E(event.event_type)}</button></td><td>${E(event.subject_username||event.username||'—')}</td><td><button class="text-button" data-action="security-filter-ip" data-ip="${E(event.client_ip||'')}">${E(event.client_ip||'—')}</button></td><td>${E([event.browser_family,event.os_family,event.device_type].filter(Boolean).join(' / '))}</td><td>${E([event.http_method,event.request_url||event.request_path].filter(Boolean).join(' '))}</td><td>${E(event.reason_code||event.status_code||'—')}</td></tr>`).join('')}</tbody></table></div>${state.securityPage?.has_more?`<button class="btn btn-secondary" data-action="security-more">${E(t('security.more'))}</button>`:''}${state.securityDetail?`<details open><summary>${E(t('security.detail'))}</summary><pre class="security-raw">${E(JSON.stringify(state.securityDetail,null,2))}</pre></details>`:''}`;
+    }
     const summary=admin?t('staff.summary',state.staff.stats):`${state.staff.stats.posts} ${t('staff.posts').toLowerCase()}`;
-    return wrapper(t('staff.title'),`<p class="notice">${summary}. ${t('staff.audit_notice')}</p><label class="field"><span>${t('staff.next_reason')}</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="${t('staff.reason_placeholder')}"></label>${nav}<div class="staff-table-wrap">${rows}</div>`,'','staff-modal');
+    return `<p class="notice">${summary}. ${t('staff.audit_notice')}</p>${state.staffTab==='security'?'':`<label class="field"><span>${t('staff.next_reason')}</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="${t('staff.reason_placeholder')}"></label>`}${nav}<div class="staff-table-wrap">${rows}</div>`;
   }
   async function loadStaff(){state.staff=await api('/api/admin/overview');if(!state.user.capabilities.includes('content:manage'))state.staffTab='posts';}
-  async function openStaffPanel(){state.staff=null;openModal('staff');await loadStaff();renderModal();}
-  async function refreshStaff(message){await loadStaff();renderModal({preserve:true});await loadPosts();if(message)toast(message);}
+  async function loadSecurity(page=0){const params=new URLSearchParams({...state.securityFilters,page:String(page)});const result=await api('/api/admin/security-events?'+params);state.securityPage=page?{...result,events:[...state.securityPage.events,...result.events]}:result;}
+  function renderStaffPage(error){
+    if(location.pathname!=='/staff')return;
+    const root=$('#profileRoot');
+    $('#forumShell').hidden=true;
+    root.hidden=false;
+    document.title=t('staff.title')+' | HerEme';
+    root.innerHTML=`<section class="staff-page"><a href="/">${E(t('route.to_wall'))}</a><h1>${E(t('staff.title'))}</h1>${error?'<p role="alert">'+E(error)+'</p>':staffPanel()}</section>`;
+    if(state.staff&&!error)localizeStaffIdentifiers();
+  }
+  async function refreshStaff(message){await loadStaff();renderStaffPage();state.loadedFeedKey=null;if(message)toast(message);}
   async function refreshIdentity(){const current=await api('/api/me');state.user=current.user;await window.HeremeI18n.applyAccountLanguage?.(current.user);state.csrf=current.csrf_token||csrfCookie();state.legacyToken='';localStorage.removeItem('hereme_token');}
-  async function loadNotificationBadge(){const userId=state.user?.id;if(!userId)return;const result=await api('/api/notifications');if(state.user?.id!==userId)return;$('#notificationButton').hidden=false;$('#notificationBadge').textContent=String(result.unread);$('#notificationBadge').hidden=!result.unread;}
+  let badgeRequest=0;
+  function displayBadge(unread){$('#notificationButton').hidden=false;$('#notificationBadge').textContent=String(unread);$('#notificationBadge').hidden=!unread;}
+  async function loadNotificationBadge(){const request=++badgeRequest;const userId=state.user?.id;if(!userId)return;const result=await api('/api/notifications');if(state.user?.id===userId&&request===badgeRequest)displayBadge(result.unread);}
   async function refreshNotificationsLive(){await loadNotificationBadge();if(state.modal==='notifications'){await loadNotifications();renderModal({preserve:true});}}
   function scheduleNotificationRefresh(){clearTimeout(state.notificationRefresh);state.notificationRefresh=setTimeout(()=>refreshNotificationsLive().catch(()=>{}),100);}
   function connectNotificationSocket(){if(!state.user||state.notificationSocket)return;const url=new URL('/api/chat-socket',location.href);url.protocol=location.protocol==='https:'?'wss:':'ws:';const socket=new WebSocket(url);state.notificationSocket=socket;
-    socket.onopen=()=>{state.notificationReconnect=0;};socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.type==='notification.created')scheduleNotificationRefresh();};
+    socket.onopen=()=>{state.notificationReconnect=0;scheduleNotificationRefresh();};socket.onmessage=event=>{const message=JSON.parse(event.data);if(['notification.created','notification.read','conversation.updated'].includes(message.type))scheduleNotificationRefresh();};
     socket.onclose=()=>{if(state.notificationSocket!==socket)return;state.notificationSocket=null;if(!state.user)return;const delay=Math.min(30000,1000*2**Math.min(state.notificationReconnect++,5));setTimeout(connectNotificationSocket,delay);};socket.onerror=()=>socket.close();}
   async function loadNotifications(){const [config,devices,settings,inbox]=await Promise.all([api('/api/push/config'),api('/api/push/subscriptions'),api('/api/notification-settings'),api('/api/notifications')]);state.notificationData={config,devices:devices.subscriptions,settings:settings.settings,inbox:inbox.notifications,unread:inbox.unread};}
   function notificationPanel(){
@@ -294,7 +353,7 @@
   const pushKey=value=>{const padding='='.repeat((4-value.length%4)%4),raw=atob((value+padding).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,char=>char.charCodeAt(0));};
   async function enablePush(){const config=state.notificationData.config;if(!config.enabled)throw new Error(t('notifications.web_push_off'));const permission=await Notification.requestPermission();if(permission!=='granted'){await loadNotifications();renderModal();if(permission==='default')toast(t('notifications.permission_not_granted'));return;}const registration=await window.HeremePwa.ready;if(!registration)throw new Error(t('notifications.worker_failed'));let subscription=await registration.pushManager.getSubscription();if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushKey(config.public_key)});try{const result=await api('/api/push/subscriptions',{method:'POST',body:{subscription:subscription.toJSON(),device_label:navigator.userAgent.slice(0,80)}});localStorage.setItem('hereme_push_subscription_id',result.subscription.id);}catch(error){await subscription.unsubscribe();throw error;}await loadNotifications();renderModal();toast(t('notifications.device_on'));}
   async function disablePush(){const id=localStorage.getItem('hereme_push_subscription_id');if(id)await api('/api/push/subscriptions/'+encodeURIComponent(id),{method:'DELETE'});const registration=await window.HeremePwa.ready,subscription=await registration?.pushManager?.getSubscription();await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');await loadNotifications();renderModal();}
-  function openAuth(messageKey,onSuccess,mode){window.HeremeAuth.open({mode,messageKey,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast(t('recovery.store_safely'));}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
+  function openAuth(messageKey,onSuccess,mode){window.HeremeAuth.open({mode,messageKey,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast(t('recovery.store_safely'));}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me'){if(history.state?.inApp)history.back();else navigate('/',{replace:true});}}});}
   function requireUser(action) {
     if(state.user)return true;
     openAuth('',async()=>action?.());return false;
@@ -325,7 +384,6 @@
     if(state.modal==='poster-edit')html=wrapper(t('e21.edit_text'),`<form id="posterEditForm" class="form-stack"><label class="field"><span>${t('e21.poster_text')}</span><textarea id="posterEditText" maxlength="3000" required>${E(state.posterEdit?.text||'')}</textarea></label><label class="field"><span>${t('e21.change_summary')}</span><input id="posterEditSummary" maxlength="300"></label><button class="btn btn-primary" type="submit">${t('e21.save_edit')}</button></form>`);
     if(state.modal==='report')html=wrapper(t('report.title'),`<form id="reportForm" class="form-stack"><label class="field" for="reportReason"><span>${t('report.problem')}</span><select id="reportReason">${['personal','harassment','illegal','spam','other'].map(reason=>`<option value="${reason}">${t(`report.${reason}`)}</option>`).join('')}</select></label><p class="notice">${t('report.notice')}</p><button class="btn btn-primary" type="submit">${t('report.send')}</button></form>`);
     if(state.modal==='menu')html=accountMenu();
-    if(state.modal==='staff')html=staffPanel();
     if(state.modal==='notifications')html=notificationPanel();
     $('#modalRoot').innerHTML=html;
     if(firstOpen&&!['detail','compose'].includes(state.modal))window.HeremeMotion?.enter($('#modalRoot .modal-overlay'),'motion-backdrop-enter');
@@ -335,7 +393,6 @@
     if(state.modal==='history'&&state.historyData?.total>state.historyData.revisions.length)$('.modal-content .revision-list')?.insertAdjacentHTML('afterend',`<button class="btn btn-secondary" data-action="history-more">${t('e21.more')}</button>`);
     if(state.modal==='history'&&state.historyData){const available=state.historyData.revisions.filter(row=>row.visibility==='public').map(row=>row.version).sort((a,b)=>a-b);if(available.length>1){const options=available.map(v=>`<option value="${v}">v${v}</option>`).join('');$('.modal-content')?.insertAdjacentHTML('afterbegin',`<div class="history-compare-controls"><label>${t('e21.from')} <select id="historyFrom">${options}</select></label><label>${t('e21.to')} <select id="historyTo">${options}</select></label><button class="btn btn-secondary" data-action="history-custom-compare">${t('e21.compare')}</button></div>`);$('#historyFrom').value=String(state.historyComparison?.from||available.at(-2));$('#historyTo').value=String(state.historyComparison?.to||available.at(-1));}}
     if(state.modal==='detail'&&state.detailPost?.version>1){const label=document.createElement('span');label.className='revision-edited';label.textContent=' · '+t('e21.edited');$('#modalRoot .detail-meta')?.append(label);}
-    if(state.modal==='staff')localizeStaffIdentifiers();
     if(state.modal==='menu'&&state.user){const roles=$('.account-summary .muted-note');if(roles)roles.textContent=rolesLabel(state.user.roles);}
     if(state.modal==='menu')window.HeremePwa?.mountMenu($('.modal-content'));
     if(state.modal==='menu')window.HeremeLanguage?.mount($('.modal-content'),{menu:true});
@@ -364,12 +421,16 @@
     if($('#posterPreview')){$('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.postMode==='video'?'<span class="video-preview-badge">'+HeremeIcons.icon('video')+' Video</span>':'');HeremePoster.enhance($('#posterPreview'));}
     if($('#categoryHint'))$('#categoryHint').textContent=HeremeThemes.get(state.category).description;
   }
-  async function openHistory(id,{route=true,from=null,to=null,view=null}={}){
-    state.historyData=await api(`/api/posts/${id}/revisions`);state.historyPostId=id;state.historyComparison=null;state.historyVersion=null;
-    if(view)state.historyVersion=await api(`/api/posts/${id}/revisions/${view}`);
-    else if(from&&to)state.historyComparison=await api(`/api/posts/${id}/revisions/${from}/diff?to=${to}`);
+  async function renderHistoryRoute(id,{from,to,view}){
+    const request=state.routeRequest;
+    const [data,version,comparison]=await Promise.all([
+      api(`/api/posts/${id}/revisions`),
+      view?api(`/api/posts/${id}/revisions/${view}`):null,
+      !view&&from&&to?api(`/api/posts/${id}/revisions/${from}/diff?to=${to}`):null
+    ]);
+    if(request!==state.routeRequest)return;
+    state.historyData=data;state.historyPostId=id;state.historyVersion=version;state.historyComparison=comparison;
     state.modal='history';lockBackground(true);renderModal();
-    if(route)history.pushState({...history.state,history:true},'',`/?post=${id}&history=1`);
   }
   async function preloadDetailImage(post){
     const url=post.content_format==='article'?HeremeArticleView.safeMediaUrl(post.article?.cover?.thumbnail_url||post.image_url):
@@ -378,17 +439,16 @@
     const image=new Image();image.src=url;
     try{await image.decode();}catch{ /* The detail's media error state handles unavailable images. */ }
   }
-  async function openDetail(id,{route=true}={}) {
+  async function renderDetailRoute(id) {
     const request=++state.detailRequest,routeRequest=state.routeRequest,returnFocus=state.modal?state.returnFocus:document.activeElement;
     let post,comments;
     try{[post,comments]=await Promise.all([api('/api/posts/'+id),api(`/api/posts/${id}/comments`)]);}
-    catch(error){if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;if(new URLSearchParams(location.search).has('post'))history.replaceState(history.state,'','/');toast('Dette innholdet er ikke lenger tilgjengelig.');return;}
+    catch(error){if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;if(error.status!==404)throw error;await navigate('/',{replace:true});toast('Dette innholdet er ikke lenger tilgjengelig.');return;}
     if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;
     await preloadDetailImage(post.post);
     if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;
     state.returnFocus=returnFocus;state.detailPost=post.post;state.comments=comments.comments;state.replyTo=null;
     state.modal='detail';lockBackground(true);renderModal();
-    if(route){rememberWall();history.pushState({...history.state,detail:true},'',`/?post=${id}`);}
   }
   async function vote(id,value) {
     if(!requireUser(()=>vote(id,value)))return;
@@ -610,7 +670,7 @@
       if(/^\/\?post=\d+$/.test(location.pathname+location.search)||/^\/u\/[A-Za-z0-9_-]{1,100}$/.test(location.pathname))params.set('returnTo',location.pathname+location.search);
       location.assign(`/chat?${params}`);return;
     }
-    if(action==='public-profile-back'){if(history.state?.wall)history.back();else await navigate('/');return;}
+    if(action==='public-profile-back'){if(history.state?.inApp)history.back();else await navigate('/',{replace:true});return;}
     if(action==='comment-vote'){await voteComment(id,Number(target.dataset.value));return;}
     if(action==='dismiss-modal'){if(event.target===target)closeModal();return;}
     if(action==='close-modal'){closeModal();return;}
@@ -620,7 +680,7 @@
     if(action==='home'||action==='profile-wall'){
       state.query='';$('#searchInput').value='';state.categories=[...HeremeThemes.ids];renderFilters();
       const needsFeed=state.loadedFeedKey!==feedKey();
-      if(location.pathname!=='/'){
+      if(location.pathname!=='/'||location.search){
         if(needsFeed)await loadPosts({render:false});
         await navigate('/');
       }else if(needsFeed)await loadPosts();
@@ -631,8 +691,12 @@
     if(action==='discussion'){await openDetail(id);$('#discussion')?.scrollIntoView({block:'start',behavior:'smooth'});return;}
     if(action==='retry-feed'){await loadPosts();return;}
     if(action==='load-more'){await loadPosts({append:true});return;}
-    if(action==='staff-panel'){await openStaffPanel();return;}
-    if(action==='staff-tab'){state.staffReason=$('#staffReason')?.value||state.staffReason;state.staffTab=target.dataset.tab;renderModal();return;}
+    if(action==='staff-panel'){await navigate('/staff');return;}
+    if(action==='staff-tab'){state.staffReason=$('#staffReason')?.value||state.staffReason;state.staffTab=target.dataset.tab;if(state.staffTab==='security')await loadSecurity();renderStaffPage();return;}
+    if(action==='security-detail'){state.securityDetail=await api('/api/admin/security-events/'+encodeURIComponent(target.dataset.id));renderStaffPage();return;}
+    if(action==='security-filter-ip'){state.securityFilters={ip:target.dataset.ip};await loadSecurity();state.securityDetail=null;renderStaffPage();return;}
+    if(action==='security-more'){await loadSecurity(state.securityPage.page+1);renderStaffPage();return;}
+    if(action==='staff-restrict-user'){const userId=$('#restrictionUserId').value.trim(),status=$('#restrictionStatus').value;if(!state.staff.users.some(user=>user.id===userId))throw Error(t('security.select_user'));await api('/api/admin/users/'+encodeURIComponent(userId)+'/restriction',{method:'POST',body:{status,reason:staffReason()}});await refreshStaff(t('security.saved'));return;}
     if(action==='staff-moderate'){await api(`/api/admin/posts/${id}/moderation`,{method:'POST',body:{action:target.dataset.mode,reason:staffReason()}});await refreshStaff(target.dataset.mode==='hide'?'Innlegget er sensurert.':'Innlegget er gjenopprettet.');return;}
     if(action==='staff-save-post'){
       const value=name=>document.querySelector(`[data-staff-field="${name}"][data-id="${id}"]`).value;
@@ -643,7 +707,7 @@
     if(action==='staff-delete-comment'){if(!confirm(t('staff.delete_thread_confirm')))return;await api(`/api/admin/comments/${id}`,{method:'DELETE',body:{reason:staffReason()}});await refreshStaff(t('staff.thread_deleted'));return;}
     if(action==='staff-delete-user'){
       const userId=target.dataset.userId,deletePosts=document.querySelector(`[data-delete-posts="${CSS.escape(userId)}"]`).checked;
-      if(!confirm(`Slette brukeren permanent${deletePosts?' og alle brukerens innlegg':' mens innleggene anonymiseres'}?`))return;
+      if(!confirm(t(deletePosts?'staff.delete_user_posts_confirm':'staff.delete_user_keep_confirm')))return;
       await api(`/api/admin/users/${encodeURIComponent(userId)}`,{method:'DELETE',body:{delete_posts:deletePosts,reason:staffReason()}});await refreshStaff('Brukeren er slettet permanent.');return;
     }
     if(action==='menu'){openModal('menu');return;}
@@ -652,7 +716,7 @@
     if(action==='push-disable'){await disablePush();return;}
     if(action==='pwa-install'){await window.HeremePwa.install();await loadNotifications();renderModal();return;}
     if(action==='pwa-install-help'){toast(t('notifications.safari_install_help'));return;}
-    if(action==='notification-open'){await api('/api/notifications/'+encodeURIComponent(target.dataset.id)+'/read',{method:'POST'});location.assign(target.dataset.route);return;}
+    if(action==='notification-open'){const result=await api('/api/notifications/'+encodeURIComponent(target.dataset.id)+'/read',{method:'POST'});++badgeRequest;displayBadge(result.unread);location.assign(target.dataset.route);return;}
     if(action==='areas'){state.draftAreas=[...state.selectedAreas];openModal('areas');return;}
     if(action==='area-toggle'){const area=target.dataset.areaId;state.draftAreas=state.draftAreas.includes(area)?state.draftAreas.filter(id=>id!==area):[...state.draftAreas,area];for(const item of document.querySelectorAll(`[data-area-id="${CSS.escape(area)}"]`))item.setAttribute('aria-pressed',state.draftAreas.includes(area));return;}
     if(action==='save-areas'){const result=await api('/api/me/areas',{method:'PUT',body:{area_ids:state.draftAreas}});state.selectedAreas=result.areas.map(area=>area.id);closeModal();await loadPosts();return;}
@@ -666,7 +730,25 @@
     if(action==='draft-open'){await openArticleDraft(await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId)));return;}
     if(action==='draft-delete'){if(!confirm(t('e21.delete_confirm')))return;await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId),{method:'DELETE'});await loadProfile();return;}
     if(action==='profile-more'){await loadProfile({append:true});return;}
-    if(action==='logout'){const pushId=localStorage.getItem('hereme_push_subscription_id'),registration=await window.HeremePwa?.ready,subscription=await registration?.pushManager?.getSubscription();await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');state.notificationSocket?.close();state.notificationSocket=null;$('#notificationButton').hidden=true;closeModal();await loadPosts();return;}
+    if(action==='logout'){
+      const pushId=localStorage.getItem('hereme_push_subscription_id');
+      const registration=await window.HeremePwa?.ready;
+      const subscription=await registration?.pushManager?.getSubscription().catch(error=>{
+        console.warn('Push subscription unavailable during logout',error);
+        return null;
+      });
+      const result=await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});
+      if(result.deletion_notice){HeremeAuth.showDeletion(result.deletion_notice,true);return;}
+      try{await subscription?.unsubscribe();}catch(error){console.warn('Local push unsubscribe failed',error);}
+      localStorage.removeItem('hereme_push_subscription_id');
+      localStorage.removeItem('hereme_token');
+      state.user=null;state.csrf='';state.legacyToken='';
+      state.notificationSocket?.close();state.notificationSocket=null;
+      $('#notificationButton').hidden=true;
+      closeModal();
+      if(location.pathname==='/staff')await navigate('/',{replace:true});else await loadPosts();
+      return;
+    }
     if(action==='rotate-recovery'){const result=await api('/api/recovery/rotate',{method:'POST'});state.recoveryKey=result.recovery_key;openModal('recovery-key');return;}
     if(action==='toggle-recovery'){const input=$('#recoveryPassword'),show=input.type==='password';input.type=show?'text':'password';target.textContent=t(show?'recovery.hide':'recovery.show');input.focus();return;}
     if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast(t('recovery.copied'));return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast(t('recovery.copied'));return;}}window.prompt(t('recovery.copy_prompt'),state.recoveryKey);return;}
@@ -677,11 +759,11 @@
     if(action==='article-edit'){const record=await api(`/api/articles/${id}/edit`,{method:'POST'});await openArticleDraft(record);return;}
     if(action==='poster-edit'){state.posterEdit={id,text:state.detailPost.poster_text,base_version:state.detailPost.version};openModal('poster-edit');return;}
     if(action==='history'){await openHistory(id);return;}
-    if(action==='history-current'){const id=state.historyPostId;history.replaceState({...history.state,detail:true},'',`/?post=${id}`);await openDetail(id,{route:false});return;}
+    if(action==='history-current'){await navigate('/?post='+state.historyPostId,{replace:true});return;}
     if(action==='history-more'){const page=await api(`/api/posts/${state.historyPostId}/revisions?offset=${state.historyData.revisions.length}`);state.historyData.revisions.push(...page.revisions);renderModal({preserve:true});return;}
-    if(action==='history-compare'){const to=Number(target.dataset.version);await openHistory(state.historyPostId,{route:false,from:to-1,to});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&from=${to-1}&to=${to}`);return;}
-    if(action==='history-custom-compare'){const from=Number($('#historyFrom').value),to=Number($('#historyTo').value);await openHistory(state.historyPostId,{route:false,from,to});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&from=${from}&to=${to}`);return;}
-    if(action==='history-view'){const version=Number(target.dataset.version);await openHistory(state.historyPostId,{route:false,view:version});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&version=${version}`);return;}
+    if(action==='history-compare'){const to=Number(target.dataset.version);await openHistory(state.historyPostId,{from:to-1,to});return;}
+    if(action==='history-custom-compare'){await openHistory(state.historyPostId,{from:$('#historyFrom').value,to:$('#historyTo').value});return;}
+    if(action==='history-view'){await openHistory(state.historyPostId,{version:target.dataset.version});return;}
     if(action==='format-poster'||action==='format-article'){saveDraft();state.postMode=action==='format-poster'?'poster':'article';renderModal({preserve:true});return;}
     if(['chapter-add','chapter-up','chapter-down','chapter-remove','article-cover-remove','article-media-remove'].includes(action))invalidateArticlePublish();
     if(action==='chapter-add'){saveDraft();state.articleDraft.chapters.push({heading:'',markdown:'',alt:'',media_id:null,collapsed:false});renderModal({preserve:true});return;}
@@ -723,9 +805,10 @@
   }
   async function handleSubmit(event) {
     const id=event.target.id;
+    if(id==='securityFilters'){event.preventDefault();state.securityFilters=Object.fromEntries(new FormData(event.target));state.securityDetail=null;await loadSecurity();renderStaffPage();return;}
     if(!['profileForm','recoverForm','composeForm','commentForm','reportForm','posterEditForm'].includes(id))return;
     event.preventDefault();
-    if(id==='posterEditForm'){const edit=state.posterEdit;const result=await api(`/api/posts/${edit.id}/text`,{method:'PATCH',body:{text:$('#posterEditText').value,change_summary:$('#posterEditSummary').value,base_version:edit.base_version,request_key:crypto.randomUUID()}});closeModal();await loadPosts();await openDetail(result.post_id);toast(t('e21.saved'));return;}
+    if(id==='posterEditForm'){const edit=state.posterEdit;const result=await api(`/api/posts/${edit.id}/text`,{method:'PATCH',body:{text:$('#posterEditText').value,change_summary:$('#posterEditSummary').value,base_version:edit.base_version,request_key:crypto.randomUUID()}});closeModal({fromRoute:true});await loadPosts();await openDetail(result.post_id);toast(t('e21.saved'));return;}
     if(id==='profileForm') {
       const result=await api('/api/session',{method:'POST',body:{name:$('#nicknameInput').value.trim()}});
       state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');if(localStorage.getItem('hereme_language'))await window.HeremeI18n.setLanguage(window.HeremeI18n.getLanguage());state.recoveryKey=result.recovery_key;state.modal='recovery-key';renderModal();
@@ -768,6 +851,8 @@
     if(['postVideoInput','postVideoCameraInput'].includes(input.id))await loadVideo(input.files?.[0]);
   }
   async function init() {
+    window.addEventListener('pageshow',event=>{if(event.persisted&&state.user)scheduleNotificationRefresh();});
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state.user)scheduleNotificationRefresh();});
     placeSortControl();
     compactHeader.addEventListener('change',placeSortControl);
     mobileWall.addEventListener('change',()=>{
@@ -783,7 +868,7 @@
       if(state.modal==='compose')saveDraft();
       const y=scrollY;
       localizeChrome();renderPreferences();renderFilters();
-      if(location.pathname==='/me')profileView();else renderWall({force:true});
+      if(location.pathname==='/staff')renderStaffPage();else if(location.pathname==='/me')profileView();else renderWall({force:true});
       if(state.modal)renderModal({preserve:true});
       requestAnimationFrame(()=>scrollTo(0,y));
     });
@@ -810,7 +895,7 @@
         else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
       }
     });
-    window.addEventListener('popstate',()=>{if(state.modal==='detail'){state.modal=null;state.detailPost=null;lockBackground(false);(state.returnFocus?.isConnected?state.returnFocus:$('.logo')).focus({preventScroll:true});removeModalVisual({immediate:true});}applyRoute({fromPop:true}).catch(error=>toast(error.message));});
+    window.addEventListener('popstate',()=>applyRoute({fromPop:true}).catch(error=>toast(error.message)));
     try {
       state.meta=await api('/api/meta');
       state.csrf=csrfCookie();
@@ -818,9 +903,9 @@
       catch(error){if(error.status!==401)throw error;state.legacyToken='';state.csrf='';localStorage.removeItem('hereme_token');}
       if(state.meta.features?.locations){$('#areaButton').hidden=false;const [available,geometry,subscribed]=await Promise.all([api('/api/areas'),api('/api/areas/geometry'),state.user?api('/api/me/areas'):Promise.resolve({areas:[]})]);state.areas=available.areas;state.areaGeometry=geometry;state.selectedAreas=subscribed.areas.map(area=>area.id);}
       if(state.user){await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='notification.created')scheduleNotificationRefresh();});}
-      localizeChrome();await loadPosts();
+      localizeChrome();if(location.pathname!=='/staff')await loadPosts();
       if(new URLSearchParams(location.search).get('recovery-saved')==='1'){history.replaceState({},'',location.pathname);toast(t('recovery.confirmed'));}
-      state.routeReady=true;await applyRoute({fromPop:true});
+      state.routeReady=true;await applyRoute({fromPop:true,initial:true});
     } catch(error) {state.loadError=error.message;renderWall();}
   }
   window.HeremeI18n.ready.then(init).catch(error=>{console.error(error);state.loadError=error.message;renderWall();});

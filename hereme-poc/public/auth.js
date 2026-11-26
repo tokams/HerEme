@@ -55,5 +55,33 @@
     root.addEventListener('keydown',event=>{if(event.key!=='Tab')return;const elements=[...root.querySelectorAll('button:not([disabled]),input:not([disabled]),a[href]')].filter(item=>!item.hidden&&item.getClientRects().length);if(!elements.length)return;const first=elements[0],last=elements.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}});
   }
   addEventListener('hereme:language',()=>{if(!active)return;const form=active.root.querySelector('[data-auth-form]');if(form)localize(active.root,form.dataset.authForm==='register');else if(active.root.querySelector('#recoveryTitle'))localizeRecovery(active.root);});
-  window.HeremeAuth={open,close};
+  function showDeletion(notice,loggedOut=false){
+    if(document.getElementById('accountDeleted'))return;
+    close({cancel:false});
+    const dialog=document.createElement('dialog');
+    dialog.id='accountDeleted';
+    dialog.className='account-deleted-notice';
+    dialog.setAttribute('aria-labelledby','accountDeletedTitle');
+    dialog.innerHTML='<h2 id="accountDeletedTitle"></h2><p></p><button class="btn btn-primary" type="button"></button><p role="alert"></p>';
+    dialog.querySelector('h2').textContent=t('auth.deleted_title')+' '+notice.username;
+    dialog.querySelector('p').textContent=t('auth.deleted_reason')+' '+notice.reason;
+    const button=dialog.querySelector('button');
+    button.textContent=t('auth.deleted_continue');
+    dialog.addEventListener('cancel',event=>event.preventDefault());
+    button.onclick=async()=>{
+      button.disabled=true;
+      try{
+        if(!loggedOut){
+          const response=await fetch('/api/session/deletion-notice/acknowledge',{method:'POST'});
+          if(!response.ok)throw Error(t('auth.deleted_retry'));
+        }
+        localStorage.removeItem('hereme_token');
+        localStorage.removeItem('hereme_push_subscription_id');
+        location.replace('/');
+      }catch(error){dialog.querySelector('[role="alert"]').textContent=error.message;button.disabled=false;}
+    };
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+  window.HeremeAuth={open,close,showDeletion};
 })();

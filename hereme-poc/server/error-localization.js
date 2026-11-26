@@ -1,7 +1,11 @@
 'use strict';
 
 const english={
+  ACCOUNT_DELETED:'Your account was deleted.',
   REGISTRATION_CLOSED:'Registration is closed in this community.',
+  INVALID_FILTER:'The security event filter is invalid.',
+  SECURITY_LOG_UNAVAILABLE:'The security log is unavailable.',
+  LEGAL_CONFIG_REQUIRED:'Legal contact information is not configured.',
   DIFF_TOO_LARGE:'The comparison is too large.',DRAFT_NOT_FOUND:'The draft was not found.',ERASE_CURRENT_POST:'Hide the current post before erasing its latest version.',HIDE_CURRENT_POST:'Hide the post before hiding its current revision.',HIDDEN_CURRENT_REVISION:'Publish a safe new version before restoring this post.',INVALID_DRAFT:'The draft is invalid.',POSTER_TEXT_ONLY:'Only poster text can be changed.',REVISION_NOT_FOUND:'This revision is unavailable.',STALE_DRAFT:'The draft changed in another tab.',STALE_VERSION:'This post has changed since you opened it.',
   ARTICLE_MEDIA_NOT_READY:'The article media is not ready or does not belong to this account.',DUPLICATE_ARTICLE_MEDIA:'Each article attachment can be used once.',INVALID_CHAPTERS:'An article needs 1–24 valid chapters.',
   SELF_VOTE:'You cannot vote on your own comment.',

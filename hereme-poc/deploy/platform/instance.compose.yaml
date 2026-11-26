@@ -14,6 +14,10 @@ x-environment: &environment
   HEREME_DATA_DIR: /var/lib/hereme
   HEREME_DATABASE_START: ${DATABASE_START:?Use empty or existing}
   HEREME_PUBLIC_ORIGIN: https://${INSTANCE_HOST:?Set canonical hostname}
+  HEREME_INSTANCE_ID: ${INSTANCE_PROJECT:?Set a stable instance project}
+  HEREME_LEGAL_CONTROLLER: ${HEREME_LEGAL_CONTROLLER:?Set the verified controller name}
+  HEREME_LEGAL_CONTACT: ${HEREME_LEGAL_CONTACT:?Set the verified contact email}
+  HEREME_LEGAL_PROCESSORS: ${HEREME_LEGAL_PROCESSORS:?Set the reviewed processor summary}
   HEREME_TRUST_PROXY: loopback
   HEREME_MIN_FREE_BYTES: 2147483648
   HEREME_SESSION_DAYS: 30

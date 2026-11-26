@@ -21,6 +21,10 @@ $identity = (Resolve-Path $IdentityFile).Path
 $options = @('-i',$identity,'-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','UpdateHostKeys=no')
 $runId = [Guid]::NewGuid().ToString('N')
 if (-not $CredentialsOnly) {
+    & ssh @options $connection "test -s '$platform/state/legal.json'"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Reviewed legal settings are missing at $platform/state/legal.json. Fill both instance entries using deploy/platform/legal.example.json after the contact mailbox and processor details are verified. The existing deployment was not changed."
+    }
     $dirty = & git -C $repo status --porcelain --untracked-files=all
     if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Commit the reviewed changes before deploying. The release is built from a clean Git HEAD.' }
     $revision = (& git -C $repo rev-parse HEAD).Trim()

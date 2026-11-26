@@ -35,6 +35,12 @@ async function browserPanel(credentials, code) {
     await page.getByLabel('Authenticator code').fill(code);
     await page.getByRole('button',{name:'Sign in',exact:true}).click();
     await page.getByRole('heading',{name:'Communities'}).waitFor();
+    await page.getByRole('link',{name:'Database Explorer'}).click();
+    await page.getByRole('link',{name:'main',exact:true}).first().click();
+    await page.getByRole('link',{name:'security_events',exact:true}).first().click();
+    await page.locator('table').first().waitFor();
+    await page.goto('https://admin.hereme.no/');
+    await page.getByRole('heading',{name:'Communities'}).waitFor();
     const card=page.locator('article').filter({hasText:'Tante Ulrikkes vei'});
     const qr=card.locator('img[alt="QR code for tanteulrikkesvei.hereme.no"]');
     await qr.waitFor();
@@ -88,6 +94,7 @@ async function test() {
   const communityStaff=await signin(community,file('platform/state/secrets/tanteulrikkesvei-staff-credentials.txt'));
   for(const [instance,user] of [[main,mainStaff],[community,communityStaff]]) {
     assert.equal((await instance.request('/api/admin/overview',{user})).status,200);
+    assert.equal((await instance.request('/api/admin/security-events',{user})).status,200);
     assert.equal((await panel.request('/api/sites',{user})).status,401);
   }
   assert.equal((await community.request('/api/admin/overview',{user:mainStaff})).status,401);
@@ -102,8 +109,27 @@ async function test() {
   const session=result.headers['set-cookie'][0];
   assert.match(session,/^__Host-hereme_operator=.*; Path=\/; HttpOnly; Secure; SameSite=Strict/);
   const cookie=session.split(';')[0];
+  assert.equal((await panel.request('/databases/main.json?sql=select+1')).status,401);
+  const query=(db,sql)=>panel.request('/databases/'+db+'.json?sql='+encodeURIComponent(sql),{headers:{cookie}});
+  for(const database of ['main','community']) {
+    const joined=await query(database,'SELECT e.event_id, json_extract(r.raw_metadata_json,\'$.ip_source\') FROM security_events e JOIN security_event_raw r USING(event_id) LIMIT 2');
+    assert.equal(joined.status,200,JSON.stringify(joined.body));
+    assert.ok(joined.body.rows.length);
+    assert.equal((await query(database,'SELECT token_hash FROM users')).status,400);
+    assert.equal((await query(database,'DELETE FROM users')).status,400);
+  }
+  assert.deepEqual((await query('platform','SELECT name FROM operators')).body.rows,[['operator']]);
+  assert.equal((await query('platform','SELECT otp FROM operators')).status,400);
+  const limited=await query('main','WITH RECURSIVE n(v) AS (VALUES(1) UNION ALL SELECT v+1 FROM n WHERE v<750) SELECT v FROM n');
+  assert.equal(limited.body.rows.length,500);
+  assert.ok((await query('main','WITH RECURSIVE n(v) AS (VALUES(1) UNION ALL SELECT v+1 FROM n) SELECT max(v) FROM n')).status>=400);
+  assert.equal((await query('missing','SELECT 1')).status,404);
+  assert.ok((await panel.request('/databases/main.db',{headers:{cookie}})).status>=400);
+  assert.equal((await query('main','SELECT name FROM users WHERE name=\'OpenOnMain\'')).body.rows.length,0);
   const overview=()=>panel.request('/api/sites',{headers:{cookie}});
   const initial=(await overview()).body;
+  assert.ok(initial.audit.some(entry=>entry.actor==='operator' && entry.action==='database query'
+    && /^SQL SHA-256 [a-f0-9]{64}$/.test(entry.detail)));
   assert.deepEqual(initial.sites.map(s=>[s.hostname,s.ready,s.registrationOpen,s.release]),
     [[host,true,true,'1'.repeat(40)],[other,true,true,'1'.repeat(40)]]);
   assert.equal((await main.request('/api/admin/overview',{headers:{cookie}})).status,401);
@@ -116,7 +142,18 @@ async function test() {
   const signupClosed=()=>community.request('/api/session',{method:'POST',body:{name:'ClosedSignup'}});
   assert.equal((await signupClosed()).status,403);
   assert.equal((await community.request('/api/me',{user:state.other})).status,200);
+  // Force a projected table beyond SQLite's in-memory statement journal threshold.
+  run('exec',cid('main','app'),'node','-e',`
+    const db=new (require('node:sqlite').DatabaseSync)('/var/lib/hereme/hereme.sqlite');
+    const changed=db.prepare('UPDATE security_event_raw SET raw_metadata_json=? WHERE rowid=(SELECT min(rowid) FROM security_event_raw)')
+      .run(JSON.stringify({fixture:'x'.repeat(512*1024)}));
+    if(changed.changes!==1)throw Error('Missing security event fixture');
+    db.close();
+  `);
+  assert.ok((await query('main','SELECT max(length(raw_metadata_json)) FROM security_event_raw')).body.rows[0][0]>512*1024);
   await register(main,'OpenOnMain');
+  assert.equal((await panel.request('/databases/',{headers:{cookie}})).status,200);
+  assert.deepEqual((await query('main','SELECT name FROM users WHERE name=\'OpenOnMain\'')).body.rows,[['OpenOnMain']]);
   run('stop',cid('edge','platform'));
   assert.equal((await signupClosed()).status,403);
   assert.equal((await main.request(state.media)).status,200);
@@ -136,6 +173,7 @@ async function test() {
   assert.equal((await legacyUser()).body.user.name,'BeforeCutover');
   assert.equal((await overview()).body.sites[1].release,'1'.repeat(40));
   phase('second');
+  assert.deepEqual((await query('main',"SELECT name FROM users WHERE name='OpenOnMain'")).body.rows,[['OpenOnMain']]);
   assert.equal((await signupClosed()).status,403);
   const updated=(await overview()).body;
   assert.ok(updated.sites.every(s=>s.ready && s.release==='3'.repeat(40)));
@@ -147,6 +185,7 @@ async function test() {
   await register(community,'ReopenedSignup');
   const logout=await panel.request('/api/logout',{method:'POST',headers:{cookie,'x-csrf-token':initial.csrf},body:{}});
   assert.equal(logout.status,200);
+  assert.equal((await query('platform','SELECT 1')).status,401);
   assert.equal((await overview()).status,401);
   console.log('Passed legacy migration, both staff panels, MFA, isolation, live health, registration, outage, failed rollout recovery and second release.');
 }

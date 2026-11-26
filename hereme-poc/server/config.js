@@ -52,7 +52,15 @@ function runtimeConfig(appDir = path.resolve(__dirname, '..'), env = process.env
   if (production && webauthnEnabled && (webauthnOrigins[0] !== publicOrigin || webauthnRpId !== new URL(publicOrigin).hostname)) {
     throw new Error('Production WebAuthn requires the configured instance hostname and its exact HTTPS origin.');
   }
-  return {dataDir,databaseStart,port,preview,environment,production,host,publicOrigin,sessionDays,minFreeBytes,
+  const instanceId=env.HEREME_INSTANCE_ID||(production?new URL(publicOrigin).hostname.replaceAll('.','-'):'development');
+  if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(instanceId))throw new Error('HEREME_INSTANCE_ID must be a stable lowercase identifier.');
+  const legalController=env.HEREME_LEGAL_CONTROLLER||'Tomasz Gliniecki';
+  const legalContact=env.HEREME_LEGAL_CONTACT||(production?'':'privacy@example.test');
+  const legalProcessors=env.HEREME_LEGAL_PROCESSORS||(production?'':'Local test environment');
+  const legalReady=Boolean(legalController&&legalContact&&legalProcessors);
+  if(legalContact&&!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(legalContact))throw new Error('HEREME_LEGAL_CONTACT must be an email address.');
+  if(production&&(/\.(?:test|invalid|example)$/i.test(legalContact)||/replace with/i.test(legalProcessors)))throw new Error('Production legal contact and processors must be verified values.');
+  return {dataDir,databaseStart,port,preview,environment,production,host,publicOrigin,instanceId,legalController,legalContact,legalProcessors,legalReady,sessionDays,minFreeBytes,
     trustProxy:env.HEREME_TRUST_PROXY==='loopback',uploadsSuspended:env.HEREME_UPLOADS_SUSPENDED==='1',
     enableVideo:env.HEREME_ENABLE_VIDEO==='1',enableLocations:env.HEREME_ENABLE_LOCATIONS==='1',
     enableVerification:env.HEREME_ENABLE_VERIFICATION==='1',enableStaffPanel:true,enableWebPush,vapidPublicKey,vapidPrivateKey,vapidSubject,pushWorker:env.HEREME_PUSH_WORKER==='1',pushPollMs,

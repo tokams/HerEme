@@ -86,6 +86,8 @@ def compose(release, stack, *args, capture=False):
     if stack == "edge" and (release / "development-ca.yaml").exists():
         files.append(str(release / "development-ca.yaml"))
     flags = [v for file in files for v in ("-f", base / file)]
+    if stack == "edge" and (release / "explorer-mounts.json").is_file():
+        flags.extend(["-f", release / "explorer-mounts.json"])
     return docker("compose", "--env-file", release / (stack + ".env"), *flags, *args, capture=capture)
 
 
@@ -169,7 +171,7 @@ def probe(release, routes):
             time.sleep(4)
 
 
-def rolling_update(release, base, old_releases, sites, state, backup, candidate, edge):
+def rolling_update(release, base, old_releases, sites, state, backup, candidate, edge, old_version):
     old_edge = old_releases["edge"]
     # Freeze only the control plane while copying the registry and registration settings.
     compose(old_edge, "edge", "stop", "platform")
@@ -191,7 +193,7 @@ def rolling_update(release, base, old_releases, sites, state, backup, candidate,
             point(base / ("active-" + stack), release)
         except BaseException:
             compose(release, stack, "stop")
-            require(db_version(running["Image"], data) == "23", "Schema changed; hold this site for forward recovery")
+            require(db_version(running["Image"], data) == old_version, "Schema changed; hold this site for forward recovery")
             start(previous, stack)
             probe(old_edge, {host: "/api/ready"})
             raise
@@ -219,6 +221,25 @@ def deploy(release, legacy, base, revision, prefix, development):
     previous = current.resolve(strict=True) if current.is_symlink() else None
     require(previous or not current.exists(), "Current release pointer is invalid")
     state.mkdir(exist_ok=True)
+    legal_file = state / "legal.json"
+    if development and not legal_file.exists():
+        legal = {site: {"controller": "Rehearsal Operator", "contact": "operator@rehearsal.hereme.no",
+                        "processors": "Rehearsal environment"} for site in ("main", "community")}
+    else:
+        require(legal_file.is_file(), f"Create reviewed per-instance legal settings at {legal_file} before release")
+        legal = json.loads(legal_file.read_text())
+    require(isinstance(legal, dict), "Legal settings must map each instance to its public details")
+    for site in ("main", "community"):
+        require(isinstance(legal.get(site), dict), f"Missing legal settings for {site}")
+        details = legal[site]
+        require(all(isinstance(details.get(key), str) and details[key].strip() for key in
+                    ("controller", "contact", "processors")), f"Incomplete legal settings for {site}")
+        require(re.fullmatch(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", details["contact"]),
+                f"Invalid legal contact for {site}")
+        if not development:
+            require(not re.search(r"\.(test|invalid|example)$", details["contact"], re.I) and
+                    not re.search(r"replace with", details["processors"], re.I),
+                    f"Replace example legal settings for {site} with verified values")
     legacy_name = prefix + "_legacy" if development else "docker"
     main, community, edge = [prefix + "_" + v for v in ("main", "community", "edge")]
     legacy_config = legacy / "deploy/docker/compose.yaml"
@@ -254,8 +275,14 @@ def deploy(release, legacy, base, revision, prefix, development):
         path.mkdir(exist_ok=True)
     inventory = policies / "sites.json"
     sites = json.loads((release / "deploy/platform/sites.json").read_text())
-    require({s["id"]: s["hostname"] for s in sites} == {"main": MAIN, "community": COMMUNITY} and len(sites) == 2,
-            "The inventory must match the two configured HTTPS routes")
+    prior_ids = {s["id"] for s in json.loads(inventory.read_text())} if inventory.exists() else set()
+    require(all(re.fullmatch(r"[a-z][a-z0-9_-]*", s["id"]) and s["id"] != "platform"
+                and re.fullmatch(r"(?:[a-z0-9-]+\.)?hereme\.no", s["hostname"])
+                and s["hostname"] != ADMIN and isinstance(s["label"], str) for s in sites)
+            and len({s["hostname"] for s in sites}) == len(sites), "Invalid registered community")
+    registered = {s["id"]: s["hostname"] for s in sites}
+    require(registered.get("main") == MAIN and registered.get("community") == COMMUNITY
+            and len(registered) == len(sites), "Invalid managed site inventory")
     pending_inventory = policies / "sites.next"
     pending_inventory.write_text(json.dumps(sites) + "\n")
     pending_inventory.replace(inventory)
@@ -264,7 +291,7 @@ def deploy(release, legacy, base, revision, prefix, development):
         folder.mkdir(exist_ok=True)
         policy = folder / "policy.json"
         if not policy.exists():
-            require(not previous, "Missing active policy for " + spec["id"])
+            require(not previous or spec["id"] not in prior_ids, "Missing active policy for " + spec["id"])
             policy.write_text('{"registrationOpen":true}\n')
     staff_file = secrets / "tanteulrikkesvei-staff-credentials.txt"
     operator_file = secrets / "platform-operator.txt"
@@ -307,7 +334,10 @@ def deploy(release, legacy, base, revision, prefix, development):
         require(dynamic and ipaddress.IPv4Address(peer) not in ipaddress.IPv4Network(dynamic),
                 f"Trusted gateway address overlaps dynamic addresses on {project}")
         networks[site] = peer
-        write_env(release / (site + ".env"), {**common, **keys, "INSTANCE_PROJECT": project, "INSTANCE_HOST": host,
+        write_env(release / (site + ".env"), {**common, **keys,
+            "HEREME_LEGAL_CONTROLLER": legal[site]["controller"], "HEREME_LEGAL_CONTACT": legal[site]["contact"],
+            "HEREME_LEGAL_PROCESSORS": legal[site]["processors"],
+            "INSTANCE_PROJECT": project, "INSTANCE_HOST": host,
             "DATA_VOLUME": volumes[0], "ARCHIVE_VOLUME": volumes[1], "EDGE_PEER": peer, "DATABASE_START": "existing",
             "POLICY_DIR": policies / site, "WEBAUTHN_ENABLED": passkeys})
     write_env(release / "edge.env", {**common, "MAIN_PROJECT": main, "COMMUNITY_PROJECT": community,
@@ -315,6 +345,18 @@ def deploy(release, legacy, base, revision, prefix, development):
         "TLS_POLICY": "development" if development else "production", "HTTP_BIND": "127.0.0.1:18081" if development else "0.0.0.0:80",
         "HTTPS_BIND": "127.0.0.1:18444" if development else "0.0.0.0:443", "EDGE_DATA_VOLUME": tls,
         "EDGE_CONFIG_VOLUME": config, "REGISTRY_DIR": registry, "POLICIES_DIR": policies})
+    mounts, volumes = [], {}
+    for site in sites:
+        key = site["id"]
+        require(re.fullmatch(r"[a-z][a-z0-9_-]*", key) and key != "platform", "Invalid explorer database ID")
+        volume = {"main": data, "community": secondary_data}.get(key, site.get("dataVolume"))
+        require(volume and re.fullmatch(r"[A-Za-z0-9_-]+", volume), f"Set registered dataVolume for {key}")
+        inspect("volume", volume)
+        alias = "source_" + key
+        volumes[alias] = {"external": True, "name": volume}
+        mounts.append(f"{alias}:/sources/{key}:ro")
+    (release / "explorer-mounts.json").write_text(json.dumps({
+        "services": {"projector": {"volumes": mounts}}, "volumes": volumes}))
     if development:
         (release / "development-ca.yaml").write_text(f"services:\n  platform:\n    environment:\n      NODE_EXTRA_CA_CERTS: /public-ca/root.crt\n    volumes:\n      - {state}/ca:/public-ca:ro\n")
         (state / "ca").mkdir(exist_ok=True)
@@ -329,7 +371,8 @@ def deploy(release, legacy, base, revision, prefix, development):
     backup.mkdir(parents=True)
     check_backup_space(candidate, backup, [(data, archive), (secondary_data, secondary_git)])
     old_version = db_version(old["Image"], data)
-    require(old_version == "23", "This cutover supports the rehearsed schema 23 only")
+    require(old_version in ("23", "24", "25", "26") if previous else old_version == "23",
+            "Expected schema 23 for the initial cutover or schema 23/24/25/26 for an upgrade")
     if previous:
         require(db_version(secondary["Image"], secondary_data) == old_version, "Secondary schema differs")
     if previous:
@@ -337,7 +380,7 @@ def deploy(release, legacy, base, revision, prefix, development):
         rolling_update(release, base, active, [
             ("main", main, MAIN, old, data, archive),
             ("community", community, COMMUNITY, secondary, secondary_data, secondary_git)
-        ], state, backup, candidate, edge)
+        ], state, backup, candidate, edge, old_version)
         print("Verified both communities and platform at", revision, "Backup:", backup)
         return
     activated = False
@@ -353,7 +396,7 @@ def deploy(release, legacy, base, revision, prefix, development):
         if development:
             docker("cp", container(edge, "edge")["Id"] + ":/data/caddy/pki/authorities/local/root.crt", state / "ca/root.crt")
         for stack in ("main", "community", "edge"):
-            args = ["platform"] if stack == "edge" else []
+            args = ["platform", "explorer"] if stack == "edge" else []
             compose(release, stack, "up", "-d", "--force-recreate", "--wait", "--wait-timeout", "150", *args)
         for project in (main, community):
             verify_image(project, SERVICES, candidate)
