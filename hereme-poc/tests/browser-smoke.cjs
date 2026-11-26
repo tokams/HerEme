@@ -388,7 +388,11 @@ async function publish(page,title) {
   await page.getByRole('button',{name:'Administrasjon og moderering'}).click();
   await page.locator('.staff-table').waitFor();assert.equal(await page.locator('.staff-tabs button').count(),4);
   assert.ok(await page.locator('[data-staff-field=title]').count()>=15);assert.equal(await page.locator('#staffReason').count(),1);
-  await page.waitForTimeout(250);await page.screenshot({path:path.join(screenshots,'desktop-staff-panel.png')});await page.locator('.modal-close').click();
+  await page.waitForURL(base+'/staff');
+  await page.screenshot({path:path.join(screenshots,'desktop-staff-panel.png')});
+  await page.locator('.staff-page a[href="/"]').click();
+  await page.waitForURL(base+'/');
+  await ready(page);
   const storage=await context.storageState();
   await context.close();
   const mobile=await browser.newContext({viewport:{width:390,height:844},locale:'nb-NO',isMobile:true,hasTouch:true,storageState:storage,permissions:['clipboard-read','clipboard-write']});
