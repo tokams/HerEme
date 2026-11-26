@@ -117,7 +117,7 @@
     $('#activityPanel').innerHTML=HeremeShell.activity(state.activity,state.loadError);
     state.feedRendered=true;
   }
-  function rememberWall(){history.replaceState({...history.state,wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',location.href);}
+  function wallSnapshot(){return {categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY};}
   function profileView(){
     const root=$('#profileRoot');$('#forumShell').hidden=true;root.hidden=false;
     if(!state.profile){root.innerHTML=`<p class="loading-card">${E(t('profile.loading'))}</p>`;return;}
@@ -145,12 +145,12 @@
     document.title=`${profile.username} · HerEme`;
   }
   const avatarEditor=HeremeAvatarEditor.setup({api,t,onSaved:result=>{Object.assign(state.profile.profile,result);Object.assign(state.user,result);profileView();toast(t('profile.avatar_saved'));}});
-  async function applyRoute({fromPop=false}={}){
+  async function applyRoute({fromPop=false,initial=false}={}){
     const request=++state.routeRequest,route=location.pathname,params=new URLSearchParams(location.search);
+    if(!initial&&state.modal)closeModal({fromRoute:true});
     window.HeremePwa?.updateInstallUi();
     const publicMatch=/^\/u\/([A-Za-z0-9_-]{1,100})$/.exec(route);
     if(route==='/staff'){
-      if(state.modal)closeModal({fromRoute:true});
       if(!state.user?.capabilities?.includes('staff:read'))return navigate('/',{replace:true});
       state.staff=null;
       state.staffTab='posts';
@@ -165,7 +165,7 @@
       if(request===state.routeRequest){renderStaffPage();$('#profileRoot').focus({preventScroll:true});}
       return;
     }
-    if(publicMatch){if(state.modal)closeModal({fromRoute:true});try{const profile=await api(`/api/users/${publicMatch[1]}/public`);if(request!==state.routeRequest)return;publicProfileView(profile);}catch(error){if(request!==state.routeRequest)return;if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
+    if(publicMatch){try{const profile=await api(`/api/users/${publicMatch[1]}/public`);if(request!==state.routeRequest)return;publicProfileView(profile);}catch(error){if(request!==state.routeRequest)return;if(error.status!==404)throw error;$('#forumShell').hidden=true;$('#profileRoot').hidden=false;$('#profileRoot').innerHTML=`<section class="empty-state"><h1>${E(t('profile.not_found'))}</h1><button class="btn btn-secondary" data-action="public-profile-back">${E(t('profile.back'))}</button></section>`;}return;}
     if(route==='/me'){
       if(!state.user){openAuth('wall.account.login_for_profile',async()=>{await refreshIdentity();navigate('/me',{replace:true});});return;}
       await loadProfile();return;
@@ -174,9 +174,33 @@
     if(history.state?.wall){const wall=history.state.wall;state.categories=wall.categories||state.categories;state.sort=wall.sort||state.sort;state.query=wall.query||'';$('#searchInput').value=state.query;$('#sortSelect').value=state.sort;renderFilters();}
     if(state.loadedFeedKey!==feedKey())await loadPosts({render:false});
     if(request!==state.routeRequest)return;
-    renderWall({preserveFeed:true});const id=Number(params.get('post'));if(id&&params.has('history'))await openHistory(id,{route:false,from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await openDetail(id,{route:false});else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
+    renderWall({preserveFeed:true});const id=Number(params.get('post'));if(id&&params.has('history'))await renderHistoryRoute(id,{from:params.get('from'),to:params.get('to'),view:params.get('version')});else if(id)await renderDetailRoute(id);else if(fromPop&&history.state?.wall?.scrollY!=null)requestAnimationFrame(()=>scrollTo(0,history.state.wall.scrollY));
   }
-  async function navigate(url,{replace=false}={}){rememberWall();history[replace?'replaceState':'pushState']({wall:{categories:state.categories,sort:state.sort,query:state.query,scrollY:scrollY}},'',url);await applyRoute();}
+  async function navigate(url,{replace=false}={}){
+    const next=new URL(url,location.origin);
+    if(next.href!==location.href){
+      const current=history.state||{},wall=location.pathname==='/'&&!location.search?wallSnapshot():current.wall||wallSnapshot();
+      if(!replace)history.replaceState({...current,wall},'',location.href);
+      const entry={wall,inApp:!replace||Boolean(current.inApp)};
+      if(next.pathname==='/'&&next.searchParams.has('post')){
+        if(replace)entry.postDepth=current.postDepth||0;
+        else if(!new URLSearchParams(location.search).has('post'))entry.postDepth=1;
+        else entry.postDepth=current.postDepth?current.postDepth+1:0;
+      }
+      history[replace?'replaceState':'pushState'](entry,'',next.href);
+    }
+    return applyRoute();
+  }
+  function leavePost(){
+    const depth=history.state?.postDepth;
+    if(depth)history.go(-depth);
+    else return navigate('/',{replace:true});
+  }
+  function openDetail(id){return navigate('/?post='+id);}
+  function openHistory(id,options={}){
+    const params=new URLSearchParams({post:id,history:1,...options});
+    return navigate('/?'+params);
+  }
   async function loadPosts({append=false,render=true}={}) {
     const request=++state.loadRequest;state.loadError='';
     $('#feed').setAttribute('aria-busy','true');
@@ -243,8 +267,7 @@
       document.querySelector(`[data-post-id="${state.detailPost?.id}"] .tile-open`)||$('.logo');
     returnTarget.focus({preventScroll:true});
     removeModalVisual({immediate:fromRoute||closingHistory||closingType==='compose'||closingType==='detail'||location.search.includes('post=')});
-    if(closingHistory){history.replaceState(history.state,'','/');renderWall();return;}
-    if(location.search.includes('post=')&&!fromRoute){history.back();return;}
+    if(!fromRoute&&new URLSearchParams(location.search).has('post'))return leavePost();
   }
   function profileModal() {
     if(state.user)return wrapper(t('account.your_profile'),`<h3>${E(t('account.greeting',{name:state.user.name}))}</h3><p>${E(t('account.pseudonym_help'))}</p><button class="btn btn-secondary" data-action="rotate-recovery">${E(t('account.new_recovery'))}</button><button class="btn btn-secondary" data-action="logout">${E(t('account.logout'))}</button><p><a href="/privacy.html">${E(t('account.privacy'))}</a> · <a href="/rules.html">${E(t('account.rules'))}</a></p>`);
@@ -330,7 +353,7 @@
   const pushKey=value=>{const padding='='.repeat((4-value.length%4)%4),raw=atob((value+padding).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(raw,char=>char.charCodeAt(0));};
   async function enablePush(){const config=state.notificationData.config;if(!config.enabled)throw new Error(t('notifications.web_push_off'));const permission=await Notification.requestPermission();if(permission!=='granted'){await loadNotifications();renderModal();if(permission==='default')toast(t('notifications.permission_not_granted'));return;}const registration=await window.HeremePwa.ready;if(!registration)throw new Error(t('notifications.worker_failed'));let subscription=await registration.pushManager.getSubscription();if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pushKey(config.public_key)});try{const result=await api('/api/push/subscriptions',{method:'POST',body:{subscription:subscription.toJSON(),device_label:navigator.userAgent.slice(0,80)}});localStorage.setItem('hereme_push_subscription_id',result.subscription.id);}catch(error){await subscription.unsubscribe();throw error;}await loadNotifications();renderModal();toast(t('notifications.device_on'));}
   async function disablePush(){const id=localStorage.getItem('hereme_push_subscription_id');if(id)await api('/api/push/subscriptions/'+encodeURIComponent(id),{method:'DELETE'});const registration=await window.HeremePwa.ready,subscription=await registration?.pushManager?.getSubscription();await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');await loadNotifications();renderModal();}
-  function openAuth(messageKey,onSuccess,mode){window.HeremeAuth.open({mode,messageKey,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast(t('recovery.store_safely'));}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me')history.back();}});}
+  function openAuth(messageKey,onSuccess,mode){window.HeremeAuth.open({mode,messageKey,onSuccess:async(result,{created})=>{await refreshIdentity();if(location.pathname==='/')renderWall();await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();if(created&&result.recovery_key){state.recoveryKey=result.recovery_key;toast(t('recovery.store_safely'));}await onSuccess?.(result,{created});},onCancel:()=>{if(location.pathname==='/me'){if(history.state?.inApp)history.back();else navigate('/',{replace:true});}}});}
   function requireUser(action) {
     if(state.user)return true;
     openAuth('',async()=>action?.());return false;
@@ -398,12 +421,16 @@
     if($('#posterPreview')){$('#posterPreview').innerHTML=HeremePoster.surface(HeremeCompose.preview(state),{previewUrl:state.videoThumbnail||state.tempUrl||''})+(state.postMode==='video'?'<span class="video-preview-badge">'+HeremeIcons.icon('video')+' Video</span>':'');HeremePoster.enhance($('#posterPreview'));}
     if($('#categoryHint'))$('#categoryHint').textContent=HeremeThemes.get(state.category).description;
   }
-  async function openHistory(id,{route=true,from=null,to=null,view=null}={}){
-    state.historyData=await api(`/api/posts/${id}/revisions`);state.historyPostId=id;state.historyComparison=null;state.historyVersion=null;
-    if(view)state.historyVersion=await api(`/api/posts/${id}/revisions/${view}`);
-    else if(from&&to)state.historyComparison=await api(`/api/posts/${id}/revisions/${from}/diff?to=${to}`);
+  async function renderHistoryRoute(id,{from,to,view}){
+    const request=state.routeRequest;
+    const [data,version,comparison]=await Promise.all([
+      api(`/api/posts/${id}/revisions`),
+      view?api(`/api/posts/${id}/revisions/${view}`):null,
+      !view&&from&&to?api(`/api/posts/${id}/revisions/${from}/diff?to=${to}`):null
+    ]);
+    if(request!==state.routeRequest)return;
+    state.historyData=data;state.historyPostId=id;state.historyVersion=version;state.historyComparison=comparison;
     state.modal='history';lockBackground(true);renderModal();
-    if(route)history.pushState({...history.state,history:true},'',`/?post=${id}&history=1`);
   }
   async function preloadDetailImage(post){
     const url=post.content_format==='article'?HeremeArticleView.safeMediaUrl(post.article?.cover?.thumbnail_url||post.image_url):
@@ -412,17 +439,16 @@
     const image=new Image();image.src=url;
     try{await image.decode();}catch{ /* The detail's media error state handles unavailable images. */ }
   }
-  async function openDetail(id,{route=true}={}) {
+  async function renderDetailRoute(id) {
     const request=++state.detailRequest,routeRequest=state.routeRequest,returnFocus=state.modal?state.returnFocus:document.activeElement;
     let post,comments;
     try{[post,comments]=await Promise.all([api('/api/posts/'+id),api(`/api/posts/${id}/comments`)]);}
-    catch(error){if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;if(new URLSearchParams(location.search).has('post'))history.replaceState(history.state,'','/');toast('Dette innholdet er ikke lenger tilgjengelig.');return;}
+    catch(error){if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;if(error.status!==404)throw error;await navigate('/',{replace:true});toast('Dette innholdet er ikke lenger tilgjengelig.');return;}
     if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;
     await preloadDetailImage(post.post);
     if(request!==state.detailRequest||routeRequest!==state.routeRequest)return;
     state.returnFocus=returnFocus;state.detailPost=post.post;state.comments=comments.comments;state.replyTo=null;
     state.modal='detail';lockBackground(true);renderModal();
-    if(route){rememberWall();history.pushState({...history.state,detail:true},'',`/?post=${id}`);}
   }
   async function vote(id,value) {
     if(!requireUser(()=>vote(id,value)))return;
@@ -644,7 +670,7 @@
       if(/^\/\?post=\d+$/.test(location.pathname+location.search)||/^\/u\/[A-Za-z0-9_-]{1,100}$/.test(location.pathname))params.set('returnTo',location.pathname+location.search);
       location.assign(`/chat?${params}`);return;
     }
-    if(action==='public-profile-back'){if(history.state?.wall)history.back();else await navigate('/');return;}
+    if(action==='public-profile-back'){if(history.state?.inApp)history.back();else await navigate('/',{replace:true});return;}
     if(action==='comment-vote'){await voteComment(id,Number(target.dataset.value));return;}
     if(action==='dismiss-modal'){if(event.target===target)closeModal();return;}
     if(action==='close-modal'){closeModal();return;}
@@ -654,7 +680,7 @@
     if(action==='home'||action==='profile-wall'){
       state.query='';$('#searchInput').value='';state.categories=[...HeremeThemes.ids];renderFilters();
       const needsFeed=state.loadedFeedKey!==feedKey();
-      if(location.pathname!=='/'){
+      if(location.pathname!=='/'||location.search){
         if(needsFeed)await loadPosts({render:false});
         await navigate('/');
       }else if(needsFeed)await loadPosts();
@@ -733,11 +759,11 @@
     if(action==='article-edit'){const record=await api(`/api/articles/${id}/edit`,{method:'POST'});await openArticleDraft(record);return;}
     if(action==='poster-edit'){state.posterEdit={id,text:state.detailPost.poster_text,base_version:state.detailPost.version};openModal('poster-edit');return;}
     if(action==='history'){await openHistory(id);return;}
-    if(action==='history-current'){const id=state.historyPostId;history.replaceState({...history.state,detail:true},'',`/?post=${id}`);await openDetail(id,{route:false});return;}
+    if(action==='history-current'){await navigate('/?post='+state.historyPostId,{replace:true});return;}
     if(action==='history-more'){const page=await api(`/api/posts/${state.historyPostId}/revisions?offset=${state.historyData.revisions.length}`);state.historyData.revisions.push(...page.revisions);renderModal({preserve:true});return;}
-    if(action==='history-compare'){const to=Number(target.dataset.version);await openHistory(state.historyPostId,{route:false,from:to-1,to});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&from=${to-1}&to=${to}`);return;}
-    if(action==='history-custom-compare'){const from=Number($('#historyFrom').value),to=Number($('#historyTo').value);await openHistory(state.historyPostId,{route:false,from,to});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&from=${from}&to=${to}`);return;}
-    if(action==='history-view'){const version=Number(target.dataset.version);await openHistory(state.historyPostId,{route:false,view:version});history.pushState({...history.state,history:true},'',`/?post=${state.historyPostId}&history=1&version=${version}`);return;}
+    if(action==='history-compare'){const to=Number(target.dataset.version);await openHistory(state.historyPostId,{from:to-1,to});return;}
+    if(action==='history-custom-compare'){await openHistory(state.historyPostId,{from:$('#historyFrom').value,to:$('#historyTo').value});return;}
+    if(action==='history-view'){await openHistory(state.historyPostId,{version:target.dataset.version});return;}
     if(action==='format-poster'||action==='format-article'){saveDraft();state.postMode=action==='format-poster'?'poster':'article';renderModal({preserve:true});return;}
     if(['chapter-add','chapter-up','chapter-down','chapter-remove','article-cover-remove','article-media-remove'].includes(action))invalidateArticlePublish();
     if(action==='chapter-add'){saveDraft();state.articleDraft.chapters.push({heading:'',markdown:'',alt:'',media_id:null,collapsed:false});renderModal({preserve:true});return;}
@@ -782,7 +808,7 @@
     if(id==='securityFilters'){event.preventDefault();state.securityFilters=Object.fromEntries(new FormData(event.target));state.securityDetail=null;await loadSecurity();renderStaffPage();return;}
     if(!['profileForm','recoverForm','composeForm','commentForm','reportForm','posterEditForm'].includes(id))return;
     event.preventDefault();
-    if(id==='posterEditForm'){const edit=state.posterEdit;const result=await api(`/api/posts/${edit.id}/text`,{method:'PATCH',body:{text:$('#posterEditText').value,change_summary:$('#posterEditSummary').value,base_version:edit.base_version,request_key:crypto.randomUUID()}});closeModal();await loadPosts();await openDetail(result.post_id);toast(t('e21.saved'));return;}
+    if(id==='posterEditForm'){const edit=state.posterEdit;const result=await api(`/api/posts/${edit.id}/text`,{method:'PATCH',body:{text:$('#posterEditText').value,change_summary:$('#posterEditSummary').value,base_version:edit.base_version,request_key:crypto.randomUUID()}});closeModal({fromRoute:true});await loadPosts();await openDetail(result.post_id);toast(t('e21.saved'));return;}
     if(id==='profileForm') {
       const result=await api('/api/session',{method:'POST',body:{name:$('#nicknameInput').value.trim()}});
       state.user=result.user;state.csrf=result.csrf_token;state.legacyToken='';localStorage.removeItem('hereme_token');if(localStorage.getItem('hereme_language'))await window.HeremeI18n.setLanguage(window.HeremeI18n.getLanguage());state.recoveryKey=result.recovery_key;state.modal='recovery-key';renderModal();
@@ -869,7 +895,7 @@
         else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
       }
     });
-    window.addEventListener('popstate',()=>{if(state.modal==='detail'){state.modal=null;state.detailPost=null;lockBackground(false);(state.returnFocus?.isConnected?state.returnFocus:$('.logo')).focus({preventScroll:true});removeModalVisual({immediate:true});}applyRoute({fromPop:true}).catch(error=>toast(error.message));});
+    window.addEventListener('popstate',()=>applyRoute({fromPop:true}).catch(error=>toast(error.message)));
     try {
       state.meta=await api('/api/meta');
       state.csrf=csrfCookie();
@@ -879,7 +905,7 @@
       if(state.user){await window.HeremePwa?.reconcilePush?.();await loadNotificationBadge();connectNotificationSocket();navigator.serviceWorker?.addEventListener('message',event=>{if(event.data?.type==='notification.created')scheduleNotificationRefresh();});}
       localizeChrome();if(location.pathname!=='/staff')await loadPosts();
       if(new URLSearchParams(location.search).get('recovery-saved')==='1'){history.replaceState({},'',location.pathname);toast(t('recovery.confirmed'));}
-      state.routeReady=true;await applyRoute({fromPop:true});
+      state.routeReady=true;await applyRoute({fromPop:true,initial:true});
     } catch(error) {state.loadError=error.message;renderWall();}
   }
   window.HeremeI18n.ready.then(init).catch(error=>{console.error(error);state.loadError=error.message;renderWall();});

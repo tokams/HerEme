@@ -72,7 +72,7 @@ const S=require('../server/services');
     await openWall.goto(origin);
     await openWall.locator('.menu-button').click();
     const logout=openWall.locator('[data-action="logout"]');
-    await logout.waitFor();
+    await logout.click({trial:true});
     const deletion=await context.request.delete(origin+'/api/admin/users/'+victim.user.id,{
       headers:{'x-csrf-token':operator.session.csrf},data:{reason,delete_posts:false}
     });

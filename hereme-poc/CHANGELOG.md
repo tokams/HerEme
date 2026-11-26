@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-26 — Wall navigation
+
+The wall router renders post details, version history, profiles and staff pages from the current URL on direct visits, navigation and browser history traversal. Closing a directly shared post returns to the wall. Closing a post opened inside HerEme returns to its originating view, including after browsing revisions or refreshing.
+
 ## 2026-11-26 — Shared links and deleted accounts
 
 The security table displays the sanitized full request URL. Schema 26 preserves a private deletion notice for each active session when staff delete an account. The wall and chat show the username and staff reason on the next authenticated request. Acknowledgement clears the session cookies.
