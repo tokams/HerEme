@@ -121,11 +121,11 @@ app.get('/api/admin/content-git/status',read('staff:read'),(req,res)=>res.json({
 app.get('/api/ready',(req,res)=>{
   const checks={database:false,foreign_keys:false,media:false,disk:false,schema:false,chat_worker:false};let message='';
   try{
-    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=25').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
+    S.db.exec('BEGIN IMMEDIATE');try{S.db.prepare('UPDATE schema_migrations SET applied_at=applied_at WHERE version=26').run();S.db.exec('ROLLBACK');checks.database=true;}catch(error){if(S.db.isTransaction)S.db.exec('ROLLBACK');throw error;}
     if(process.env.HEREME_REGISTRATION_POLICY){checks.registration_policy=false;registrationOpen();checks.registration_policy=true;}
     checks.legal=S.config.legalReady;
     checks.foreign_keys=S.db.prepare('PRAGMA foreign_key_check').all().length===0;
-    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===25;
+    checks.schema=S.db.prepare('SELECT max(version) version FROM schema_migrations').get().version===26;
     const worker=S.db.prepare('SELECT last_run,overdue FROM chat_worker_state WHERE id=1').get();
     checks.chat_worker=Date.now()-new Date(runtimeMetrics.started_at).getTime()<120000||Boolean(worker&&Date.now()-new Date(worker.last_run).getTime()<120000&&worker.overdue===0);
     checks.media=['media','uploads','avatars','tmp'].every(name=>{const directory=path.join(S.dataDir,name);fs.accessSync(directory,fs.constants.R_OK|fs.constants.W_OK);return fs.statSync(directory).isDirectory();})&&S.avatars.verify();
@@ -176,11 +176,25 @@ app.post('/api/recovery/confirm',async(req,res,next)=>{try{
   S.identity.confirmRecovery(current,form.get('password'));
   res.status(303).set('Location','/?recovery-saved=1').send('');
 }catch(error){next(error);}});
-app.get('/api/me',(req,res)=>{const current=S.identity.readSession(req,res);if(!current)return errors(res,401,'AUTH_REQUIRED','Ingen aktiv sesjon.');res.json({user:current,csrf_token:current.csrf||null,legacy_migrated:Boolean(current.legacyMigrated),recovery_key:current.recoveryKey||null,recovery_key_shown_once:Boolean(current.recoveryKey)});});
+app.get('/api/me',(req,res)=>{const current=S.identity.requireUser(req,res);res.json({user:current,csrf_token:current.csrf||null,legacy_migrated:Boolean(current.legacyMigrated),recovery_key:current.recoveryKey||null,recovery_key_shown_once:Boolean(current.recoveryKey)});});
 app.get('/api/avatars/:id/:version/:size',(req,res)=>{const file=S.avatars.file(req.params.id,req.params.version,req.params.size);res.set('Content-Type','image/webp').set('Cache-Control','private, no-store').send(fs.readFileSync(file));});
 app.post('/api/me/avatar',write(null,10),avatarUpload.single('image'),async(req,res)=>res.status(201).json(await S.avatars.save(req.auth,req.file,req.body)));
 app.delete('/api/me/avatar',write(null,10),(req,res)=>res.json(S.avatars.remove(req.auth)));
-app.post('/api/session/logout',write(null,20),(req,res)=>{S.db.exec('BEGIN IMMEDIATE');try{S.push.disableDevice(req.auth,{id:req.body?.push_subscription_id,endpoint:req.body?.push_endpoint});S.identity.logout(req.auth);security(req,'logout',{actor:req.auth,statusCode:200});S.db.exec('COMMIT');}catch(error){S.db.exec('ROLLBACK');throw error;}S.identity.logout(null,res);res.json({ok:true});});
+app.post('/api/session/deletion-notice/acknowledge',(req,res)=>{
+  if(S.identity.deletionNotice(req,true))S.identity.logout(null,res);
+  res.set('Cache-Control','no-store').json({ok:true});
+});
+app.post('/api/session/logout',(req,res,next)=>{
+  req.auth=S.identity.readSession(req,res);
+  if(req.auth){
+    S.identity.requireCsrf(req,req.auth);
+    S.rate.check('write:'+req.auth.id,20);
+    return next();
+  }
+  const notice=S.identity.deletionNotice(req,true);
+  S.identity.logout(null,res);
+  res.set('Cache-Control','no-store').json({ok:true,...(notice?{deletion_notice:notice}:{})});
+},(req,res)=>{S.db.exec('BEGIN IMMEDIATE');try{S.push.disableDevice(req.auth,{id:req.body?.push_subscription_id,endpoint:req.body?.push_endpoint});S.identity.logout(req.auth);security(req,'logout',{actor:req.auth,statusCode:200});S.db.exec('COMMIT');}catch(error){S.db.exec('ROLLBACK');throw error;}S.identity.logout(null,res);res.json({ok:true});});
 app.post('/api/session/revoke-all',write(null,5),(req,res)=>{S.db.exec('BEGIN IMMEDIATE');try{S.push.disableAll(req.auth);const sessions=S.db.prepare("SELECT id_hash FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>datetime('now')").all(req.auth.id);S.identity.revokeAll(req.auth);for(const session of sessions)security(req,'session_revoked',{actor:req.auth,subject:req.auth,reasonCode:'USER_REVOKED',statusCode:200});S.db.exec('COMMIT');}catch(error){S.db.exec('ROLLBACK');throw error;}S.identity.logout(null,res);res.json({ok:true});});
 app.post('/api/recovery/rotate',write(null,5),(req,res)=>{S.identity.requireFresh(req.auth);res.json({recovery_key:S.identity.rotateRecovery(req.auth),recovery_key_shown_once:true});});
 app.patch('/api/me',write(null,10),(req,res)=>res.json({user:S.identity.rename(req.auth,req.body?.name)}));
@@ -315,6 +329,9 @@ app.use((error,req,res,next)=>{
 });
 
 if(require.main===module){
+  const purgeExpiredNotices=()=>S.db.prepare("DELETE FROM deleted_session_notices WHERE expires_at<=datetime('now')").run();
+  purgeExpiredNotices();
+  setInterval(purgeExpiredNotices,86400000).unref();
   if(!S.config.production)setInterval(()=>{try{const overdue=S.chat.cleanup();if(overdue)throw Error(`${overdue} expired chat files remain`);}catch(error){console.error('Chat expiry cleanup failed:',error);process.exit(1);}},60000);
   const options={port:S.config.port,host:S.config.host,attempts:S.config.production?1:20,onBusy:port=>console.log(`  Port ${port} er opptatt. Prøver neste port...`)};
   listenAvailable(app,options).then(server=>{const port=server.address().port;console.log(`\n  HerEme kjører!\n  På PC:     http://localhost:${port}`);if(!S.config.production)for(const {name,ip:address} of lanIps())console.log(`  På mobilen: http://${address}:${port}  (${name})`);console.log(`  Data: ${S.dataDir}\n`);}).catch(error=>{console.error(error);S.db.close();process.exitCode=1;});

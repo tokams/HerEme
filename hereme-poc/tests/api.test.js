@@ -309,6 +309,18 @@ test('moderator censorship and audited administrator content and user controls',
 
   const preserved=await profile('PreservedUser'),preservedPost=(await request('/api/posts',{method:'POST',session:preserved,body:{title:'Preserve my post',body:'Keep this',type:'text',category:'question'}})).body.id;
   const deletePreserved=await request(`/api/admin/users/${preserved.user.id}`,{method:'DELETE',session:admin,body:{delete_posts:false,reason:'account removal requested'}});assert.equal(deletePreserved.status,200,JSON.stringify(deletePreserved.body));assert.equal((await request('/api/posts/'+preservedPost)).body.post.author,'slettet bruker');
+  const blocked=await request('/api/me',{session:preserved});
+  assert.equal(blocked.status,401);
+  assert.equal(blocked.body.error.code,'ACCOUNT_DELETED');
+  assert.deepEqual(blocked.body.error.details,{username:'PreservedUser',reason:'account removal requested'});
+  assert.equal((await request('/api/me')).body.error.code,'AUTH_REQUIRED');
+  await request('/api/session/deletion-notice/acknowledge',{method:'POST',session:admin});
+  assert.equal((await request('/api/me',{session:admin})).status,200);
+  const ended=await request('/api/session/logout',{method:'POST',session:preserved});
+  assert.deepEqual(ended.body.deletion_notice,blocked.body.error.details);
+  assert.ok(ended.headers.getSetCookie().every(cookie=>cookie.includes('Max-Age=0')));
+  assert.equal((await request('/api/me',{session:preserved})).body.error.code,'AUTH_REQUIRED');
+  assert.deepEqual((await request('/api/session/logout',{method:'POST',session:preserved})).body,{ok:true});
   const removed=await profile('RemovedUser'),removedPost=(await request('/api/posts',{method:'POST',session:removed,body:{title:'Remove my post',body:'Delete this',type:'text',category:'alert'}})).body.id;
   const deleteRemoved=await request(`/api/admin/users/${removed.user.id}`,{method:'DELETE',session:admin,body:{delete_posts:true,reason:'account and content removal requested'}});assert.equal(deleteRemoved.body.posts_deleted,1);assert.equal((await request('/api/posts/'+removedPost)).status,404);
   assert.equal((await request(`/api/admin/posts/${postId}`,{method:'DELETE',session:admin,body:{reason:'content deletion requested'}})).status,200);assert.equal((await request('/api/posts/'+postId)).status,404);

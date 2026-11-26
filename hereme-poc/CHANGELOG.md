@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-26 — Shared links and deleted accounts
+
+The security table displays the sanitized full request URL. Schema 26 preserves a private deletion notice for each active session when staff delete an account. The wall and chat show the username and staff reason on the next authenticated request. Acknowledgement clears the session cookies.
+
 ## 2026-11-25 — Request URLs in security events
 
 Schema 25 adds request URL, path and safe referring URL to the existing security events. Operators can filter these fields, HTTP method and completed response status. Raw records use the same sanitization as the searchable fields. Older events retain their original evidence.

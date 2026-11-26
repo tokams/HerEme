@@ -35,7 +35,7 @@ function backfillContentRevisions(db){
 function applyMigrations(db) {
   db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))");
   const version = db.prepare('SELECT COALESCE(MAX(version),0) AS version FROM schema_migrations').get().version;
-  if (version > 25) throw new Error(`Unsupported database migration version: ${version}`);
+  if (version > 26) throw new Error(`Unsupported database migration version: ${version}`);
   if (version === 0) {
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -583,6 +583,14 @@ function applyMigrations(db) {
         ALTER TABLE security_events ADD COLUMN request_path TEXT;
         ALTER TABLE security_events ADD COLUMN referrer_url TEXT;
         INSERT INTO schema_migrations(version) VALUES(25); COMMIT;`);
+    }catch(error){db.exec('ROLLBACK');throw error;}
+  }
+  if(version<26){
+    db.exec('BEGIN IMMEDIATE');
+    try{db.exec(`CREATE TABLE deleted_session_notices (
+        session_hash TEXT PRIMARY KEY, username TEXT NOT NULL, reason TEXT NOT NULL, expires_at TEXT NOT NULL
+      );
+      INSERT INTO schema_migrations(version) VALUES(26); COMMIT;`);
     }catch(error){db.exec('ROLLBACK');throw error;}
   }
 }

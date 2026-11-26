@@ -39,7 +39,7 @@ try {
       }
     }
     verifyChecksums(clone,expected);
-    if(db.prepare('SELECT max(version) AS v FROM schema_migrations').get().v!==25)
+    if(db.prepare('SELECT max(version) AS v FROM schema_migrations').get().v!==26)
       throw Error('Candidate needs a separately reviewed database migration.');
     for(const table of ['users','rooms','posts','votes','comments','reports']) {
       const {count} = db.prepare('SELECT count(*) AS count FROM '+table).get();

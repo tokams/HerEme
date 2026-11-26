@@ -77,7 +77,21 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
     }
     return null;
   }
-  function requireUser(req,res){const auth=readSession(req,res);if(!auth)fail('AUTH_REQUIRED','Velg et pseudonym eller logg inn for å delta.',401);return auth;}
+  function deletionNotice(req,acknowledge=false){
+    const raw=parseCookies(req)[cookieName];
+    if(!raw)return null;
+    const match="WHERE session_hash=? AND expires_at>datetime('now')";
+    return db.prepare(acknowledge
+      ? "DELETE FROM deleted_session_notices "+match+" RETURNING username,reason"
+      : "SELECT username,reason FROM deleted_session_notices "+match).get(sha256(raw));
+  }
+  function requireUser(req,res){
+    const auth=readSession(req,res);
+    if(auth)return auth;
+    const notice=deletionNotice(req);
+    if(notice){res.set('Cache-Control','no-store');fail('ACCOUNT_DELETED','Kontoen er slettet.',401,notice);}
+    fail('AUTH_REQUIRED','Velg et pseudonym eller logg inn for å delta.',401);
+  }
   function requireCsrf(req,auth,value=req.headers['x-csrf-token']){
     if(!value||sha256(String(value))!==auth.csrfHash)fail('CSRF_INVALID','Sikkerhetstoken mangler eller er utløpt.',403);
   }
@@ -130,6 +144,6 @@ function createIdentityService(db,{sessionDays=30,production=false}={}){
     db.prepare('UPDATE users SET preferred_language=? WHERE id=?').run(preferredLanguage,auth.id);
     return {preferred_language:preferredLanguage};
   }
-  return {readSession,requireUser,requireCsrf,requireCapability,createProfile,recover,confirmRecovery,stepUp,markFresh,requireFresh,requireActive,issueSession,rotateRecovery,revokeAll,logout,rename,language,setCookie,userProjection,sha256,parseCookies,setSecurityEvents};
+  return {readSession,deletionNotice,requireUser,requireCsrf,requireCapability,createProfile,recover,confirmRecovery,stepUp,markFresh,requireFresh,requireActive,issueSession,rotateRecovery,revokeAll,logout,rename,language,setCookie,userProjection,sha256,parseCookies,setSecurityEvents};
 }
 module.exports={createIdentityService};

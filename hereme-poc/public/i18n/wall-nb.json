@@ -159,6 +159,8 @@
   "wall.staff.hide": "Sensurer",
   "wall.staff.pseudonym": "Pseudonym",
   "wall.staff.roles": "Roller",
+  "wall.staff.delete_user_posts_confirm": "Slette brukeren og alle innleggene permanent? Brukeren får se begrunnelsen.",
+  "wall.staff.delete_user_keep_confirm": "Slette brukeren permanent og anonymisere innleggene? Brukeren får se begrunnelsen.",
   "wall.staff.delete_user": "Slett bruker",
   "wall.staff.delete_posts": "Slett også innlegg",
   "wall.staff.post": "Innlegg",

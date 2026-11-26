@@ -1,6 +1,7 @@
 'use strict';
 
 const english={
+  ACCOUNT_DELETED:'Your account was deleted.',
   REGISTRATION_CLOSED:'Registration is closed in this community.',
   INVALID_FILTER:'The security event filter is invalid.',
   SECURITY_LOG_UNAVAILABLE:'The security log is unavailable.',

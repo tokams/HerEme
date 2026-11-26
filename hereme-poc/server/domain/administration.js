@@ -129,6 +129,8 @@ function createAdministrationService(db,dataDir,{audit,identity,avatars}={}){
       db.prepare("UPDATE comments SET author_id=NULL,demo_author='slettet bruker' WHERE author_id=?").run(userId);
       db.prepare('UPDATE rooms SET created_by=NULL WHERE created_by=?').run(userId);db.prepare('UPDATE media SET owner_id=NULL WHERE owner_id=?').run(userId);db.prepare('DELETE FROM reports WHERE user_id=?').run(userId);
       audit.record({actorId:actor.id,action:'admin.user.deleted',subjectType:'user',subjectId:userId,previous:user,next:{deleted:true,posts_deleted:withPosts,post_count:postIds.length},reason:why});
+      db.prepare(`INSERT INTO deleted_session_notices(session_hash,username,reason,expires_at)
+        SELECT id_hash,?,?,expires_at FROM sessions WHERE user_id=? AND revoked_at IS NULL AND expires_at>datetime('now')`).run(user.name,why,userId);
       db.prepare('DELETE FROM users WHERE id=?').run(userId);db.exec('COMMIT');staged.commit();avatars.purgeUser(userId);return {ok:true,posts_deleted:postIds.length};
     }catch(error){if(db.isTransaction){db.exec('ROLLBACK');staged.rollback();}throw error;}
   }

@@ -23,7 +23,7 @@
     try{response=await fetch(url,{method,headers,body:form||(body===undefined?undefined:JSON.stringify(body))});}
     catch{throw new Error(t('error.offline'));}
     const data=await response.json();
-    if(!response.ok){const error=new Error(data.error?.message||data.error||t('error.http',{status:response.status}));error.status=response.status;error.code=data.error?.code;throw error;}
+    if(!response.ok){if(data.error?.code==='ACCOUNT_DELETED')HeremeAuth.showDeletion(data.error.details);const error=new Error(data.error?.message||data.error||t('error.http',{status:response.status}));error.status=response.status;error.code=data.error?.code;throw error;}
     return data;
   }
   function toast(message) {
@@ -284,7 +284,7 @@
       const fields=['from','to','event_type','user_id','username','ip','browser','browser_version','os','os_version','device','event_id','operation_id','request_url','request_path','http_method','referrer_url','status_code'];
       const filters=`<form id="securityFilters" class="security-filters">${fields.map(field=>`<label>${E(t(`security.${field}`))}<input name="${field}" value="${E(state.securityFilters[field]||'')}"></label>`).join('')}<button class="btn btn-primary">${E(t('security.search'))}</button></form>`;
       const events=state.securityPage?.events||[];
-      rows=`${filters}<p class="muted-note">${E(t('security.caution'))}</p><div class="staff-table-wrap"><table class="staff-table"><thead><tr><th>${E(t('security.time'))}</th><th>${E(t('security.event_type'))}</th><th>${E(t('security.username'))}</th><th>IP</th><th>${E(t('security.browser'))} / ${E(t('security.os'))} / ${E(t('security.device'))}</th><th>${E(t('security.request_path'))}</th><th>${E(t('security.reason'))}</th></tr></thead><tbody>${events.map(event=>`<tr><td>${E(event.timestamp_utc)}</td><td><button class="text-button" data-action="security-detail" data-id="${E(event.event_id)}">${E(event.event_type)}</button></td><td>${E(event.subject_username||event.username||'—')}</td><td><button class="text-button" data-action="security-filter-ip" data-ip="${E(event.client_ip||'')}">${E(event.client_ip||'—')}</button></td><td>${E([event.browser_family,event.os_family,event.device_type].filter(Boolean).join(' / '))}</td><td>${E([event.http_method,event.request_path].filter(Boolean).join(' '))}</td><td>${E(event.reason_code||event.status_code||'—')}</td></tr>`).join('')}</tbody></table></div>${state.securityPage?.has_more?`<button class="btn btn-secondary" data-action="security-more">${E(t('security.more'))}</button>`:''}${state.securityDetail?`<details open><summary>${E(t('security.detail'))}</summary><pre class="security-raw">${E(JSON.stringify(state.securityDetail,null,2))}</pre></details>`:''}`;
+      rows=`${filters}<p class="muted-note">${E(t('security.caution'))}</p><div class="staff-table-wrap"><table class="staff-table"><thead><tr><th>${E(t('security.time'))}</th><th>${E(t('security.event_type'))}</th><th>${E(t('security.username'))}</th><th>IP</th><th>${E(t('security.browser'))} / ${E(t('security.os'))} / ${E(t('security.device'))}</th><th>${E(t('security.request_url'))}</th><th>${E(t('security.reason'))}</th></tr></thead><tbody>${events.map(event=>`<tr><td>${E(event.timestamp_utc)}</td><td><button class="text-button" data-action="security-detail" data-id="${E(event.event_id)}">${E(event.event_type)}</button></td><td>${E(event.subject_username||event.username||'—')}</td><td><button class="text-button" data-action="security-filter-ip" data-ip="${E(event.client_ip||'')}">${E(event.client_ip||'—')}</button></td><td>${E([event.browser_family,event.os_family,event.device_type].filter(Boolean).join(' / '))}</td><td>${E([event.http_method,event.request_url||event.request_path].filter(Boolean).join(' '))}</td><td>${E(event.reason_code||event.status_code||'—')}</td></tr>`).join('')}</tbody></table></div>${state.securityPage?.has_more?`<button class="btn btn-secondary" data-action="security-more">${E(t('security.more'))}</button>`:''}${state.securityDetail?`<details open><summary>${E(t('security.detail'))}</summary><pre class="security-raw">${E(JSON.stringify(state.securityDetail,null,2))}</pre></details>`:''}`;
     }
     const summary=admin?t('staff.summary',state.staff.stats):`${state.staff.stats.posts} ${t('staff.posts').toLowerCase()}`;
     return `<p class="notice">${summary}. ${t('staff.audit_notice')}</p>${state.staffTab==='security'?'':`<label class="field"><span>${t('staff.next_reason')}</span><input id="staffReason" maxlength="300" value="${E(state.staffReason)}" placeholder="${t('staff.reason_placeholder')}"></label>`}${nav}<div class="staff-table-wrap">${rows}</div>`;
@@ -681,7 +681,7 @@
     if(action==='staff-delete-comment'){if(!confirm(t('staff.delete_thread_confirm')))return;await api(`/api/admin/comments/${id}`,{method:'DELETE',body:{reason:staffReason()}});await refreshStaff(t('staff.thread_deleted'));return;}
     if(action==='staff-delete-user'){
       const userId=target.dataset.userId,deletePosts=document.querySelector(`[data-delete-posts="${CSS.escape(userId)}"]`).checked;
-      if(!confirm(`Slette brukeren permanent${deletePosts?' og alle brukerens innlegg':' mens innleggene anonymiseres'}?`))return;
+      if(!confirm(t(deletePosts?'staff.delete_user_posts_confirm':'staff.delete_user_keep_confirm')))return;
       await api(`/api/admin/users/${encodeURIComponent(userId)}`,{method:'DELETE',body:{delete_posts:deletePosts,reason:staffReason()}});await refreshStaff('Brukeren er slettet permanent.');return;
     }
     if(action==='menu'){openModal('menu');return;}
@@ -704,7 +704,25 @@
     if(action==='draft-open'){await openArticleDraft(await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId)));return;}
     if(action==='draft-delete'){if(!confirm(t('e21.delete_confirm')))return;await api('/api/articles/drafts/'+encodeURIComponent(target.dataset.draftId),{method:'DELETE'});await loadProfile();return;}
     if(action==='profile-more'){await loadProfile({append:true});return;}
-    if(action==='logout'){const pushId=localStorage.getItem('hereme_push_subscription_id'),registration=await window.HeremePwa?.ready,subscription=await registration?.pushManager?.getSubscription();await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});await subscription?.unsubscribe();localStorage.removeItem('hereme_push_subscription_id');state.user=null;state.csrf='';state.legacyToken='';localStorage.removeItem('hereme_token');state.notificationSocket?.close();state.notificationSocket=null;$('#notificationButton').hidden=true;closeModal();if(location.pathname==='/staff')await navigate('/',{replace:true});else await loadPosts();return;}
+    if(action==='logout'){
+      const pushId=localStorage.getItem('hereme_push_subscription_id');
+      const registration=await window.HeremePwa?.ready;
+      const subscription=await registration?.pushManager?.getSubscription().catch(error=>{
+        console.warn('Push subscription unavailable during logout',error);
+        return null;
+      });
+      const result=await api('/api/session/logout',{method:'POST',body:{push_subscription_id:pushId,push_endpoint:subscription?.endpoint||null}});
+      if(result.deletion_notice){HeremeAuth.showDeletion(result.deletion_notice,true);return;}
+      try{await subscription?.unsubscribe();}catch(error){console.warn('Local push unsubscribe failed',error);}
+      localStorage.removeItem('hereme_push_subscription_id');
+      localStorage.removeItem('hereme_token');
+      state.user=null;state.csrf='';state.legacyToken='';
+      state.notificationSocket?.close();state.notificationSocket=null;
+      $('#notificationButton').hidden=true;
+      closeModal();
+      if(location.pathname==='/staff')await navigate('/',{replace:true});else await loadPosts();
+      return;
+    }
     if(action==='rotate-recovery'){const result=await api('/api/recovery/rotate',{method:'POST'});state.recoveryKey=result.recovery_key;openModal('recovery-key');return;}
     if(action==='toggle-recovery'){const input=$('#recoveryPassword'),show=input.type==='password';input.type=show?'text':'password';target.textContent=t(show?'recovery.hide':'recovery.show');input.focus();return;}
     if(action==='copy-recovery'){const input=$('#recoveryPassword');if(navigator.clipboard?.writeText)try{await navigator.clipboard.writeText(state.recoveryKey);toast(t('recovery.copied'));return;}catch{}if(input){input.type='text';input.focus();input.select();if(document.execCommand?.('copy')){toast(t('recovery.copied'));return;}}window.prompt(t('recovery.copy_prompt'),state.recoveryKey);return;}

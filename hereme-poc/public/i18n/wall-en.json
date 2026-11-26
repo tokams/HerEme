@@ -159,6 +159,8 @@
   "wall.staff.hide": "Hide",
   "wall.staff.pseudonym": "Pseudonym",
   "wall.staff.roles": "Roles",
+  "wall.staff.delete_user_posts_confirm": "Permanently delete this user and all their posts? The user will see your reason.",
+  "wall.staff.delete_user_keep_confirm": "Permanently delete this user and anonymize their posts? The user will see your reason.",
   "wall.staff.delete_user": "Delete user",
   "wall.staff.delete_posts": "Also delete posts",
   "wall.staff.post": "Post",
